@@ -127,13 +127,13 @@ export function getGlobalOverviewData(range: DateRange): GlobalOverviewData {
   return {
     kpis: {
       // totalUsers / totalAssigned are cumulative (not period-based) — real API would not filter by date
-      totalUsers:    { label: 'Total Users',            value: 248,       delta: computeDelta(1),  tier: 'A' },
-      totalAssigned: { label: 'Assigned to Scenarios',  value: 186,       delta: computeDelta(2),  tier: 'A' },
+      totalUsers:    { label: 'Total Users',            labelKey: 'totalUsers',          value: 248,       delta: computeDelta(1),  tier: 'A' },
+      totalAssigned: { label: 'Assigned to Scenarios',  labelKey: 'assignedToScenarios', value: 186,       delta: computeDelta(2),  tier: 'A' },
       // activity metrics scale with period
-      totalSessions: { label: 'Practice Sessions',      value: sessions,  delta: computeDelta(3),  tier: 'A' },
-      avgScore:      { label: 'Avg Session Score',      value: avgScore,  delta: computeDelta(4, 'neutral'),  unit: 'pts', tier: 'B' },
-      passRate:      { label: 'Overall Pass Rate',      value: passRate,  delta: computeDelta(5, 'negative'), unit: '%',   tier: 'B' },
-      certifiedUsers:{ label: 'Certified Users',        value: certified, delta: computeDelta(6),  tier: 'A' },
+      totalSessions: { label: 'Practice Sessions',      labelKey: 'practiceSessions',    value: sessions,  delta: computeDelta(3),  tier: 'A' },
+      avgScore:      { label: 'Avg Session Score',      labelKey: 'avgSessionScore',     value: avgScore,  delta: computeDelta(4, 'neutral'),  unit: 'pts', tier: 'B' },
+      passRate:      { label: 'Overall Pass Rate',      labelKey: 'overallPassRate',     value: passRate,  delta: computeDelta(5, 'negative'), unit: '%',   tier: 'B' },
+      certifiedUsers:{ label: 'Certified Users',        labelKey: 'certifiedUsers',      value: certified, delta: computeDelta(6),  tier: 'A' },
     },
 
     // line chart: daily sessions across the range
@@ -187,10 +187,10 @@ export function getCoachData(range: DateRange): CoachData {
   return {
     kpis: {
       // cumulative counts — real API: SELECT COUNT(*) FROM coach_usecases WHERE customer_id = ?
-      configuredUsecases: { label: 'Configured Use Cases', value: 12,  delta: computeDelta(11), tier: 'A' },
-      assignedUsers:      { label: 'Assigned Users',       value: 186, delta: computeDelta(12), tier: 'A' },
-      activeTeams:        { label: 'Active Teams',         value: 7,   delta: computeDelta(13), tier: 'A' },
-      knowledgeStages:    { label: 'Knowledge Stages',     value: 48,  delta: computeDelta(14), tier: 'A' },
+      configuredUsecases: { label: 'Configured Use Cases', labelKey: 'configuredUseCases', value: 12,  delta: computeDelta(11), tier: 'A' },
+      assignedUsers:      { label: 'Assigned Users',       labelKey: 'assignedUsers',      value: 186, delta: computeDelta(12), tier: 'A' },
+      activeTeams:        { label: 'Active Teams',         labelKey: 'activeTeams',        value: 7,   delta: computeDelta(13), tier: 'A' },
+      knowledgeStages:    { label: 'Knowledge Stages',     labelKey: 'knowledgeStages',    value: 48,  delta: computeDelta(14), tier: 'A' },
     },
 
     // trend: cumulative use cases configured over the period
@@ -241,10 +241,10 @@ export function getSimulatorData(range: DateRange): SimulatorData {
 
   return {
     kpis: {
-      configuredScenarios: { label: 'Configured Scenarios', value: 8,        delta: computeDelta(21),             tier: 'A' },
-      assignedUsers:       { label: 'Assigned Users',       value: 162,      delta: computeDelta(22),             tier: 'A' },
-      totalSessions:       { label: 'Total Sessions',       value: sessions, delta: computeDelta(23),             tier: 'B' },
-      avgScore:            { label: 'Avg Score',            value: avgScore, delta: computeDelta(24, 'positive'), unit: 'pts', tier: 'B' },
+      configuredScenarios: { label: 'Configured Scenarios', labelKey: 'configuredScenarios', value: 8,        delta: computeDelta(21),             tier: 'A' },
+      assignedUsers:       { label: 'Assigned Users',       labelKey: 'assignedUsers',       value: 162,      delta: computeDelta(22),             tier: 'A' },
+      totalSessions:       { label: 'Total Sessions',       labelKey: 'totalSessions',       value: sessions, delta: computeDelta(23),             tier: 'B' },
+      avgScore:            { label: 'Avg Score',            labelKey: 'avgScore',            value: avgScore, delta: computeDelta(24, 'positive'), unit: 'pts', tier: 'B' },
     },
 
     // score trend: improving curve across the selected range
@@ -293,10 +293,10 @@ export function getCertificationData(range: DateRange): CertificationData {
 
   return {
     kpis: {
-      candidates: { label: 'Candidates Evaluated', value: candidates, delta: computeDelta(31),             tier: 'A' },
-      passRate:   { label: 'Pass Rate',             value: passRate,  delta: computeDelta(32, 'negative'), unit: '%',   tier: 'B' },
-      avgScore:   { label: 'Avg Score',             value: avgScore,  delta: computeDelta(33, 'positive'), unit: 'pts', tier: 'B' },
-      pending:    { label: 'Pending Evaluations',   value: pending,   delta: 0,                            tier: 'B' },
+      candidates: { label: 'Candidates Evaluated', labelKey: 'candidatesEvaluated',  value: candidates, delta: computeDelta(31),             tier: 'A' },
+      passRate:   { label: 'Pass Rate',             labelKey: 'passRate',            value: passRate,  delta: computeDelta(32, 'negative'), unit: '%',   tier: 'B' },
+      avgScore:   { label: 'Avg Score',             labelKey: 'avgScore',            value: avgScore,  delta: computeDelta(33, 'positive'), unit: 'pts', tier: 'B' },
+      pending:    { label: 'Pending Evaluations',   labelKey: 'pendingEvaluations',  value: pending,   delta: 0,                            tier: 'B' },
     },
 
     // stacked bar: pass vs fail per day, scaled to period
@@ -343,11 +343,11 @@ export function getSecondBrainData(range: DateRange): SecondBrainData {
   return {
     kpis: {
       // cumulative counts — real API: SELECT COUNT(*) FROM segment_contents
-      totalDocs:            { label: 'Knowledge Documents',      value: totalDocs,     delta: computeDelta(41), tier: 'A' },
-      fileTypes:            { label: 'File Types Indexed',       value: 6,             delta: 0,               tier: 'A' },
-      totalSegments:        { label: 'Content Segments',        value: totalSegments, delta: computeDelta(42), tier: 'A' },
+      totalDocs:            { label: 'Knowledge Documents',      labelKey: 'knowledgeDocuments',    value: totalDocs,     delta: computeDelta(41), tier: 'A' },
+      fileTypes:            { label: 'File Types Indexed',       labelKey: 'fileTypesIndexed',      value: 6,             delta: 0,               tier: 'A' },
+      totalSegments:        { label: 'Content Segments',         labelKey: 'contentSegments',       value: totalSegments, delta: computeDelta(42), tier: 'A' },
       // period metric: avg segments across use cases in view
-      avgSegmentsPerUsecase:{ label: 'Avg Segments / Use Case', value: Math.round(totalSegments / 12), delta: computeDelta(43), tier: 'B' },
+      avgSegmentsPerUsecase:{ label: 'Avg Segments / Use Case',  labelKey: 'avgSegmentsPerUsecase', value: Math.round(totalSegments / 12), delta: computeDelta(43), tier: 'B' },
     },
 
     // upload trend: docs added per day in the period
@@ -388,10 +388,10 @@ export function getSecondBrainData(range: DateRange): SecondBrainData {
 export function getLmsData(_range?: DateRange): LmsData {
   return {
     kpis: {
-      enrolledUsers:    { label: 'Enrolled Users',    value: '—', delta: 0, tier: 'B' },
-      completionRate:   { label: 'Completion Rate',   value: '—', delta: 0, unit: '%',  tier: 'B' },
-      avgQuizScore:     { label: 'Avg Quiz Score',    value: '—', delta: 0, unit: 'pts',tier: 'B' },
-      modulesCompleted: { label: 'Modules Completed', value: '—', delta: 0, tier: 'B' },
+      enrolledUsers:    { label: 'Enrolled Users',    labelKey: 'enrolledUsers',    value: '—', delta: 0, tier: 'B' },
+      completionRate:   { label: 'Completion Rate',   labelKey: 'completionRate',   value: '—', delta: 0, unit: '%',  tier: 'B' },
+      avgQuizScore:     { label: 'Avg Quiz Score',    labelKey: 'avgQuizScore',     value: '—', delta: 0, unit: 'pts',tier: 'B' },
+      modulesCompleted: { label: 'Modules Completed', labelKey: 'modulesCompleted', value: '—', delta: 0, tier: 'B' },
     },
     completionTrend: [],
     moduleTable: [],

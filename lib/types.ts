@@ -19,11 +19,14 @@ export interface DashboardFilters {
 //  API response shapes (mock → real swap-in)
 // ─────────────────────────────────────────────
 
+import type { TranslationKey } from './translations'
+
 export interface KpiCard {
-  label: string
+  label: string          // English fallback (used as React key)
+  labelKey: TranslationKey  // i18n key → translations[lang][labelKey]
   value: number | string
-  delta: number        // % change vs prior period
-  unit?: string        // '%', 'pts', etc.
+  delta: number          // % change vs prior period
+  unit?: string          // '%', 'pts', etc.
   tier: 'A' | 'B'
 }
 

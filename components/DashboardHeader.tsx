@@ -4,6 +4,7 @@ import { useState } from "react"
 import { motion } from "framer-motion"
 import { Calendar, Filter } from "lucide-react"
 import { useDashboardStore } from "@/lib/store"
+import { useLangStore, useT } from "@/lib/lang-store"
 import { cn } from "@/lib/utils"
 import type { Module } from "@/lib/types"
 
@@ -29,6 +30,8 @@ interface Props {
 
 export function DashboardHeader({ title, subtitle, showModuleFilter = false }: Props) {
   const { selectedModules, toggleModule, dateRange, setDateRange } = useDashboardStore()
+  const { lang, toggle: toggleLang } = useLangStore()
+  const t = useT()
   const [activeDays, setActiveDays] = useState(30)
 
   function applyPreset(days: number) {
@@ -49,6 +52,17 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
             {subtitle && <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>}
           </div>
 
+          {/* Controls row */}
+          <div className="flex items-center gap-2">
+            {/* EN / ES toggle */}
+            <button
+              onClick={toggleLang}
+              className="px-2.5 py-1 rounded-lg text-xs font-semibold border border-border bg-muted hover:bg-muted/70 transition-colors tabular-nums"
+              aria-label="Toggle language"
+            >
+              {lang === 'en' ? 'ES' : 'EN'}
+            </button>
+
           {/* Date presets */}
           <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
             <Calendar className="w-3.5 h-3.5 text-muted-foreground ml-1" />
@@ -67,13 +81,14 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
               </button>
             ))}
           </div>
+          </div>
         </div>
 
         {/* Module filter */}
         {showModuleFilter && (
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-              <Filter className="w-3 h-3" /> Solutions
+              <Filter className="w-3 h-3" /> {t.filterSolutions}
             </span>
             {MODULES.map(({ id, label, color }) => {
               const active = selectedModules.includes(id)

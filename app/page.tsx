@@ -10,6 +10,7 @@ import { DonutChart } from "@/components/charts/DonutChart"
 import { DataTable, type Column } from "@/components/DataTable"
 import { getGlobalOverviewData } from "@/lib/mock-data"
 import { useDashboardStore } from "@/lib/store"
+import { useT } from "@/lib/lang-store"
 import type { UserRow } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -39,37 +40,38 @@ const DONUT_COLORS: Record<string, string> = {
   "LMS":             "#3b82f6",
 }
 
-const userColumns: Column<UserRow>[] = [
-  { key: "name",             header: "User",      render: r => <span className="font-medium">{r.name}</span> },
-  { key: "assignedUsecases", header: "Scenarios", render: r => <span className="tabular-nums">{r.assignedUsecases}</span> },
-  { key: "sessions",         header: "Sessions",  render: r => <span className="tabular-nums">{r.sessions}</span> },
-  {
-    key: "avgScore", header: "Avg Score",
-    render: r => r.avgScore != null
-      ? <span className="tabular-nums">{r.avgScore} pts</span>
-      : <span className="text-muted-foreground">—</span>
-  },
-  {
-    key: "passRate", header: "Pass Rate",
-    render: r => r.passRate != null ? (
-      <span className={cn(
-        "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium",
-        r.passRate >= 70 ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-          : r.passRate >= 50 ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
-          : "bg-rose-500/15 text-rose-600 dark:text-rose-400"
-      )}>
-        {r.passRate}%
-      </span>
-    ) : <span className="text-muted-foreground">—</span>
-  },
-  { key: "dateAdded", header: "Joined", render: r => <span className="text-muted-foreground text-xs">{r.dateAdded}</span> },
-]
-
 export default function OverviewPage() {
   const { dateRange } = useDashboardStore()
+  const t          = useT()
   const data       = getGlobalOverviewData(dateRange)
   const kpiEntries = Object.values(data.kpis)
   const days       = Math.round((dateRange.to.getTime() - dateRange.from.getTime()) / 86_400_000)
+
+  const userColumns: Column<UserRow>[] = [
+    { key: "name",             header: t.colUser,      render: r => <span className="font-medium">{r.name}</span> },
+    { key: "assignedUsecases", header: t.colScenarios, render: r => <span className="tabular-nums">{r.assignedUsecases}</span> },
+    { key: "sessions",         header: t.colSessions,  render: r => <span className="tabular-nums">{r.sessions}</span> },
+    {
+      key: "avgScore", header: t.colAvgScore,
+      render: r => r.avgScore != null
+        ? <span className="tabular-nums">{r.avgScore} pts</span>
+        : <span className="text-muted-foreground">—</span>
+    },
+    {
+      key: "passRate", header: t.colPassRate,
+      render: r => r.passRate != null ? (
+        <span className={cn(
+          "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium",
+          r.passRate >= 70 ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+            : r.passRate >= 50 ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+            : "bg-rose-500/15 text-rose-600 dark:text-rose-400"
+        )}>
+          {r.passRate}%
+        </span>
+      ) : <span className="text-muted-foreground">—</span>
+    },
+    { key: "dateAdded", header: t.colJoined, render: r => <span className="text-muted-foreground text-xs">{r.dateAdded}</span> },
+  ]
 
   // donut data derived from live module breakdown — updates with date range
   const donutData = data.moduleBreakdown
@@ -79,8 +81,8 @@ export default function OverviewPage() {
   return (
     <div className="min-h-screen">
       <DashboardHeader
-        title="Global Overview"
-        subtitle="Platform-wide analytics across all solutions"
+        title={t.overviewTitle}
+        subtitle={t.overviewSub}
         showModuleFilter
       />
       <div className="p-6 space-y-6">
@@ -91,25 +93,25 @@ export default function OverviewPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <ChartCard title="Activity Trend" subtitle={`Daily sessions — last ${days} days`} className="lg:col-span-2">
+          <ChartCard title={t.activityTrend} subtitle={`${t.activityTrendSub} — ${t.last} ${days} ${t.days}`} className="lg:col-span-2">
             <ActivityLineChart data={data.activityTrend} label="Sessions" />
           </ChartCard>
-          <ChartCard title="Module Distribution" subtitle={`Sessions by solution — ${days}d`}>
+          <ChartCard title={t.moduleDistribution} subtitle={`${t.moduleDistSub} — ${days}d`}>
             <DonutChart data={donutData} />
           </ChartCard>
         </div>
 
-        <ChartCard title="Sessions by Module" subtitle={`Total vs passed — last ${days} days`}>
+        <ChartCard title={t.sessionsByModule} subtitle={`${t.sessionsByModuleSub} — ${t.last} ${days} ${t.days}`}>
           <ModuleBarChart data={data.moduleBreakdown} />
         </ChartCard>
 
         <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
           <div className="mb-4">
-            <h3 className="text-sm font-semibold">User Summary</h3>
+            <h3 className="text-sm font-semibold">{t.userSummary}</h3>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Session activity for the last {days} days
+              {t.userSummarySub} {days} {t.days}
               <span className="ml-2 text-[10px] font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded">
-                Source: coach_users + saved_reports
+                {t.sourceUsers}
               </span>
             </p>
           </div>

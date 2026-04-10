@@ -4,6 +4,7 @@ import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { ArrowUpDown, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useT } from "@/lib/lang-store"
 
 export interface Column<T> {
   key: keyof T | string
@@ -24,6 +25,7 @@ export function DataTable<T extends Record<string, any>>({
   columns,
   pageSize = 10,
 }: Props<T>) {
+  const t = useT()
   const [search,  setSearch]  = useState("")
   const [sortKey, setSortKey] = useState<string | null>(null)
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
@@ -62,7 +64,7 @@ export function DataTable<T extends Record<string, any>>({
         <input
           value={search}
           onChange={e => { setSearch(e.target.value); setPage(1) }}
-          placeholder="Search…"
+          placeholder={t.searchPlaceholder}
           className="w-full pl-8 pr-4 py-2 text-sm bg-muted/50 border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-ring"
         />
       </div>
@@ -125,22 +127,22 @@ export function DataTable<T extends Record<string, any>>({
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>{filtered.length} rows</span>
+          <span>{t.showing} {filtered.length}</span>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setPage(p => Math.max(1, p - 1))}
               disabled={page === 1}
               className="px-2 py-1 rounded border border-border disabled:opacity-30 hover:bg-muted transition-colors"
             >
-              ←
+              {t.prev}
             </button>
-            <span>Page {page} / {totalPages}</span>
+            <span>{t.pageLabel} {page} / {totalPages}</span>
             <button
               onClick={() => setPage(p => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
               className="px-2 py-1 rounded border border-border disabled:opacity-30 hover:bg-muted transition-colors"
             >
-              →
+              {t.next}
             </button>
           </div>
         </div>

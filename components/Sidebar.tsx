@@ -9,19 +9,21 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useTheme } from "./ThemeProvider"
-
-const nav = [
-  { href: "/",               label: "Overview",        icon: LayoutDashboard },
-  { href: "/lms",            label: "LMS",             icon: BookOpen        },
-  { href: "/coach",          label: "Master Coach",    icon: BrainCircuit    },
-  { href: "/simulator",      label: "Simulator",       icon: Gamepad2        },
-  { href: "/certification",  label: "Certification",   icon: BadgeCheck      },
-  { href: "/second-brain",   label: "Second Brain",    icon: Database        },
-]
+import { useT } from "@/lib/lang-store"
 
 export function Sidebar() {
   const pathname = usePathname()
   const { theme, toggle } = useTheme()
+  const t = useT()
+
+  const nav = [
+    { href: "/",               label: t.navOverview,        icon: LayoutDashboard },
+    { href: "/lms",            label: t.navLms,             icon: BookOpen        },
+    { href: "/coach",          label: t.navCoach,           icon: BrainCircuit    },
+    { href: "/simulator",      label: t.navSimulator,       icon: Gamepad2        },
+    { href: "/certification",  label: t.navCertification,   icon: BadgeCheck      },
+    { href: "/second-brain",   label: t.navSecondBrain,     icon: Database        },
+  ]
 
   return (
     <aside className="w-64 shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col">
@@ -64,9 +66,9 @@ export function Sidebar() {
           className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
         >
           {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-          {theme === "dark" ? "Light mode" : "Dark mode"}
+          {theme === "dark" ? t.lightMode : t.darkMode}
         </button>
-        <p className="text-xs text-muted-foreground/50 mt-2 px-3">v1.0 · Phase 1 Launch</p>
+        <p className="text-xs text-muted-foreground/50 mt-2 px-3">{t.phaseLabel}</p>
       </div>
     </aside>
   )

@@ -8,6 +8,7 @@ import { ActivityLineChart } from "@/components/charts/ActivityLineChart"
 import { DataTable, type Column } from "@/components/DataTable"
 import { getSecondBrainData } from "@/lib/mock-data"
 import { useDashboardStore } from "@/lib/store"
+import { useT } from "@/lib/lang-store"
 import type { DocRow } from "@/lib/types"
 
 const TYPE_COLORS: Record<string, string> = {
@@ -26,30 +27,31 @@ const icons = [
   <BarChart2 key="b" className="w-4 h-4" />,
 ]
 
-const columns: Column<DocRow>[] = [
-  { key: "name",         header: "Document",   render: r => <span className="font-medium font-mono text-xs">{r.name}</span> },
-  {
-    key: "type", header: "Type",
-    render: r => (
-      <span className={`inline-flex px-2 py-0.5 rounded text-xs font-bold uppercase ${TYPE_COLORS[r.type] ?? "bg-muted"}`}>
-        {r.type}
-      </span>
-    )
-  },
-  { key: "usecaseName",  header: "Use Case",  render: r => <span className="text-muted-foreground">{r.usecaseName}</span> },
-  { key: "segmentCount", header: "Segments",  render: r => <span className="tabular-nums">{r.segmentCount}</span> },
-  { key: "dateAdded",    header: "Date Added",render: r => <span className="text-muted-foreground text-xs">{r.dateAdded}</span> },
-]
-
 export default function SecondBrainPage() {
   const { dateRange } = useDashboardStore()
+  const t = useT()
   const data = getSecondBrainData(dateRange)
   const kpis = Object.values(data.kpis)
   const days = Math.round((dateRange.to.getTime() - dateRange.from.getTime()) / 86_400_000)
 
+  const columns: Column<DocRow>[] = [
+    { key: "name",         header: t.colDocument, render: r => <span className="font-medium font-mono text-xs">{r.name}</span> },
+    {
+      key: "type", header: t.colType,
+      render: r => (
+        <span className={`inline-flex px-2 py-0.5 rounded text-xs font-bold uppercase ${TYPE_COLORS[r.type] ?? "bg-muted"}`}>
+          {r.type}
+        </span>
+      )
+    },
+    { key: "usecaseName",  header: t.colUseCase,   render: r => <span className="text-muted-foreground">{r.usecaseName}</span> },
+    { key: "segmentCount", header: t.colSegments,  render: r => <span className="tabular-nums">{r.segmentCount}</span> },
+    { key: "dateAdded",    header: t.colDateAdded, render: r => <span className="text-muted-foreground text-xs">{r.dateAdded}</span> },
+  ]
+
   return (
     <div className="min-h-screen">
-      <DashboardHeader title="Second Brain" subtitle="Knowledge base content inventory and document tracking" />
+      <DashboardHeader title={t.sbTitle} subtitle={t.sbSub} />
       <div className="p-6 space-y-6">
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
           {kpis.map((kpi, i) => (
@@ -59,24 +61,23 @@ export default function SecondBrainPage() {
             />
           ))}
         </div>
-        <ChartCard title="Document Uploads Over Time" subtitle={`New docs added — last ${days} days · source: segment_contents.date_created`}>
+        <ChartCard title={t.documentUploads} subtitle={`${t.documentUploadsSub} — ${t.last} ${days} ${t.days}`}>
           <ActivityLineChart data={data.uploadTrend} label="Documents" color="#ec4899" />
         </ChartCard>
         <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
           <div className="mb-4">
-            <h3 className="text-sm font-semibold">Document Inventory</h3>
+            <h3 className="text-sm font-semibold">{t.documentInventory}</h3>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {data.docTable.length} documents {days < 90 ? `added in the last ${days} days` : "in total"}
+              {data.docTable.length} {days < 90 ? `${t.documentsSub} ${days} ${t.days}` : t.documentsSubAll}
               <span className="ml-2 text-[10px] font-medium bg-pink-500/10 text-pink-600 dark:text-pink-400 px-1.5 py-0.5 rounded">
-                Source: segment_contents + usecase_segment + coach_usecases
+                {t.sourceSB}
               </span>
             </p>
           </div>
           <DataTable data={data.docTable} columns={columns} pageSize={10} />
         </div>
         <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-700 dark:text-amber-400">
-          <strong>Phase 2 note:</strong> Query analytics (total queries, top topics, satisfaction scores)
-          require activity tracking infrastructure. Deferred to Phase 2.
+          <strong>{t.phase2Note}:</strong> {t.phase2SB}
         </div>
       </div>
     </div>

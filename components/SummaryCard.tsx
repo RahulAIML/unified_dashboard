@@ -4,6 +4,7 @@ import { motion } from "framer-motion"
 import { TrendingUp, TrendingDown, Minus } from "lucide-react"
 import { cn, deltaColor, fmt } from "@/lib/utils"
 import type { KpiCard } from "@/lib/types"
+import { useT } from "@/lib/lang-store"
 
 interface Props {
   kpi: KpiCard
@@ -13,7 +14,9 @@ interface Props {
 }
 
 export function SummaryCard({ kpi, index = 0, icon, accent = "from-blue-500/10 to-violet-500/10" }: Props) {
-  const { label, value, delta, unit, tier } = kpi
+  const t = useT()
+  const { labelKey, label, value, delta, unit, tier } = kpi
+  const displayLabel = t[labelKey] ?? label
   const isPositive = delta > 0
   const isNegative = delta < 0
 
@@ -34,7 +37,7 @@ export function SummaryCard({ kpi, index = 0, icon, accent = "from-blue-500/10 t
       <div className="relative">
         <div className="flex items-start justify-between mb-3">
           <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            {label}
+            {displayLabel}
           </span>
           <div className="flex items-center gap-2">
             {/* Tier badge */}
@@ -64,7 +67,7 @@ export function SummaryCard({ kpi, index = 0, icon, accent = "from-blue-500/10 t
           )}
         </div>
 
-        <p className="text-[11px] text-muted-foreground mt-1">vs prior period</p>
+        <p className="text-[11px] text-muted-foreground mt-1">{t.vsPrior}</p>
       </div>
     </motion.div>
   )
