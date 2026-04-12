@@ -12,16 +12,8 @@ services:
         value: production
       - key: PORT
         value: 3000
-      # ── Analytics DB (rolplay_pro_analytics) ──────────────────────────────
-      # Set these as secret environment variables in the Render dashboard.
-      # Do NOT hardcode credentials here.
-      - key: DB_HOST
-        sync: false
-      - key: DB_USER
-        sync: false
-      - key: DB_PASSWORD
-        sync: false
-      - key: DB_NAME
-        sync: false
-      - key: DB_PORT
-        sync: false
+      # ── PHP Bridge (Mode B — no port 3306 required) ──────────────────────
+      - key: BRIDGE_URL
+        value: https://improveyourpitchbeta.net/rolplay-ai/rolplay-bridge.php
+      - key: BRIDGE_SECRET
+        sync: false   # set this secret in Render dashboard → Environment
