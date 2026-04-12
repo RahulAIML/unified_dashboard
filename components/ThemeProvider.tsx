@@ -1,6 +1,7 @@
 "use client"
 
 import { createContext, useContext, useEffect, useState } from "react"
+import { loadSavedTheme } from "@/lib/theme"
 
 type Theme = "light" | "dark"
 
@@ -13,6 +14,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>("light")
 
   useEffect(() => {
+    loadSavedTheme()
     const stored = localStorage.getItem("theme") as Theme | null
     if (stored) setTheme(stored)
     else if (window.matchMedia("(prefers-color-scheme: dark)").matches) setTheme("dark")

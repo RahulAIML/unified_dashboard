@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getTrends } from '@/lib/data-provider'
+import { getDashboardTrends } from '@/lib/data-provider'
 
 export async function GET(request: NextRequest) {
   try {
@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid date range' }, { status: 400 })
     }
 
-    const data = await getTrends({ from, to, usecaseIds })
+    const data = await getDashboardTrends({ from, to, usecaseIds })
     return NextResponse.json(data)
   } catch (err) {
     console.error('[/api/dashboard/trends]', err)

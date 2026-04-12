@@ -10,6 +10,7 @@ import {
 import { cn } from "@/lib/utils"
 import { useTheme } from "./ThemeProvider"
 import { useT } from "@/lib/lang-store"
+import { ThemeSwitcher } from "@/components/theme-switcher"
 
 export function Sidebar() {
   const pathname = usePathname()
@@ -60,7 +61,8 @@ export function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="px-4 py-4 border-t border-sidebar-border">
+      <div className="px-4 py-4 border-t border-sidebar-border space-y-3">
+        <ThemeSwitcher />
         <button
           onClick={toggle}
           className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
