@@ -151,6 +151,64 @@ export interface DocRow {
   inRange?: boolean
 }
 
+// ─────────────────────────────────────────────
+//  Real API response types (from rolplay_pro_analytics)
+// ─────────────────────────────────────────────
+
+/** Response from GET /api/dashboard/overview */
+export interface OverviewApiResponse {
+  totalEvaluations:     number
+  avgScore:             number | null
+  passRate:             number | null
+  passedEvaluations:    number
+  prevTotalEvaluations: number
+  prevAvgScore:         number | null
+  prevPassRate:         number | null
+}
+
+/** A single point in a time-series returned by GET /api/dashboard/trends */
+export interface ApiTrendPoint {
+  date:    string   // YYYY-MM-DD
+  value:   number
+  value2?: number
+}
+
+/** Response from GET /api/dashboard/trends */
+export interface TrendsApiResponse {
+  scoreTrend:     ApiTrendPoint[]
+  passFailTrend:  ApiTrendPoint[]
+  evalCountTrend: ApiTrendPoint[]
+}
+
+/** A single row from GET /api/dashboard/results */
+export interface EvaluationApiRow {
+  savedReportId: number
+  usecaseId:     number | null
+  score:         number | null
+  result:        string | null
+  passed:        boolean
+  date:          string
+}
+
+/** Response from GET /api/dashboard/results */
+export interface ResultsApiResponse {
+  data: EvaluationApiRow[]
+}
+
+/** A single row from GET /api/dashboard/usecase-breakdown */
+export interface UsecaseApiRow {
+  usecaseId:        number
+  totalEvaluations: number
+  avgScore:         number | null
+  passRate:         number | null
+  passed:           number
+}
+
+/** Response from GET /api/dashboard/usecase-breakdown */
+export interface UsecaseBreakdownApiResponse {
+  data: UsecaseApiRow[]
+}
+
 // ── LMS (limited data — placeholder) ─────────
 
 export interface LmsData {

@@ -140,9 +140,30 @@ export const translations = {
     // ── Source badges ────────────────────────────────────────
     sourceUsers:      'Source: coach_users + saved_reports',
     sourceCoach:      'Source: coach_usecases + coach_usecase_user',
-    sourceSim:        'Source: saved_reports (score, passed_flag, date_created)',
-    sourceCert:       'Source: saved_reports + coach_evaluation_sessions + segment_contents',
+    sourceSim:        'Source: rolplay_pro_analytics · report_field_current',
+    sourceCert:       'Source: rolplay_pro_analytics · report_field_current',
     sourceSB:         'Source: segment_contents + usecase_segment + coach_usecases',
+
+    // ── Loading / error / empty states ───────────────────────
+    loading:          'Loading…',
+    errorLoading:     'Failed to load data',
+    noData:           'No data for this period',
+    retryLabel:       'Retry',
+
+    // ── Real-data column labels ───────────────────────────────
+    colReportId:      'Report ID',
+    colUsecaseId:     'Use Case ID',
+    colEvaluations:   'Evaluations',
+    colAvgScoreShort: 'Avg Score',
+    colPassed:        'Passed',
+
+    // ── Evaluation results ────────────────────────────────────
+    passLabel:        'PASS',
+    failLabel:        'FAIL',
+    evalCountTrend:   'Daily Evaluations',
+    evalCountSub:     'Evaluations submitted per day',
+    usecaseBreakdown: 'Use Case Breakdown',
+    usecaseBreakdownSub: 'Score and pass rate by use case',
   },
 
   es: {
@@ -278,9 +299,30 @@ export const translations = {
     // ── Source badges ────────────────────────────────────────
     sourceUsers:      'Fuente: coach_users + saved_reports',
     sourceCoach:      'Fuente: coach_usecases + coach_usecase_user',
-    sourceSim:        'Fuente: saved_reports (score, passed_flag, date_created)',
-    sourceCert:       'Fuente: saved_reports + coach_evaluation_sessions + segment_contents',
+    sourceSim:        'Fuente: rolplay_pro_analytics · report_field_current',
+    sourceCert:       'Fuente: rolplay_pro_analytics · report_field_current',
     sourceSB:         'Fuente: segment_contents + usecase_segment + coach_usecases',
+
+    // ── Loading / error / empty states ───────────────────────
+    loading:          'Cargando…',
+    errorLoading:     'Error al cargar los datos',
+    noData:           'Sin datos para este período',
+    retryLabel:       'Reintentar',
+
+    // ── Real-data column labels ───────────────────────────────
+    colReportId:      'ID Reporte',
+    colUsecaseId:     'ID Caso de Uso',
+    colEvaluations:   'Evaluaciones',
+    colAvgScoreShort: 'Punt. Media',
+    colPassed:        'Aprobados',
+
+    // ── Evaluation results ────────────────────────────────────
+    passLabel:        'APROBADO',
+    failLabel:        'REPROBADO',
+    evalCountTrend:   'Evaluaciones Diarias',
+    evalCountSub:     'Evaluaciones enviadas por día',
+    usecaseBreakdown: 'Desglose por Caso de Uso',
+    usecaseBreakdownSub: 'Puntuación y tasa de aprobación por caso de uso',
   },
 } as const
 

@@ -1,5 +1,6 @@
 "use client"
 
+import { useMemo } from "react"
 import { Gamepad2, Users, PlayCircle, Award } from "lucide-react"
 import { DashboardHeader } from "@/components/DashboardHeader"
 import { SummaryCard } from "@/components/SummaryCard"
@@ -9,7 +10,14 @@ import { DataTable, type Column } from "@/components/DataTable"
 import { getSimulatorData } from "@/lib/mock-data"
 import { useDashboardStore } from "@/lib/store"
 import { useT } from "@/lib/lang-store"
-import type { ScenarioRow } from "@/lib/types"
+import { useApi, buildApiUrl } from "@/lib/hooks/useApi"
+import { calcDelta } from "@/lib/utils"
+import type {
+  OverviewApiResponse,
+  TrendsApiResponse,
+  UsecaseBreakdownApiResponse,
+  UsecaseApiRow,
+} from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 const icons = [
@@ -22,22 +30,81 @@ const icons = [
 export default function SimulatorPage() {
   const { dateRange } = useDashboardStore()
   const t = useT()
-  const data = getSimulatorData(dateRange)
-  const kpis = Object.values(data.kpis)
-  const days = Math.round((dateRange.to.getTime() - dateRange.from.getTime()) / 86_400_000)
 
-  const columns: Column<ScenarioRow>[] = [
-    { key: "name",         header: t.colScenario,  render: r => <span className="font-medium">{r.name}</span> },
-    { key: "assignedUsers",header: t.colUsers,     render: r => <span className="tabular-nums">{r.assignedUsers}</span> },
-    { key: "sessions",     header: t.colSessions,  render: r => <span className="tabular-nums">{r.sessions}</span> },
+  // Mock data for KPI slots not in analytics DB (configuredScenarios, assignedUsers)
+  const mockData = getSimulatorData(dateRange)
+  const days = Math.round(
+    (dateRange.to.getTime() - dateRange.from.getTime()) / 86_400_000
+  )
+
+  // ── Real API calls ────────────────────────────────────────────────────────
+  const overviewUrl = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to)
+  const { data: overview, loading: overviewLoading, error: overviewError } =
+    useApi<OverviewApiResponse>(overviewUrl)
+
+  const trendsUrl = buildApiUrl("/api/dashboard/trends", dateRange.from, dateRange.to)
+  const { data: trends, loading: trendsLoading } = useApi<TrendsApiResponse>(trendsUrl)
+
+  const ucUrl = buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to)
+  const { data: ucBreakdown, loading: ucLoading } =
+    useApi<UsecaseBreakdownApiResponse>(ucUrl)
+
+  // ── KPI cards: mix real + mock ──────────────────────────────────────────────
+  // Slots 0–1 (configuredScenarios, assignedUsers) → mock (coach DB)
+  // Slots 2–3 (totalSessions, avgScore) → real analytics DB
+  const kpis = useMemo(() => {
+    const mockKpis = Object.values(mockData.kpis)
+    if (overviewLoading || !overview) return mockKpis
+
+    return [
+      mockKpis[0], // configuredScenarios — mock
+      mockKpis[1], // assignedUsers — mock
+      {
+        label:    'Total Sessions',
+        labelKey: 'totalSessions' as const,
+        value:    overview.totalEvaluations,
+        delta:    calcDelta(overview.totalEvaluations, overview.prevTotalEvaluations),
+        tier:     'B' as const,
+      },
+      {
+        label:    'Avg Score',
+        labelKey: 'avgScore' as const,
+        value:    overview.avgScore ?? '—',
+        delta:    calcDelta(overview.avgScore, overview.prevAvgScore),
+        unit:     'pts',
+        tier:     'B' as const,
+      },
+    ]
+  }, [overview, overviewLoading, mockData.kpis])
+
+  // ── Score trend (real) ───────────────────────────────────────────────────
+  const scoreTrendData = useMemo(
+    () => trends?.scoreTrend?.length ? trends.scoreTrend : mockData.scoreTrend,
+    [trends, mockData.scoreTrend]
+  )
+
+  // ── Usecase breakdown table columns ──────────────────────────────────────
+  const ucColumns: Column<UsecaseApiRow>[] = useMemo(() => [
     {
-      key: "avgScore", header: t.colAvgScore,
-      render: r => r.avgScore != null
-        ? <span className="tabular-nums">{r.avgScore} pts</span>
-        : <span className="text-muted-foreground">—</span>
+      key: "usecaseId",
+      header: t.colScenario,
+      render: r => <span className="font-medium">UC-{r.usecaseId}</span>,
     },
     {
-      key: "passRate", header: t.colPassRate,
+      key: "totalEvaluations",
+      header: t.colSessions,
+      render: r => <span className="tabular-nums">{r.totalEvaluations}</span>,
+    },
+    {
+      key: "avgScore",
+      header: t.colAvgScore,
+      render: r => r.avgScore != null
+        ? <span className="tabular-nums">{r.avgScore} pts</span>
+        : <span className="text-muted-foreground">—</span>,
+    },
+    {
+      key: "passRate",
+      header: t.colPassRate,
       render: r => r.passRate != null ? (
         <span className={cn(
           "inline-flex px-2 py-0.5 rounded-full text-xs font-medium",
@@ -47,38 +114,73 @@ export default function SimulatorPage() {
         )}>
           {r.passRate}%
         </span>
-      ) : <span className="text-muted-foreground">—</span>
+      ) : <span className="text-muted-foreground">—</span>,
     },
-    { key: "lastActivity", header: t.colLastActive, render: r => <span className="text-muted-foreground text-xs">{r.lastActivity ?? "—"}</span> },
-  ]
+    {
+      key: "passed",
+      header: t.colPassed,
+      render: r => <span className="tabular-nums">{r.passed}</span>,
+    },
+  ], [t])
 
   return (
     <div className="min-h-screen">
       <DashboardHeader title={t.simTitle} subtitle={t.simSub} />
       <div className="p-6 space-y-6">
+
+        {overviewError && (
+          <div className="rounded-lg border border-rose-500/30 bg-rose-500/5 px-4 py-3 text-sm text-rose-600 dark:text-rose-400">
+            {t.errorLoading}: {overviewError}
+          </div>
+        )}
+
+        {/* KPI cards */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
           {kpis.map((kpi, i) => (
             <SummaryCard key={kpi.label} kpi={kpi} index={i} icon={icons[i]}
-              accent={["from-emerald-500/10 to-emerald-500/5","from-blue-500/10 to-blue-500/5",
-                       "from-violet-500/10 to-violet-500/5","from-amber-500/10 to-amber-500/5"][i]}
+              accent={[
+                "from-emerald-500/10 to-emerald-500/5",
+                "from-blue-500/10 to-blue-500/5",
+                "from-violet-500/10 to-violet-500/5",
+                "from-amber-500/10 to-amber-500/5",
+              ][i]}
             />
           ))}
         </div>
-        <ChartCard title={t.scoreTrend} subtitle={`${t.scoreTrendSub} — ${t.last} ${days} ${t.days}`}>
-          <ActivityLineChart data={data.scoreTrend} label="Avg Score" color="#10b981" />
+
+        {/* Score trend */}
+        <ChartCard
+          title={t.scoreTrend}
+          subtitle={`${t.scoreTrendSub} — ${t.last} ${days} ${t.days}`}
+        >
+          {trendsLoading
+            ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
+            : <ActivityLineChart data={scoreTrendData} label="Avg Score" color="#10b981" />
+          }
         </ChartCard>
+
+        {/* Usecase breakdown table */}
         <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
           <div className="mb-4">
-            <h3 className="text-sm font-semibold">{t.scenarioBreakdown}</h3>
+            <h3 className="text-sm font-semibold">{t.usecaseBreakdown}</h3>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {t.scenarioBreakdownSub} {days} {t.days}
+              {ucLoading
+                ? t.loading
+                : `${ucBreakdown?.data?.length ?? 0} ${t.usecaseBreakdownSub}`
+              }
               <span className="ml-2 text-[10px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 rounded">
                 {t.sourceSim}
               </span>
             </p>
           </div>
-          <DataTable data={data.scenarioTable} columns={columns} pageSize={8} />
+          {ucLoading
+            ? <div className="py-10 text-center text-sm text-muted-foreground">{t.loading}</div>
+            : ucBreakdown?.data?.length
+              ? <DataTable data={ucBreakdown.data} columns={ucColumns} pageSize={8} />
+              : <div className="py-10 text-center text-sm text-muted-foreground">{t.noData}</div>
+          }
         </div>
+
       </div>
     </div>
   )
