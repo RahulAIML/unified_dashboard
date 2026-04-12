@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Sidebar } from "@/components/Sidebar";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { AIAssistant } from "@/components/ai-assistant";
 
 const geistSans = Geist({
   variable: "--font-sans",
@@ -38,6 +39,7 @@ export default function RootLayout({
               {children}
             </main>
           </div>
+          <AIAssistant />
         </ThemeProvider>
       </body>
     </html>
