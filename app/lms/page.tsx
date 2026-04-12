@@ -32,7 +32,7 @@ export default function LmsPage() {
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
           {kpis.map((kpi, i) => (
             <SummaryCard key={kpi.label} kpi={kpi} index={i} icon={icons[i]}
-              accent="from-blue-500/10 to-blue-500/5"
+              accent="from-primary/10 to-primary/5"
             />
           ))}
         </div>
@@ -45,10 +45,11 @@ export default function LmsPage() {
           />
         </div>
 
-        <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 text-sm text-blue-700 dark:text-blue-400">
+        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-primary">
           <strong>{t.lmsAuditNeeded}:</strong> {t.lmsNoDataSub}
         </div>
       </div>
     </div>
   )
 }
+

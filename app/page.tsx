@@ -32,17 +32,23 @@ const kpiIcons = [
 ]
 
 const kpiAccents = [
-  "from-blue-500/10 to-blue-500/5",
-  "from-violet-500/10 to-violet-500/5",
-  "from-emerald-500/10 to-emerald-500/5",
-  "from-amber-500/10 to-amber-500/5",
-  "from-pink-500/10 to-pink-500/5",
-  "from-teal-500/10 to-teal-500/5",
+  "from-primary/10 to-primary/5",
+  "from-primary/10 to-primary/5",
+  "from-primary/10 to-primary/5",
+  "from-primary/10 to-primary/5",
+  "from-primary/10 to-primary/5",
+  "from-primary/10 to-primary/5",
 ]
 
 const DONUT_COLORS = [
-  "#6366f1", "#10b981", "#f59e0b", "#ec4899",
-  "#3b82f6", "#8b5cf6", "#14b8a6", "#f97316",
+  "hsl(var(--primary))",
+  "hsl(var(--primary) / 0.85)",
+  "hsl(var(--primary) / 0.7)",
+  "hsl(var(--primary) / 0.55)",
+  "hsl(var(--primary) / 0.45)",
+  "hsl(var(--primary) / 0.35)",
+  "hsl(var(--primary) / 0.25)",
+  "hsl(var(--primary) / 0.15)",
 ]
 
 export default function OverviewPage() {
@@ -247,7 +253,7 @@ export default function OverviewPage() {
             <h3 className="text-sm font-semibold">{t.userSummary}</h3>
             <p className="text-xs text-muted-foreground mt-0.5">
               {t.userSummarySub} {days} {t.days}
-              <span className="ml-2 text-[10px] font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded">
+              <span className="ml-2 text-[10px] font-medium bg-primary/10 text-primary px-1.5 py-0.5 rounded">
                 {t.sourceUsers}
               </span>
             </p>

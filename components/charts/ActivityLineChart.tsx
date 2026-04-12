@@ -34,7 +34,7 @@ export function ActivityLineChart({
   data,
   label = "Sessions",
   label2,
-  color = "#6366f1",
+  color = "hsl(var(--primary))",
   color2 = "#10b981",
 }: Props) {
   const formatted = data.map(d => ({

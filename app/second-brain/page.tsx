@@ -12,12 +12,12 @@ import { useT } from "@/lib/lang-store"
 import type { DocRow } from "@/lib/types"
 
 const TYPE_COLORS: Record<string, string> = {
-  pdf:  "bg-red-500/15 text-red-600 dark:text-red-400",
-  docx: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
-  pptx: "bg-orange-500/15 text-orange-600 dark:text-orange-400",
-  xlsx: "bg-green-500/15 text-green-600 dark:text-green-400",
-  txt:  "bg-gray-500/15 text-gray-600 dark:text-gray-400",
-  mp4:  "bg-purple-500/15 text-purple-600 dark:text-purple-400",
+  pdf:  "bg-primary/10 text-primary",
+  docx: "bg-primary/10 text-primary",
+  pptx: "bg-primary/10 text-primary",
+  xlsx: "bg-primary/10 text-primary",
+  txt:  "bg-primary/10 text-primary",
+  mp4:  "bg-primary/10 text-primary",
 }
 
 const icons = [
@@ -56,20 +56,20 @@ export default function SecondBrainPage() {
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
           {kpis.map((kpi, i) => (
             <SummaryCard key={kpi.label} kpi={kpi} index={i} icon={icons[i]}
-              accent={["from-pink-500/10 to-pink-500/5","from-blue-500/10 to-blue-500/5",
-                       "from-violet-500/10 to-violet-500/5","from-teal-500/10 to-teal-500/5"][i]}
+              accent={["from-primary/10 to-primary/5","from-primary/10 to-primary/5",
+                       "from-primary/10 to-primary/5","from-primary/10 to-primary/5"][i]}
             />
           ))}
         </div>
         <ChartCard title={t.documentUploads} subtitle={`${t.documentUploadsSub} — ${t.last} ${days} ${t.days}`}>
-          <ActivityLineChart data={data.uploadTrend} label="Documents" color="#ec4899" />
+          <ActivityLineChart data={data.uploadTrend} label="Documents" color="hsl(var(--primary))" />
         </ChartCard>
         <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
           <div className="mb-4">
             <h3 className="text-sm font-semibold">{t.documentInventory}</h3>
             <p className="text-xs text-muted-foreground mt-0.5">
               {data.docTable.length} {days < 90 ? `${t.documentsSub} ${days} ${t.days}` : t.documentsSubAll}
-              <span className="ml-2 text-[10px] font-medium bg-pink-500/10 text-pink-600 dark:text-pink-400 px-1.5 py-0.5 rounded">
+              <span className="ml-2 text-[10px] font-medium bg-primary/10 text-primary px-1.5 py-0.5 rounded">
                 {t.sourceSB}
               </span>
             </p>
@@ -83,3 +83,4 @@ export default function SecondBrainPage() {
     </div>
   )
 }
+

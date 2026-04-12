@@ -149,10 +149,10 @@ export default function CertificationPage() {
           {kpis.map((kpi, i) => (
             <SummaryCard key={kpi.label} kpi={kpi} index={i} icon={icons[i]}
               accent={[
-                "from-amber-500/10 to-amber-500/5",
-                "from-emerald-500/10 to-emerald-500/5",
-                "from-blue-500/10 to-blue-500/5",
-                "from-rose-500/10 to-rose-500/5",
+                "from-primary/10 to-primary/5",
+                "from-primary/10 to-primary/5",
+                "from-primary/10 to-primary/5",
+                "from-primary/10 to-primary/5",
               ][i]}
             />
           ))}
@@ -180,7 +180,7 @@ export default function CertificationPage() {
                 ? t.loading
                 : `${results?.data?.length ?? 0} ${t.evaluationsSub} ${days} ${t.days}`
               }
-              <span className="ml-2 text-[10px] font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded">
+              <span className="ml-2 text-[10px] font-medium bg-primary/10 text-primary px-1.5 py-0.5 rounded">
                 {t.sourceCert}
               </span>
             </p>
@@ -199,3 +199,4 @@ export default function CertificationPage() {
     </div>
   )
 }
+

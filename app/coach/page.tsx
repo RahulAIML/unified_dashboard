@@ -32,7 +32,7 @@ export default function CoachPage() {
     {
       key: "interactionType", header: t.colMode,
       render: r => (
-        <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-violet-500/10 text-violet-600 dark:text-violet-400">
+        <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
           {r.interactionType}
         </span>
       )
@@ -47,20 +47,24 @@ export default function CoachPage() {
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
           {kpis.map((kpi, i) => (
             <SummaryCard key={kpi.label} kpi={kpi} index={i} icon={icons[i]}
-              accent={["from-violet-500/10 to-violet-500/5","from-blue-500/10 to-blue-500/5",
-                       "from-emerald-500/10 to-emerald-500/5","from-amber-500/10 to-amber-500/5"][i]}
+              accent={[
+                "from-primary/10 to-primary/5",
+                "from-primary/10 to-primary/5",
+                "from-primary/10 to-primary/5",
+                "from-primary/10 to-primary/5",
+              ][i]}
             />
           ))}
         </div>
         <ChartCard title={t.useCaseDeployment} subtitle={`${t.useCaseDeploymentSub} — ${t.last} ${days} ${t.days}`}>
-          <ActivityLineChart data={data.deploymentTrend} label="Use Cases" color="#8b5cf6" />
+          <ActivityLineChart data={data.deploymentTrend} label="Use Cases" color="hsl(var(--primary))" />
         </ChartCard>
         <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
           <div className="mb-4">
             <h3 className="text-sm font-semibold">{t.useCaseInventory}</h3>
             <p className="text-xs text-muted-foreground mt-0.5">
               {t.useCaseInventorySub}
-              <span className="ml-2 text-[10px] font-medium bg-violet-500/10 text-violet-600 dark:text-violet-400 px-1.5 py-0.5 rounded">
+              <span className="ml-2 text-[10px] font-medium bg-primary/10 text-primary px-1.5 py-0.5 rounded">
                 {t.sourceCoach}
               </span>
             </p>
@@ -74,3 +78,5 @@ export default function CoachPage() {
     </div>
   )
 }
+
+

@@ -139,10 +139,10 @@ export default function SimulatorPage() {
           {kpis.map((kpi, i) => (
             <SummaryCard key={kpi.label} kpi={kpi} index={i} icon={icons[i]}
               accent={[
-                "from-emerald-500/10 to-emerald-500/5",
-                "from-blue-500/10 to-blue-500/5",
-                "from-violet-500/10 to-violet-500/5",
-                "from-amber-500/10 to-amber-500/5",
+                "from-primary/10 to-primary/5",
+                "from-primary/10 to-primary/5",
+                "from-primary/10 to-primary/5",
+                "from-primary/10 to-primary/5",
               ][i]}
             />
           ))}
@@ -155,7 +155,7 @@ export default function SimulatorPage() {
         >
           {trendsLoading
             ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
-            : <ActivityLineChart data={scoreTrendData} label="Avg Score" color="#10b981" />
+            : <ActivityLineChart data={scoreTrendData} label="Avg Score" color="hsl(var(--primary))" />
           }
         </ChartCard>
 
@@ -168,7 +168,7 @@ export default function SimulatorPage() {
                 ? t.loading
                 : `${ucBreakdown?.data?.length ?? 0} ${t.usecaseBreakdownSub}`
               }
-              <span className="ml-2 text-[10px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 rounded">
+              <span className="ml-2 text-[10px] font-medium bg-primary/10 text-primary px-1.5 py-0.5 rounded">
                 {t.sourceSim}
               </span>
             </p>
@@ -185,3 +185,4 @@ export default function SimulatorPage() {
     </div>
   )
 }
+

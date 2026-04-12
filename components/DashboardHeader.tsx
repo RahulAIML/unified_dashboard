@@ -9,11 +9,11 @@ import { cn } from "@/lib/utils"
 import type { Module } from "@/lib/types"
 
 const MODULES: { id: Module; label: string; color: string }[] = [
-  { id: "lms",           label: "LMS",           color: "bg-blue-500"   },
-  { id: "coach",         label: "Coach",         color: "bg-violet-500" },
-  { id: "simulator",     label: "Simulator",     color: "bg-emerald-500"},
-  { id: "certification", label: "Certification", color: "bg-amber-500"  },
-  { id: "second-brain",  label: "Second Brain",  color: "bg-pink-500"   },
+  { id: "lms",           label: "LMS",           color: "bg-primary" },
+  { id: "coach",         label: "Coach",         color: "bg-primary" },
+  { id: "simulator",     label: "Simulator",     color: "bg-primary" },
+  { id: "certification", label: "Certification", color: "bg-primary" },
+  { id: "second-brain",  label: "Second Brain",  color: "bg-primary" },
 ]
 
 const DATE_PRESETS = [

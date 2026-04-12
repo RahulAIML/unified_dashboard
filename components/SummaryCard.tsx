@@ -13,7 +13,7 @@ interface Props {
   accent?: string
 }
 
-export function SummaryCard({ kpi, index = 0, icon, accent = "from-blue-500/10 to-violet-500/10" }: Props) {
+export function SummaryCard({ kpi, index = 0, icon, accent = "from-primary/10 to-primary/5" }: Props) {
   const t = useT()
   const { labelKey, label, value, delta, unit, tier } = kpi
   const displayLabel = t[labelKey] ?? label
@@ -43,7 +43,7 @@ export function SummaryCard({ kpi, index = 0, icon, accent = "from-blue-500/10 t
             {/* Tier badge */}
             <span className={cn(
               "text-[10px] font-bold px-1.5 py-0.5 rounded",
-              tier === 'A' ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : "bg-blue-500/15 text-blue-600 dark:text-blue-400"
+              tier === 'A' ? "bg-primary/15 text-primary" : "bg-primary/10 text-primary"
             )}>
               T{tier}
             </span>

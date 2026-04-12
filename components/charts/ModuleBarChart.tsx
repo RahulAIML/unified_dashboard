@@ -26,7 +26,7 @@ function CustomTooltip({ active, payload, label }: any) {
   )
 }
 
-const COLORS = ["#6366f1", "#10b981"]
+const COLORS = ["hsl(var(--primary))", "hsl(var(--primary) / 0.6)"]
 
 export function ModuleBarChart({ data }: { data: DataPoint[] }) {
   return (

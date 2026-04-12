@@ -15,6 +15,7 @@ export const translations = {
     navSimulator:    'Simulator',
     navCertification:'Certification',
     navSecondBrain:  'Second Brain',
+    navSettings:     'Settings',
     lightMode:       'Light mode',
     darkMode:        'Dark mode',
     phaseLabel:      'v1.0 · Phase 1 Launch',
@@ -37,6 +38,10 @@ export const translations = {
     certSub:         'Evaluation results, pass rates, and score distributions',
     sbTitle:         'Second Brain',
     sbSub:           'Knowledge base content inventory and document tracking',
+    settingsTitle:   'Settings',
+    settingsSub:     'Customize the dashboard look and feel for each client',
+    brandColors:     'Brand Colors',
+    brandColorsSub:  'Set the primary brand color used across the dashboard',
 
     // ── KPI card labels ──────────────────────────────────────
     totalUsers:           'Total Users',
@@ -174,6 +179,7 @@ export const translations = {
     navSimulator:    'Simulador',
     navCertification:'Certificación',
     navSecondBrain:  'Segunda Mente',
+    navSettings:     'Ajustes',
     lightMode:       'Modo claro',
     darkMode:        'Modo oscuro',
     phaseLabel:      'v1.0 · Fase 1 Lanzamiento',
@@ -196,6 +202,10 @@ export const translations = {
     certSub:         'Resultados de evaluaciones, tasas de aprobación y distribución de puntuaciones',
     sbTitle:         'Segunda Mente',
     sbSub:           'Inventario de base de conocimiento y seguimiento de documentos',
+    settingsTitle:   'Ajustes',
+    settingsSub:     'Personaliza el aspecto del panel para cada cliente',
+    brandColors:     'Colores de Marca',
+    brandColorsSub:  'Define el color principal utilizado en todo el panel',
 
     // ── KPI card labels ──────────────────────────────────────
     totalUsers:           'Usuarios Totales',
@@ -329,3 +339,5 @@ export const translations = {
 export type Lang = keyof typeof translations
 export type TranslationKey = keyof typeof translations.en
 export type T = typeof translations.en
+
+
