@@ -13,6 +13,84 @@ interface Message {
   content: string
 }
 
+function parseInline(text: string): React.ReactNode[] {
+  const nodes: React.ReactNode[] = []
+  const regex = /(\*\*[^*]+\*\*|`[^`]+`|\*[^*]+\*)/g
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      nodes.push(text.slice(lastIndex, match.index))
+    }
+    const token = match[0]
+    if (token.startsWith("**")) {
+      nodes.push(<strong key={`${match.index}-b`}>{token.slice(2, -2)}</strong>)
+    } else if (token.startsWith("`")) {
+      nodes.push(
+        <code
+          key={`${match.index}-c`}
+          className="rounded bg-muted px-1.5 py-0.5 text-[12px]"
+        >
+          {token.slice(1, -1)}
+        </code>
+      )
+    } else if (token.startsWith("*")) {
+      nodes.push(<em key={`${match.index}-i`}>{token.slice(1, -1)}</em>)
+    }
+    lastIndex = match.index + token.length
+  }
+
+  if (lastIndex < text.length) {
+    nodes.push(text.slice(lastIndex))
+  }
+
+  return nodes
+}
+
+function renderMarkdown(content: string): React.ReactNode[] {
+  const lines = content.split(/\r?\n/)
+  const blocks: React.ReactNode[] = []
+  let listItems: string[] = []
+
+  const flushList = () => {
+    if (listItems.length === 0) return
+    blocks.push(
+      <ul key={`list-${blocks.length}`} className="ml-4 list-disc space-y-1">
+        {listItems.map((item, i) => (
+          <li key={`li-${blocks.length}-${i}`}>{parseInline(item)}</li>
+        ))}
+      </ul>
+    )
+    listItems = []
+  }
+
+  lines.forEach((line, idx) => {
+    const trimmed = line.trim()
+    const listMatch = /^[-*•]\s+(.+)$/.exec(trimmed)
+    if (listMatch) {
+      listItems.push(listMatch[1])
+      return
+    }
+
+    flushList()
+
+    if (trimmed.length === 0) {
+      blocks.push(<div key={`sp-${idx}`} className="h-2" />)
+      return
+    }
+
+    blocks.push(
+      <p key={`p-${idx}`} className="leading-relaxed">
+        {parseInline(trimmed)}
+      </p>
+    )
+  })
+
+  flushList()
+  return blocks
+}
+
 function summarizeTrend(trend?: { value: number }[]): string {
   if (!trend || trend.length < 2) return "trend data is limited"
   const first = trend[0].value
@@ -169,7 +247,7 @@ export function AIAssistant() {
                       : "bg-muted text-foreground"
                   )}
                 >
-                  {m.content}
+                  <div className="space-y-2">{renderMarkdown(m.content)}</div>
                 </div>
               ))}
               {loading && (
