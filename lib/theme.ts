@@ -130,3 +130,52 @@ export function loadSavedTheme(): string | null {
   if (saved) applyTheme(saved)
   return saved
 }
+
+// ── Logo → color extraction ───────────────────────────────────────────────────
+
+/** Convert an RGB triplet to an HSL CSS-variable string e.g. "220 72% 56%" */
+export function rgbToHsl(r: number, g: number, b: number): string {
+  const rn = r / 255
+  const gn = g / 255
+  const bn = b / 255
+
+  const max = Math.max(rn, gn, bn)
+  const min = Math.min(rn, gn, bn)
+  let h = 0
+  let s = 0
+  const l = (max + min) / 2
+
+  if (max !== min) {
+    const d = max - min
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
+    switch (max) {
+      case rn:
+        h = (gn - bn) / d + (gn < bn ? 6 : 0)
+        break
+      case gn:
+        h = (bn - rn) / d + 2
+        break
+      default:
+        h = (rn - gn) / d + 4
+        break
+    }
+    h *= 60
+  }
+
+  return `${Math.round(h)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`
+}
+
+/** Save the logo dataURL so it persists across page loads */
+export function saveLogoPreview(dataUrl: string) {
+  if (typeof localStorage === "undefined") return
+  try {
+    localStorage.setItem("theme-logo", dataUrl)
+  } catch {
+    // localStorage quota exceeded — silently ignore
+  }
+}
+
+export function loadSavedLogo(): string | null {
+  if (typeof localStorage === "undefined") return null
+  return localStorage.getItem("theme-logo")
+}
