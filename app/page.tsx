@@ -120,40 +120,52 @@ interface SolutionSnapshot {
   prevAvgScore:         number
   prevPassRate:         number
   // trend data for charts
-  scoreTrendBase:  number   // daily avg sessions for line chart
-  activityBase:    number   // daily eval count
+  scoreTrendBase:  number
+  activityBase:    number
+  // User-count fields — fixed per solution so they sum to "all" totals
+  users:    number   // Total Users
+  assigned: number   // Assigned to Scenarios
 }
 
+// Numbers are internally consistent:
+//   users:    87+62+54+31+14 = 248  ✓
+//   assigned: 65+48+41+23+9  = 186  ✓
 const SOLUTION_MOCK: Record<string, SolutionSnapshot> = {
   all: {
     totalEvaluations: 1342, avgScore: 76, passRate: 63, passedEvaluations: 94,
     prevTotalEvaluations: 1041, prevAvgScore: 71, prevPassRate: 58,
     scoreTrendBase: 45, activityBase: 45,
+    users: 248, assigned: 186,
   },
   lms: {
     totalEvaluations: 312, avgScore: 82, passRate: 71, passedEvaluations: 28,
     prevTotalEvaluations: 271, prevAvgScore: 78, prevPassRate: 66,
     scoreTrendBase: 11, activityBase: 11,
+    users: 87, assigned: 65,
   },
   coach: {
     totalEvaluations: 287, avgScore: 69, passRate: 58, passedEvaluations: 19,
     prevTotalEvaluations: 320, prevAvgScore: 72, prevPassRate: 61,
     scoreTrendBase: 10, activityBase: 10,
+    users: 62, assigned: 48,
   },
   simulator: {
     totalEvaluations: 398, avgScore: 74, passRate: 65, passedEvaluations: 31,
     prevTotalEvaluations: 352, prevAvgScore: 70, prevPassRate: 60,
     scoreTrendBase: 14, activityBase: 14,
+    users: 54, assigned: 41,
   },
   certification: {
     totalEvaluations: 198, avgScore: 79, passRate: 68, passedEvaluations: 16,
     prevTotalEvaluations: 174, prevAvgScore: 75, prevPassRate: 64,
     scoreTrendBase: 7, activityBase: 7,
+    users: 31, assigned: 23,
   },
   "second-brain": {
     totalEvaluations: 147, avgScore: 88, passRate: 75, passedEvaluations: 12,
     prevTotalEvaluations: 124, prevAvgScore: 83, prevPassRate: 70,
     scoreTrendBase: 5, activityBase: 5,
+    users: 14, assigned: 9,
   },
 }
 
@@ -263,21 +275,11 @@ export default function OverviewPage() {
     const mockKpis = Object.values(mockData.kpis)
     const d = calcDelta
 
-    // Scale "Total Users" and "Assigned" proportionally to the selected solution's
-    // session share so they don't look identical across solutions.
-    // (Real user-count data isn't in the analytics DB — it lives in a separate system.)
-    const allSessions  = SOLUTION_MOCK.all.totalEvaluations   // 1342 total mock baseline
-    const thisShare    = snapshot.totalEvaluations / Math.max(allSessions, 1)
-    const totalUsers   = selectedSolution
-      ? Math.max(1, Math.round(Number(mockKpis[0].value) * thisShare))
-      : mockKpis[0].value
-    const assigned     = selectedSolution
-      ? Math.max(1, Math.round(Number(mockKpis[1].value) * thisShare))
-      : mockKpis[1].value
-
+    // Use fixed per-solution user counts (defined in SOLUTION_MOCK) so the
+    // numbers are always internally consistent: solution values sum to "all".
     return [
-      { ...mockKpis[0], value: totalUsers },
-      { ...mockKpis[1], value: assigned  },
+      { ...mockKpis[0], value: snapshot.users    },
+      { ...mockKpis[1], value: snapshot.assigned  },
       {
         label: "Practice Sessions", labelKey: "practiceSessions" as const,
         value: snapshot.totalEvaluations,
@@ -306,7 +308,7 @@ export default function OverviewPage() {
         tier: "A" as const,
       },
     ]
-  }, [snapshot, mockData.kpis, selectedSolution])
+  }, [snapshot, mockData.kpis])
 
   // ── Activity trend ────────────────────────────────────────────────────────
   // Priority: real API trend → synthetic (solution-specific) → plain mock scale
