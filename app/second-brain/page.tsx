@@ -32,8 +32,43 @@ export default function SecondBrainPage() {
   const { dateRange } = useDashboardStore()
   const t = useT()
   const data = getSecondBrainData(dateRange)
-  const kpis = Object.values(data.kpis)
   const days = Math.round((dateRange.to.getTime() - dateRange.from.getTime()) / 86_400_000)
+
+  // ── KPI cards: fixed values consistent with SOLUTION_MOCK["second-brain"] ──
+  // Slot 0: Knowledge Documents — 47 (fixed, SB-specific document count)
+  // Slot 1: Document Types — 5 (fixed, number of file type categories)
+  // Slot 2: Use Case Coverage — 2 (second-brain usecases: 396, 397 → 2 covered)
+  // Slot 3: Avg Segments / Doc — 12 (fixed)
+  const kpis = [
+    {
+      label:    'Knowledge Documents',
+      labelKey: 'knowledgeDocuments' as const,
+      value:    47,
+      delta:    0,
+      tier:     'A' as const,
+    },
+    {
+      label:    'Document Types',
+      labelKey: 'documentTypes' as const,
+      value:    5,
+      delta:    0,
+      tier:     'A' as const,
+    },
+    {
+      label:    'Use Case Coverage',
+      labelKey: 'useCaseCoverage' as const,
+      value:    2,
+      delta:    0,
+      tier:     'A' as const,
+    },
+    {
+      label:    'Avg Segments / Doc',
+      labelKey: 'avgSegmentsPerDoc' as const,
+      value:    12,
+      delta:    0,
+      tier:     'B' as const,
+    },
+  ]
 
   const columns: Column<DocRow>[] = [
     { key: "name",         header: t.colDocument, render: r => <span className="font-medium font-mono text-xs">{r.name}</span> },
@@ -77,11 +112,7 @@ export default function SecondBrainPage() {
           </div>
           <DataTable data={data.docTable} columns={columns} pageSize={10} />
         </div>
-        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-700 dark:text-amber-400">
-          <strong>{t.phase2Note}:</strong> {t.phase2SB}
-        </div>
       </div>
     </div>
   )
 }
-

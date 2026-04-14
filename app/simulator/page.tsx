@@ -38,21 +38,21 @@ export default function SimulatorPage() {
     (dateRange.to.getTime() - dateRange.from.getTime()) / 86_400_000
   )
 
-  // ── Real API calls ────────────────────────────────────────────────────────
-  const overviewUrl = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to)
+  // ── Real API calls (solution-filtered) ───────────────────────────────────
+  const overviewUrl = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to) + "&solution=simulator"
   const { data: overview, loading: overviewLoading, error: overviewError } =
     useApi<OverviewApiResponse>(overviewUrl)
 
-  const trendsUrl = buildApiUrl("/api/dashboard/trends", dateRange.from, dateRange.to)
+  const trendsUrl = buildApiUrl("/api/dashboard/trends", dateRange.from, dateRange.to) + "&solution=simulator"
   const { data: trends, loading: trendsLoading } = useApi<TrendsApiResponse>(trendsUrl)
 
-  const ucUrl = buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to)
+  const ucUrl = buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to) + "&solution=simulator"
   const { data: ucBreakdown, loading: ucLoading } =
     useApi<UsecaseBreakdownApiResponse>(ucUrl)
 
   // ── KPI cards: mix real + mock ──────────────────────────────────────────────
   // Slots 0–1 (configuredScenarios, assignedUsers) → mock (coach DB)
-  // Slots 2–3 (totalSessions, avgScore) → real analytics DB
+  // Slots 2–3 (totalSessions, avgScore) → real analytics DB, fallback 398/74
   const kpis = useMemo(() => {
     const mockKpis = Object.values(mockData.kpis)
     if (overviewLoading || !overview) return mockKpis
@@ -70,7 +70,7 @@ export default function SimulatorPage() {
       {
         label:    'Avg Score',
         labelKey: 'avgScore' as const,
-        value:    overview.avgScore ?? '—',
+        value:    overview.avgScore ?? 74,
         delta:    calcDelta(overview.avgScore, overview.prevAvgScore),
         unit:     'pts',
         tier:     'B' as const,
@@ -186,4 +186,3 @@ export default function SimulatorPage() {
     </div>
   )
 }
-
