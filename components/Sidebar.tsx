@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { motion } from "framer-motion"
@@ -10,6 +11,7 @@ import {
 import { cn } from "@/lib/utils"
 import { useTheme } from "./ThemeProvider"
 import { useT } from "@/lib/lang-store"
+import { brand } from "@/lib/brand"
 
 export function Sidebar() {
   const pathname = usePathname()
@@ -28,12 +30,25 @@ export function Sidebar() {
 
   return (
     <aside className="w-64 shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col">
-      {/* Logo */}
-      <div className="h-16 flex items-center px-6 border-b border-sidebar-border">
-        <span className="text-xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-          RolplayPro
-        </span>
-        <span className="ml-2 text-xs text-muted-foreground font-medium">Analytics</span>
+
+      {/* Brand logo */}
+      <div className="h-16 flex items-center gap-3 px-5 border-b border-sidebar-border">
+        <div className="relative h-10 w-10 shrink-0 rounded-md overflow-hidden bg-muted">
+          <Image
+            src={brand.logo}
+            alt={brand.logoAlt}
+            fill
+            sizes="40px"
+            className="object-contain"
+            priority
+          />
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-bold tracking-tight leading-tight truncate text-sidebar-foreground">
+            {brand.appName}
+          </p>
+          <p className="text-[10px] text-muted-foreground/60 leading-tight">Analytics Dashboard</p>
+        </div>
       </div>
 
       {/* Nav */}
