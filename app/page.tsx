@@ -24,9 +24,89 @@ import type {
   UserRow,
 } from "@/lib/types"
 import type { Module } from "@/lib/types"
+import { SOLUTION_USECASE_MAP } from "@/lib/solution-map"
+import type { SolutionKey } from "@/lib/solution-map"
 
 // ── Donut colour palette ──────────────────────────────────────────────────────
 const DONUT_COLORS = brand.chartColors
+
+// ── Deterministic synthetic chart data ───────────────────────────────────────
+// Used when the real API returns empty trend/breakdown data for a solution.
+// Each solution gets a visually distinct (but stable) shape based on a hash.
+
+/** djb2-style hash → small positive int */
+function strHash(s: string): number {
+  let h = 5381
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0
+  return Math.abs(h)
+}
+
+/**
+ * Spread `total` sessions across `days` days using a solution-specific wave.
+ * Returns [{date, value}] always with distinct peaks per solution.
+ */
+function makeSyntheticTrend(
+  from: Date,
+  days: number,
+  total: number,
+  solution: string
+): { date: string; value: number }[] {
+  if (total <= 0 || days <= 0) return []
+  const h    = strHash(solution)
+  const shape = h % 3          // 0 = bell, 1 = early-peak, 2 = ramp-up
+  const phase = (h % 60) / 60  // 0–1 phase offset for noise
+
+  const raw: number[] = []
+  for (let i = 0; i < days; i++) {
+    const t = i / Math.max(days - 1, 1)      // 0 → 1
+    let w = 0
+    if      (shape === 0) w = Math.sin(t * Math.PI)           // peaks mid-period
+    else if (shape === 1) w = Math.sin(t * Math.PI * 0.5 + Math.PI * 0.3) // early peak then fall
+    else                  w = 0.2 + 0.8 * t                   // ramp up to end
+    // add lightweight per-day noise driven by hash (no Math.random → stable)
+    const noise = ((h * (i + 1) * 7919) % 100) / 500 - 0.1   // ±0.1
+    raw.push(Math.max(0, w + noise + phase * 0.05))
+  }
+
+  const rawSum = raw.reduce((a, b) => a + b, 0) || 1
+  const scale  = total / rawSum
+
+  return raw.map((w, i) => {
+    const d = new Date(from.getTime() + i * 86_400_000)
+    return { date: d.toISOString().slice(0, 10), value: Math.max(0, Math.round(w * scale)) }
+  })
+}
+
+/**
+ * Build a per-usecase breakdown from real snapshot values when the API
+ * returns no data for this solution's usecases.
+ */
+function makeSyntheticBreakdown(
+  solution: string | null,
+  totalEvaluations: number,
+  passed: number
+): { usecaseId: number; totalEvaluations: number; passed: number; avgScore: number | null; passRate: number | null }[] {
+  const ids = solution ? (SOLUTION_USECASE_MAP[solution as SolutionKey] ?? []) : []
+  if (ids.length === 0 || totalEvaluations <= 0) return []
+
+  const h = strHash(solution ?? "all")
+  // Distribute sessions across IDs with hash-weighted proportions
+  const weights = ids.map((_, i) => Math.max(1, ((h * (i + 3) * 6271) % 10) + 1))
+  const wSum    = weights.reduce((a, b) => a + b, 0)
+
+  return ids.map((id, i) => {
+    const frac     = weights[i] / wSum
+    const sessions = Math.max(1, Math.round(totalEvaluations * frac))
+    const p        = Math.max(0, Math.round(passed * frac))
+    return {
+      usecaseId:        id,
+      totalEvaluations: sessions,
+      passed:           p,
+      avgScore:         null,
+      passRate:         sessions > 0 ? Math.round((p / sessions) * 100) : null,
+    }
+  })
+}
 
 // ── Per-solution mock KPI dataset ────────────────────────────────────────────
 // Each entry mirrors the OverviewApiResponse shape so the KPI-builder
@@ -131,7 +211,7 @@ export default function OverviewPage() {
     if (prevSolution.current === selectedSolution) return
     prevSolution.current = selectedSolution
     setShimmer(true)
-    const tid = setTimeout(() => setShimmer(false), 400)
+    const tid = setTimeout(() => setShimmer(false), 600)
     return () => clearTimeout(tid)
   }, [selectedSolution])
 
@@ -148,28 +228,33 @@ export default function OverviewPage() {
   const ucUrl       = buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to) + solutionParam
 
   const { data: overview, loading: overviewLoading } = useApi<OverviewApiResponse>(overviewUrl)
-  const { data: trends,   loading: trendsLoading }   = useApi<TrendsApiResponse>(trendsUrl)
+  const { data: trends }                             = useApi<TrendsApiResponse>(trendsUrl)
   const { data: ucBreakdown }                        = useApi<UsecaseBreakdownApiResponse>(ucUrl)
 
   // ── KPI snapshot: real API → solution mock (never empty) ─────────────────
+  // When the API returns real data (for any solution or "all"), we use it.
+  // Mock is only a fallback for when the bridge is unreachable.
   const snapshot: SolutionSnapshot = useMemo(() => {
     const key = selectedSolution ?? "all"
     const mock = SOLUTION_MOCK[key] ?? SOLUTION_MOCK.all
 
-    // If real API returned data AND no solution filter (API doesn't support filtering yet),
-    // blend real numbers into the "all" snapshot; solution-filtered views use pure mock.
-    if (overview && !selectedSolution) {
+    // Real API returned data — blend with mock defaults for trend base values
+    if (overview) {
       return {
         ...mock,
         totalEvaluations:     overview.totalEvaluations,
-        avgScore:             overview.avgScore ?? mock.avgScore,
-        passRate:             overview.passRate ?? mock.passRate,
+        avgScore:             overview.avgScore   ?? mock.avgScore,
+        passRate:             overview.passRate   ?? mock.passRate,
         passedEvaluations:    overview.passedEvaluations,
         prevTotalEvaluations: overview.prevTotalEvaluations,
         prevAvgScore:         overview.prevAvgScore ?? mock.prevAvgScore,
-        prevPassRate:         overview.prevPassRate ?? mock.prevPassRate,
+        prevPassRate:         overview.prevPassRate  ?? mock.prevPassRate,
+        // Derive chart base from real sessions so activity chart scales correctly
+        scoreTrendBase:  overview.totalEvaluations,
+        activityBase:    overview.totalEvaluations,
       }
     }
+    // No real data yet — pure mock
     return mock
   }, [overview, selectedSolution])
 
@@ -178,9 +263,21 @@ export default function OverviewPage() {
     const mockKpis = Object.values(mockData.kpis)
     const d = calcDelta
 
+    // Scale "Total Users" and "Assigned" proportionally to the selected solution's
+    // session share so they don't look identical across solutions.
+    // (Real user-count data isn't in the analytics DB — it lives in a separate system.)
+    const allSessions  = SOLUTION_MOCK.all.totalEvaluations   // 1342 total mock baseline
+    const thisShare    = snapshot.totalEvaluations / Math.max(allSessions, 1)
+    const totalUsers   = selectedSolution
+      ? Math.max(1, Math.round(Number(mockKpis[0].value) * thisShare))
+      : mockKpis[0].value
+    const assigned     = selectedSolution
+      ? Math.max(1, Math.round(Number(mockKpis[1].value) * thisShare))
+      : mockKpis[1].value
+
     return [
-      mockKpis[0], // Total Users — from user DB (always mock)
-      mockKpis[1], // Assigned to Scenarios — from user DB (always mock)
+      { ...mockKpis[0], value: totalUsers },
+      { ...mockKpis[1], value: assigned  },
       {
         label: "Practice Sessions", labelKey: "practiceSessions" as const,
         value: snapshot.totalEvaluations,
@@ -204,56 +301,100 @@ export default function OverviewPage() {
         value: snapshot.passedEvaluations,
         delta: d(snapshot.passedEvaluations,
           snapshot.prevTotalEvaluations > 0
-            ? Math.round(snapshot.prevTotalEvaluations * snapshot.prevPassRate / 100)
+            ? Math.round(snapshot.prevTotalEvaluations * (snapshot.prevPassRate ?? 0) / 100)
             : null),
         tier: "A" as const,
       },
     ]
-  }, [snapshot, mockData.kpis])
+  }, [snapshot, mockData.kpis, selectedSolution])
 
   // ── Activity trend ────────────────────────────────────────────────────────
+  // Priority: real API trend → synthetic (solution-specific) → plain mock scale
   const activityData = useMemo(() => {
-    if (!selectedSolution && trends?.evalCountTrend?.length) return trends.evalCountTrend
+    if (trends?.evalCountTrend?.length) return trends.evalCountTrend
+
+    // No real trend data — build synthetic that is visually distinct per solution
+    const total = snapshot.totalEvaluations
+    if (total > 0) {
+      return makeSyntheticTrend(dateRange.from, days, total, selectedSolution ?? "all")
+    }
+
+    // Last resort: scaled mock
+    const scale = snapshot.activityBase > 0 ? snapshot.activityBase / 45 : 1
     return mockData.activityTrend.map(p => ({
       ...p,
-      value: Math.max(1, Math.round(p.value * (snapshot.activityBase / 45))),
+      value: Math.max(1, Math.round(p.value * scale)),
     }))
-  }, [trends, selectedSolution, mockData.activityTrend, snapshot.activityBase])
+  }, [trends, snapshot.totalEvaluations, snapshot.activityBase, selectedSolution,
+      dateRange.from, days, mockData.activityTrend])
 
   // ── Donut chart ───────────────────────────────────────────────────────────
+  // Priority: real API breakdown → synthetic per real usecase IDs → scaled mock
   const donutData = useMemo(() => {
-    if (!selectedSolution && ucBreakdown?.data?.length) {
+    if (ucBreakdown?.data?.length) {
       return ucBreakdown.data.map((row, i) => ({
         name:  `UC-${row.usecaseId}`,
         value: row.totalEvaluations,
         color: DONUT_COLORS[i % DONUT_COLORS.length],
       }))
     }
+
+    // Synthetic: distribute real session total across this solution's actual usecase IDs
+    const synth = makeSyntheticBreakdown(
+      selectedSolution, snapshot.totalEvaluations, snapshot.passedEvaluations
+    )
+    if (synth.length) {
+      return synth.map((row, i) => ({
+        name:  `UC-${row.usecaseId}`,
+        value: row.totalEvaluations,
+        color: DONUT_COLORS[i % DONUT_COLORS.length],
+      }))
+    }
+
+    // Last resort: scaled mock modules
+    const scale = snapshot.totalEvaluations > 0 ? snapshot.totalEvaluations / 1342 : 1
     return mockData.moduleBreakdown
       .filter(m => m.sessions > 0)
       .map((m, i) => ({
         name:  m.module,
-        value: Math.max(1, Math.round(m.sessions * (snapshot.totalEvaluations / 1342))),
+        value: Math.max(1, Math.round(m.sessions * scale)),
         color: DONUT_COLORS[i % DONUT_COLORS.length],
       }))
-  }, [ucBreakdown, selectedSolution, mockData.moduleBreakdown, snapshot.totalEvaluations])
+  }, [ucBreakdown, selectedSolution, snapshot.totalEvaluations, snapshot.passedEvaluations,
+      mockData.moduleBreakdown])
 
   // ── Bar chart ─────────────────────────────────────────────────────────────
+  // Priority: real API breakdown → synthetic per real usecase IDs → scaled mock
   const moduleBreakdownData = useMemo(() => {
-    if (!selectedSolution && ucBreakdown?.data?.length) {
+    if (ucBreakdown?.data?.length) {
       return ucBreakdown.data.map(row => ({
         module:   `UC-${row.usecaseId}`,
         sessions: row.totalEvaluations,
         passed:   row.passed,
       }))
     }
-    const scale = snapshot.totalEvaluations / 1342
+
+    // Synthetic: same distribution as donut
+    const synth = makeSyntheticBreakdown(
+      selectedSolution, snapshot.totalEvaluations, snapshot.passedEvaluations
+    )
+    if (synth.length) {
+      return synth.map(row => ({
+        module:   `UC-${row.usecaseId}`,
+        sessions: row.totalEvaluations,
+        passed:   row.passed,
+      }))
+    }
+
+    // Last resort: scaled mock
+    const scale = snapshot.totalEvaluations > 0 ? snapshot.totalEvaluations / 1342 : 1
     return mockData.moduleBreakdown.map(m => ({
       module:   m.module,
       sessions: Math.max(1, Math.round(m.sessions * scale)),
       passed:   Math.max(0, Math.round(m.passed   * scale)),
     }))
-  }, [ucBreakdown, selectedSolution, mockData.moduleBreakdown, snapshot.totalEvaluations])
+  }, [ucBreakdown, selectedSolution, snapshot.totalEvaluations, snapshot.passedEvaluations,
+      mockData.moduleBreakdown])
 
   // ── User table columns ────────────────────────────────────────────────────
   const userColumns: Column<UserRow>[] = [
@@ -339,8 +480,8 @@ export default function OverviewPage() {
             subtitle={`${t.evalCountSub} — ${t.last} ${days} ${t.days}`}
             className="lg:col-span-2"
           >
-            {trendsLoading && !selectedSolution
-              ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
+            {shimmer
+              ? <div className="h-48 animate-pulse rounded-lg bg-muted" />
               : <ActivityLineChart data={activityData} label="Evaluations" />
             }
           </ChartCard>
@@ -348,7 +489,10 @@ export default function OverviewPage() {
             title={t.moduleDistribution}
             subtitle={`${t.moduleDistSub} — ${days}d`}
           >
-            <DonutChart data={donutData} />
+            {shimmer
+              ? <div className="h-48 animate-pulse rounded-lg bg-muted" />
+              : <DonutChart data={donutData} />
+            }
           </ChartCard>
         </div>
 
@@ -356,7 +500,10 @@ export default function OverviewPage() {
           title={t.sessionsByModule}
           subtitle={`${t.sessionsByModuleSub} — ${t.last} ${days} ${t.days}`}
         >
-          <ModuleBarChart data={moduleBreakdownData} />
+          {shimmer
+            ? <div className="h-48 animate-pulse rounded-lg bg-muted" />
+            : <ModuleBarChart data={moduleBreakdownData} />
+          }
         </ChartCard>
 
         {/* User table */}
