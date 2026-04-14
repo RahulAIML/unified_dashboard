@@ -1,6 +1,5 @@
 "use client"
 
-import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { motion } from "framer-motion"
@@ -33,13 +32,13 @@ export function Sidebar() {
 
       {/* Brand logo */}
       <div className="h-16 flex items-center gap-3 px-5 border-b border-sidebar-border">
-        <Image
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
           src={brand.logo}
           alt={brand.logoAlt}
           width={40}
           height={40}
           className="rounded-md object-contain shrink-0"
-          priority
         />
         <div className="min-w-0">
           <p className="text-sm font-bold tracking-tight leading-tight truncate text-sidebar-foreground">

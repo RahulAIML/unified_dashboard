@@ -1,4 +1,5 @@
 "use client"
+import { brand } from "@/lib/brand"
 
 import { BrainCircuit, Users, Layers, GitBranch } from "lucide-react"
 import { DashboardHeader } from "@/components/DashboardHeader"
@@ -57,7 +58,7 @@ export default function CoachPage() {
           ))}
         </div>
         <ChartCard title={t.useCaseDeployment} subtitle={`${t.useCaseDeploymentSub} — ${t.last} ${days} ${t.days}`}>
-          <ActivityLineChart data={data.deploymentTrend} label="Use Cases" color="hsl(var(--primary))" />
+          <ActivityLineChart data={data.deploymentTrend} label="Use Cases" color={brand.chartColors[0]} />
         </ChartCard>
         <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
           <div className="mb-4">

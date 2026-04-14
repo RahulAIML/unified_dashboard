@@ -1,4 +1,5 @@
 "use client"
+import { brand } from "@/lib/brand"
 
 import { useMemo } from "react"
 import { Gamepad2, Users, PlayCircle, Award } from "lucide-react"
@@ -155,7 +156,7 @@ export default function SimulatorPage() {
         >
           {trendsLoading
             ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
-            : <ActivityLineChart data={scoreTrendData} label="Avg Score" color="hsl(var(--primary))" />
+            : <ActivityLineChart data={scoreTrendData} label="Avg Score" color={brand.chartColors[0]} />
           }
         </ChartCard>
 

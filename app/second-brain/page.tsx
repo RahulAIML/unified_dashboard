@@ -1,4 +1,5 @@
 "use client"
+import { brand } from "@/lib/brand"
 
 import { Database, FileType, Layers, BarChart2 } from "lucide-react"
 import { DashboardHeader } from "@/components/DashboardHeader"
@@ -62,7 +63,7 @@ export default function SecondBrainPage() {
           ))}
         </div>
         <ChartCard title={t.documentUploads} subtitle={`${t.documentUploadsSub} — ${t.last} ${days} ${t.days}`}>
-          <ActivityLineChart data={data.uploadTrend} label="Documents" color="hsl(var(--primary))" />
+          <ActivityLineChart data={data.uploadTrend} label="Documents" color={brand.chartColors[0]} />
         </ChartCard>
         <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
           <div className="mb-4">
