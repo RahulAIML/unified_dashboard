@@ -13,6 +13,7 @@ import {
   hslToHex,
 } from "@/lib/theme"
 import { cn } from "@/lib/utils"
+import { useT } from "@/lib/lang-store"
 
 // ── Preset brand colors ───────────────────────────────────────────────────────
 
@@ -36,6 +37,7 @@ function hslToCssColor(hsl: string): string {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function ThemeSwitcher() {
+  const t = useT()
   const [currentHsl, setCurrentHsl]     = useState<string>("220 72% 56%")
   const [logoUrl, setLogoUrl]           = useState<string | null>(null)
   const [extracting, setExtracting]     = useState(false)
@@ -138,7 +140,7 @@ export function ThemeSwitcher() {
           style={{ background: currentCssColor }}
         />
         <div>
-          <p className="text-sm font-medium">Active theme color</p>
+          <p className="text-sm font-medium">{t.themeActiveColor}</p>
           <p className="text-xs text-muted-foreground font-mono">{currentCssColor}</p>
         </div>
         <AnimatePresence>
@@ -149,7 +151,7 @@ export function ThemeSwitcher() {
               exit={{ opacity: 0 }}
               className="ml-auto flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400"
             >
-              <Check className="h-3 w-3" /> Applied
+              <Check className="h-3 w-3" /> {t.themeApplied}
             </motion.span>
           )}
         </AnimatePresence>
@@ -159,7 +161,7 @@ export function ThemeSwitcher() {
       <div>
         <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
           <ImageIcon className="h-3.5 w-3.5" />
-          Upload Company Logo
+          {t.themeUploadLogo}
         </p>
 
         <div
@@ -191,11 +193,11 @@ export function ThemeSwitcher() {
                 className="h-14 max-w-[120px] object-contain rounded"
               />
               <div className="flex-1 text-left">
-                <p className="text-sm font-medium">Logo uploaded</p>
+                <p className="text-sm font-medium">{t.themeLogoUploaded}</p>
                 {extracting && (
                   <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
                     <RefreshCw className="h-3 w-3 animate-spin" />
-                    Extracting dominant color…
+                    {t.themeExtracting}
                   </p>
                 )}
                 {extractedHsl && !extracting && (
@@ -204,7 +206,7 @@ export function ThemeSwitcher() {
                       className="h-4 w-4 rounded-full border border-white shadow-sm"
                       style={{ background: extractedCssColor! }}
                     />
-                    <span className="text-xs text-muted-foreground">Dominant color detected</span>
+                    <span className="text-xs text-muted-foreground">{t.themeDominantDetected}</span>
                   </div>
                 )}
                 {extractError && (
@@ -222,10 +224,8 @@ export function ThemeSwitcher() {
           ) : (
             <div className="py-2">
               <Upload className="mx-auto h-6 w-6 text-muted-foreground mb-2" />
-              <p className="text-sm font-medium">Drop your logo here</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                PNG, JPG, SVG · Theme color extracted automatically
-              </p>
+              <p className="text-sm font-medium">{t.themeDropLogo}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{t.themeDropLogoSub}</p>
             </div>
           )}
         </div>
@@ -244,14 +244,14 @@ export function ThemeSwitcher() {
                 style={{ background: extractedCssColor! }}
               />
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium">Color extracted from logo</p>
+                <p className="text-xs font-medium">{t.themeColorExtracted}</p>
                 <p className="text-[11px] text-muted-foreground font-mono truncate">{extractedCssColor}</p>
               </div>
               <button
                 onClick={() => applyColor(extractedHsl)}
                 className="shrink-0 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
               >
-                Apply Theme
+                {t.themeApplyTheme}
               </button>
             </motion.div>
           )}
@@ -262,7 +262,7 @@ export function ThemeSwitcher() {
       <div>
         <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
           <Palette className="h-3.5 w-3.5" />
-          Preset Colors
+          {t.themePresetColors}
         </p>
         <div className="flex flex-wrap gap-2">
           {PRESETS.map((p) => {
@@ -290,7 +290,7 @@ export function ThemeSwitcher() {
       {/* Manual hex input */}
       <div>
         <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Custom Hex Color
+          {t.themeCustomHex}
         </p>
         <div className="flex items-center gap-2">
           <input

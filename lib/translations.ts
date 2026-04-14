@@ -22,6 +22,7 @@ export const translations = {
 
     // ── Global filter bar ────────────────────────────────────
     filterSolutions: 'Solutions',
+    filterAll:       'All',
     last:            'last',
     days:            'days',
 
@@ -42,6 +43,22 @@ export const translations = {
     settingsSub:     'Customize the dashboard look and feel for each client',
     brandColors:     'Brand Colors',
     brandColorsSub:  'Set the primary brand color used across the dashboard',
+
+    // ── ThemeSwitcher ────────────────────────────────────────
+    themeActiveColor:      'Active theme color',
+    themeApplied:          'Applied',
+    themeUploadLogo:       'Upload Company Logo',
+    themeLogoUploaded:     'Logo uploaded',
+    themeExtracting:       'Extracting dominant color…',
+    themeDominantDetected: 'Dominant color detected',
+    themeColorExtracted:   'Color extracted from logo',
+    themeApplyTheme:       'Apply Theme',
+    themePresetColors:     'Preset Colors',
+    themeCustomHex:        'Custom Hex Color',
+    themeDropLogo:         'Drop your logo here',
+    themeDropLogoSub:      'PNG, JPG, SVG · Theme color extracted automatically',
+    themeShowing:          'Showing:',
+    themeClear:            'Clear',
 
     // ── KPI card labels ──────────────────────────────────────
     totalUsers:           'Total Users',
@@ -178,7 +195,7 @@ export const translations = {
     navCoach:        'Coach Experto',
     navSimulator:    'Simulador',
     navCertification:'Certificación',
-    navSecondBrain:  'Segunda Mente',
+    navSecondBrain:  'Second Brain',   // brand name — never translate
     navSettings:     'Ajustes',
     lightMode:       'Modo claro',
     darkMode:        'Modo oscuro',
@@ -186,6 +203,7 @@ export const translations = {
 
     // ── Global filter bar ────────────────────────────────────
     filterSolutions: 'Soluciones',
+    filterAll:       'Todos',
     last:            'últimos',
     days:            'días',
 
@@ -200,12 +218,28 @@ export const translations = {
     simSub:          'Sesiones de escenarios, puntuaciones y tasas de aprobación',
     certTitle:       'Certificación Experta',
     certSub:         'Resultados de evaluaciones, tasas de aprobación y distribución de puntuaciones',
-    sbTitle:         'Segunda Mente',
+    sbTitle:         'Second Brain',   // brand name — never translate
     sbSub:           'Inventario de base de conocimiento y seguimiento de documentos',
     settingsTitle:   'Ajustes',
     settingsSub:     'Personaliza el aspecto del panel para cada cliente',
     brandColors:     'Colores de Marca',
     brandColorsSub:  'Define el color principal utilizado en todo el panel',
+
+    // ── ThemeSwitcher ────────────────────────────────────────
+    themeActiveColor:      'Color de tema activo',
+    themeApplied:          'Aplicado',
+    themeUploadLogo:       'Subir Logo de Empresa',
+    themeLogoUploaded:     'Logo cargado',
+    themeExtracting:       'Extrayendo color dominante…',
+    themeDominantDetected: 'Color dominante detectado',
+    themeColorExtracted:   'Color extraído del logo',
+    themeApplyTheme:       'Aplicar Tema',
+    themePresetColors:     'Colores Predefinidos',
+    themeCustomHex:        'Color Hex Personalizado',
+    themeDropLogo:         'Arrastra tu logo aquí',
+    themeDropLogoSub:      'PNG, JPG, SVG · Color extraído automáticamente',
+    themeShowing:          'Mostrando:',
+    themeClear:            'Limpiar',
 
     // ── KPI card labels ──────────────────────────────────────
     totalUsers:           'Usuarios Totales',

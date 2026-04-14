@@ -113,7 +113,7 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
                 className="w-1.5 h-1.5 rounded-full shrink-0"
                 style={{ background: !selectedSolution ? brand.accentColor : "#9ca3af" }}
               />
-              All
+              {t.filterAll}
             </motion.button>
 
             {MODULES.map(({ id, label }) => {

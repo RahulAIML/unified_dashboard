@@ -309,14 +309,14 @@ export default function OverviewPage() {
                 className="inline-block w-2 h-2 rounded-full"
                 style={{ background: brand.accentColor }}
               />
-              Showing: <span className="capitalize font-bold">
+              {t.themeShowing} <span className="capitalize font-bold">
                 {selectedSolution.replace("-", " ")}
               </span>
               <button
                 onClick={() => useDashboardStore.getState().setSolution(null)}
                 className="ml-1 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
               >
-                Clear
+                {t.themeClear}
               </button>
             </motion.div>
           )}
