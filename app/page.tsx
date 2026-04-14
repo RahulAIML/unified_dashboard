@@ -21,6 +21,7 @@ import type {
   UserRow,
 } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import { brand } from "@/lib/brand"
 
 const kpiIcons = [
   <Users key="u" className="w-4 h-4" />,
@@ -40,16 +41,8 @@ const kpiAccents = [
   "from-primary/10 to-primary/5",
 ]
 
-const DONUT_COLORS = [
-  "hsl(var(--primary))",
-  "hsl(var(--primary) / 0.85)",
-  "hsl(var(--primary) / 0.7)",
-  "hsl(var(--primary) / 0.55)",
-  "hsl(var(--primary) / 0.45)",
-  "hsl(var(--primary) / 0.35)",
-  "hsl(var(--primary) / 0.25)",
-  "hsl(var(--primary) / 0.15)",
-]
+// Coppel blue + yellow alternating palette — hardcoded hex for Recharts SVG
+const DONUT_COLORS = brand.chartColors
 
 export default function OverviewPage() {
   const { dateRange } = useDashboardStore()

@@ -14,7 +14,7 @@ export const brand = {
   /** Hex — maps to CSS --primary (buttons, active states, links) */
   primaryColor: "#1E40AF",
 
-  /** Hex — maps to CSS --brand-accent (charts, highlights, hover rings) */
+  /** Hex — Coppel yellow (highlights, second series in charts) */
   accentColor: "#FACC15",
 
   /** Path relative to /public — shown in sidebar top-left */
@@ -22,6 +22,21 @@ export const brand = {
 
   /** Alt text for the logo */
   logoAlt: "Coppel",
+
+  /**
+   * Hardcoded hex palette for Recharts (CSS variables don't work in SVG fill/stroke).
+   * Index 0 = primary blue, Index 1 = yellow, rest = blue/yellow family.
+   */
+  chartColors: [
+    "#1E40AF", // Coppel blue
+    "#FACC15", // Coppel yellow
+    "#2563EB", // blue-600
+    "#FDE68A", // yellow-200
+    "#1D4ED8", // blue-700
+    "#FCD34D", // yellow-300
+    "#3B82F6", // blue-500
+    "#60A5FA", // blue-400
+  ],
 } as const
 
 export type Brand = typeof brand

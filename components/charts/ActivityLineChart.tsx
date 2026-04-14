@@ -6,6 +6,7 @@ import {
   CartesianGrid, Tooltip, Legend
 } from "recharts"
 import type { TimeSeriesPoint } from "@/lib/types"
+import { brand } from "@/lib/brand"
 
 interface Props {
   data: TimeSeriesPoint[]
@@ -34,8 +35,8 @@ export function ActivityLineChart({
   data,
   label = "Sessions",
   label2,
-  color = "hsl(var(--primary))",
-  color2 = "#10b981",
+  color  = brand.chartColors[0], // Coppel blue  — hardcoded hex, CSS vars don't work in Recharts SVG
+  color2 = brand.chartColors[1], // Coppel yellow
 }: Props) {
   const formatted = data.map(d => ({
     ...d,

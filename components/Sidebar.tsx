@@ -33,16 +33,14 @@ export function Sidebar() {
 
       {/* Brand logo */}
       <div className="h-16 flex items-center gap-3 px-5 border-b border-sidebar-border">
-        <div className="relative h-10 w-10 shrink-0 rounded-md overflow-hidden bg-muted">
-          <Image
-            src={brand.logo}
-            alt={brand.logoAlt}
-            fill
-            sizes="40px"
-            className="object-contain"
-            priority
-          />
-        </div>
+        <Image
+          src={brand.logo}
+          alt={brand.logoAlt}
+          width={40}
+          height={40}
+          className="rounded-md object-contain shrink-0"
+          priority
+        />
         <div className="min-w-0">
           <p className="text-sm font-bold tracking-tight leading-tight truncate text-sidebar-foreground">
             {brand.appName}

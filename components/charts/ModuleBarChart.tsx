@@ -5,6 +5,7 @@ import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis,
   CartesianGrid, Tooltip, Legend, Cell
 } from "recharts"
+import { brand } from "@/lib/brand"
 
 interface DataPoint {
   module: string
@@ -26,7 +27,8 @@ function CustomTooltip({ active, payload, label }: any) {
   )
 }
 
-const COLORS = ["hsl(var(--primary))", "hsl(var(--primary) / 0.6)"]
+// Hardcoded hex — CSS vars don't resolve inside Recharts SVG
+const COLORS = [brand.chartColors[0], brand.chartColors[1]]
 
 export function ModuleBarChart({ data }: { data: DataPoint[] }) {
   return (

@@ -6,6 +6,7 @@ import {
   CartesianGrid, Tooltip, Legend
 } from "recharts"
 import type { TimeSeriesPoint } from "@/lib/types"
+import { brand } from "@/lib/brand"
 
 function CustomTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null
@@ -37,8 +38,8 @@ export function StackedBarChart({ data }: { data: TimeSeriesPoint[] }) {
           <YAxis tick={{ fontSize: 11, fill: "currentColor", opacity: 0.5 }} axisLine={false} tickLine={false} />
           <Tooltip content={<CustomTooltip />} />
           <Legend wrapperStyle={{ fontSize: 11 }} />
-          <Bar dataKey="value"  name="Passed" stackId="a" fill="#10b981" radius={[0, 0, 0, 0]} />
-          <Bar dataKey="value2" name="Failed" stackId="a" fill="#f43f5e" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="value"  name="Passed" stackId="a" fill={brand.chartColors[0]} radius={[0, 0, 0, 0]} />
+          <Bar dataKey="value2" name="Failed" stackId="a" fill={brand.chartColors[1]} radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </motion.div>
