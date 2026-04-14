@@ -31,7 +31,7 @@ export function Sidebar() {
     <aside className="w-64 shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col">
 
       {/* Brand header — yellow accent bar on top */}
-      <div className="relative h-16 flex items-center gap-3 px-5 border-b border-sidebar-border overflow-hidden">
+      <div className="relative h-20 flex items-center gap-3 px-5 border-b border-sidebar-border overflow-hidden">
         {/* Coppel yellow top stripe */}
         <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ background: brand.accentColor }} />
 
@@ -39,9 +39,10 @@ export function Sidebar() {
         <img
           src={brand.logo}
           alt={brand.logoAlt}
-          width={36}
-          height={36}
-          className="rounded-md object-contain shrink-0"
+          width={52}
+          height={52}
+          className="rounded-lg object-contain shrink-0 shadow-sm"
+          style={{ border: `2px solid ${brand.accentColor}` }}
         />
         <div className="min-w-0">
           {/* "Coppel" in blue, "Analytics" in yellow */}
