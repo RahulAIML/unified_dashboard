@@ -12,10 +12,10 @@
 
 // ── Configuration ─────────────────────────────────────────────────────────────
 define('BRIDGE_SECRET', 'REDACTED_BRIDGE_SECRET');
-define('DB_HOST',       '127.0.0.1');
-define('DB_USER',       'rpsim');
-define('DB_PASS',       'skeleton-scribe-selective');
-define('DB_NAME',       'roleplay_demorp6');
+define('DB_HOST',       'localhost');
+define('DB_USER',       'root');
+define('DB_PASS',       'IYP-DB-2023-06');
+define('DB_NAME',       'rolplay_pro_analytics');
 define('DB_CHARSET',    'utf8mb4');
 define('DB_PORT',       3306);
 
