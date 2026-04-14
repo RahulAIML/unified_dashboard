@@ -30,19 +30,24 @@ export function Sidebar() {
   return (
     <aside className="w-64 shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col">
 
-      {/* Brand logo */}
-      <div className="h-16 flex items-center gap-3 px-5 border-b border-sidebar-border">
+      {/* Brand header — yellow accent bar on top */}
+      <div className="relative h-16 flex items-center gap-3 px-5 border-b border-sidebar-border overflow-hidden">
+        {/* Coppel yellow top stripe */}
+        <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ background: brand.accentColor }} />
+
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={brand.logo}
           alt={brand.logoAlt}
-          width={40}
-          height={40}
+          width={36}
+          height={36}
           className="rounded-md object-contain shrink-0"
         />
         <div className="min-w-0">
-          <p className="text-sm font-bold tracking-tight leading-tight truncate text-sidebar-foreground">
-            {brand.appName}
+          {/* "Coppel" in blue, "Analytics" in yellow */}
+          <p className="text-sm font-extrabold tracking-tight leading-tight truncate">
+            <span style={{ color: brand.primaryColor }}>Coppel </span>
+            <span style={{ color: brand.accentColor }}>Analytics</span>
           </p>
           <p className="text-[10px] text-muted-foreground/60 leading-tight">Analytics Dashboard</p>
         </div>
@@ -59,13 +64,19 @@ export function Sidebar() {
                 className={cn(
                   "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
                   active
-                    ? "bg-primary/10 text-primary"
+                    ? "text-white"
                     : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
                 )}
+                style={active ? { background: brand.primaryColor } : {}}
               >
                 <Icon className="w-4 h-4 shrink-0" />
                 <span>{label}</span>
-                {active && <ChevronRight className="w-3 h-3 ml-auto opacity-60" />}
+                {active && (
+                  <span
+                    className="ml-auto w-1.5 h-1.5 rounded-full shrink-0"
+                    style={{ background: brand.accentColor }}
+                  />
+                )}
               </motion.div>
             </Link>
           )

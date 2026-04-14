@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils"
+import { brand } from "@/lib/brand"
 
 interface Props {
   title: string
@@ -9,12 +10,18 @@ interface Props {
 
 export function ChartCard({ title, subtitle, children, className }: Props) {
   return (
-    <div className={cn("rounded-xl border border-border bg-card p-5 shadow-sm", className)}>
-      <div className="mb-4">
-        <h3 className="text-sm font-semibold">{title}</h3>
-        {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
+    <div className={cn("rounded-xl border border-border bg-card shadow-sm overflow-hidden", className)}>
+      {/* Coppel blue left accent bar */}
+      <div className="flex">
+        <div className="w-[3px] shrink-0" style={{ background: brand.primaryColor }} />
+        <div className="flex-1 p-5">
+          <div className="mb-4">
+            <h3 className="text-sm font-bold" style={{ color: brand.primaryColor }}>{title}</h3>
+            {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
+          </div>
+          {children}
+        </div>
       </div>
-      {children}
     </div>
   )
 }

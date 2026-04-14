@@ -6,20 +6,21 @@ import { Calendar, Filter } from "lucide-react"
 import { useDashboardStore } from "@/lib/store"
 import { useLangStore, useT } from "@/lib/lang-store"
 import { cn } from "@/lib/utils"
+import { brand } from "@/lib/brand"
 import type { Module } from "@/lib/types"
 
-const MODULES: { id: Module; label: string; color: string }[] = [
-  { id: "lms",           label: "LMS",           color: "bg-primary" },
-  { id: "coach",         label: "Coach",         color: "bg-primary" },
-  { id: "simulator",     label: "Simulator",     color: "bg-primary" },
-  { id: "certification", label: "Certification", color: "bg-primary" },
-  { id: "second-brain",  label: "Second Brain",  color: "bg-primary" },
+const MODULES: { id: Module; label: string }[] = [
+  { id: "lms",           label: "LMS"          },
+  { id: "coach",         label: "Coach"        },
+  { id: "simulator",     label: "Simulator"    },
+  { id: "certification", label: "Certification"},
+  { id: "second-brain",  label: "Second Brain" },
 ]
 
 const DATE_PRESETS = [
-  { label: "7d",  days: 7   },
-  { label: "30d", days: 30  },
-  { label: "90d", days: 90  },
+  { label: "7d",  days: 7  },
+  { label: "30d", days: 30 },
+  { label: "90d", days: 90 },
 ]
 
 interface Props {
@@ -29,7 +30,7 @@ interface Props {
 }
 
 export function DashboardHeader({ title, subtitle, showModuleFilter = false }: Props) {
-  const { selectedModules, toggleModule, dateRange, setDateRange } = useDashboardStore()
+  const { selectedModules, toggleModule, setDateRange } = useDashboardStore()
   const { lang, toggle: toggleLang } = useLangStore()
   const t = useT()
   const [activeDays, setActiveDays] = useState(30)
@@ -44,15 +45,21 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
 
   return (
     <div className="border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-10">
+      {/* Blue to yellow gradient accent bar */}
+      <div
+        className="h-[3px] w-full"
+        style={{ background: `linear-gradient(90deg, ${brand.primaryColor}, ${brand.accentColor})` }}
+      />
+
       <div className="px-6 py-4">
-        {/* Title row */}
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
+            <h1 className="text-xl font-bold tracking-tight" style={{ color: brand.primaryColor }}>
+              {title}
+            </h1>
             {subtitle && <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>}
           </div>
 
-          {/* Controls row */}
           <div className="flex items-center gap-2">
             {/* EN / ES toggle */}
             <button
@@ -63,34 +70,33 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
               {lang === 'en' ? 'ES' : 'EN'}
             </button>
 
-          {/* Date presets */}
-          <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-            <Calendar className="w-3.5 h-3.5 text-muted-foreground ml-1" />
-            {DATE_PRESETS.map(({ label, days }) => (
-              <button
-                key={days}
-                onClick={() => applyPreset(days)}
-                className={cn(
-                  "px-3 py-1 rounded-md text-xs font-medium transition-colors",
-                  activeDays === days
-                    ? "bg-background shadow-sm text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+            {/* Date presets */}
+            <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+              <Calendar className="w-3.5 h-3.5 text-muted-foreground ml-1" />
+              {DATE_PRESETS.map(({ label, days }) => (
+                <button
+                  key={days}
+                  onClick={() => applyPreset(days)}
+                  className={cn(
+                    "px-3 py-1 rounded-md text-xs font-semibold transition-all",
+                    activeDays !== days && "text-muted-foreground hover:text-foreground"
+                  )}
+                  style={activeDays === days ? { background: brand.primaryColor, color: "#fff" } : {}}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* Module filter */}
+        {/* Module filter pills */}
         {showModuleFilter && (
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
               <Filter className="w-3 h-3" /> {t.filterSolutions}
             </span>
-            {MODULES.map(({ id, label, color }) => {
+            {MODULES.map(({ id, label }) => {
               const active = selectedModules.includes(id)
               return (
                 <motion.button
@@ -98,13 +104,15 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
                   onClick={() => toggleModule(id)}
                   whileTap={{ scale: 0.95 }}
                   className={cn(
-                    "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors",
-                    active
-                      ? "border-transparent bg-foreground/10 text-foreground"
-                      : "border-border text-muted-foreground hover:border-foreground/30"
+                    "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all",
+                    !active && "border-border text-muted-foreground hover:border-foreground/30"
                   )}
+                  style={active ? { background: brand.primaryColor, color: "#fff", borderColor: "transparent" } : {}}
                 >
-                  <span className={cn("w-1.5 h-1.5 rounded-full", active ? color : "bg-muted-foreground/30")} />
+                  <span
+                    className="w-1.5 h-1.5 rounded-full shrink-0"
+                    style={{ background: active ? brand.accentColor : "#9ca3af" }}
+                  />
                   {label}
                 </motion.button>
               )
