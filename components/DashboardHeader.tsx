@@ -30,7 +30,7 @@ interface Props {
 }
 
 export function DashboardHeader({ title, subtitle, showModuleFilter = false }: Props) {
-  const { selectedModules, toggleModule, setDateRange } = useDashboardStore()
+  const { selectedSolution, setSolution, setDateRange } = useDashboardStore()
   const { lang, toggle: toggleLang } = useLangStore()
   const t = useT()
   const [activeDays, setActiveDays] = useState(30)
@@ -45,7 +45,7 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
 
   return (
     <div className="border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-10">
-      {/* Blue to yellow gradient accent bar */}
+      {/* Blue → yellow gradient accent bar */}
       <div
         className="h-[3px] w-full"
         style={{ background: `linear-gradient(90deg, ${brand.primaryColor}, ${brand.accentColor})` }}
@@ -90,18 +90,38 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
           </div>
         </div>
 
-        {/* Module filter pills */}
+        {/* Solution filter — single-select, drives KPI updates */}
         {showModuleFilter && (
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
               <Filter className="w-3 h-3" /> {t.filterSolutions}
             </span>
+
+            {/* "All" pill */}
+            <motion.button
+              onClick={() => setSolution(null)}
+              whileTap={{ scale: 0.95 }}
+              className={cn(
+                "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all",
+                !selectedSolution
+                  ? "text-white border-transparent"
+                  : "border-border text-muted-foreground hover:border-foreground/30"
+              )}
+              style={!selectedSolution ? { background: brand.primaryColor } : {}}
+            >
+              <span
+                className="w-1.5 h-1.5 rounded-full shrink-0"
+                style={{ background: !selectedSolution ? brand.accentColor : "#9ca3af" }}
+              />
+              All
+            </motion.button>
+
             {MODULES.map(({ id, label }) => {
-              const active = selectedModules.includes(id)
+              const active = selectedSolution === id
               return (
                 <motion.button
                   key={id}
-                  onClick={() => toggleModule(id)}
+                  onClick={() => setSolution(id)}
                   whileTap={{ scale: 0.95 }}
                   className={cn(
                     "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all",
