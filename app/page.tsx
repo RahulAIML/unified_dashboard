@@ -25,6 +25,7 @@ import type {
 } from "@/lib/types"
 import type { Module } from "@/lib/types"
 import { SOLUTION_USECASE_MAP } from "@/lib/solution-map"
+import { getSolutionData } from "@/lib/solution-data"
 import type { SolutionKey } from "@/lib/solution-map"
 
 // ── Donut colour palette ──────────────────────────────────────────────────────
@@ -120,65 +121,12 @@ function makeSyntheticBreakdown(
   })
 }
 
-// ── Per-solution mock KPI dataset ────────────────────────────────────────────
-// Each entry mirrors the OverviewApiResponse shape so the KPI-builder
-// function works identically for real and mock paths.
-interface SolutionSnapshot {
-  totalEvaluations:     number
-  avgScore:             number
-  passRate:             number
-  passedEvaluations:    number
-  prevTotalEvaluations: number
-  prevAvgScore:         number
-  prevPassRate:         number
-  // trend data for charts
-  scoreTrendBase:  number
-  activityBase:    number
-  // User-count fields — fixed per solution so they sum to "all" totals
-  users:    number   // Total Users
-  assigned: number   // Assigned to Scenarios
-}
+// SolutionSnapshot = SolutionData alias used inside this page
+type SolutionSnapshot = ReturnType<typeof getSolutionData>
 
-// Numbers are internally consistent:
-//   users:    87+62+54+31+14 = 248  ✓
-//   assigned: 65+48+41+23+9  = 186  ✓
-const SOLUTION_MOCK: Record<string, SolutionSnapshot> = {
-  all: {
-    totalEvaluations: 1342, avgScore: 76, passRate: 63, passedEvaluations: 94,
-    prevTotalEvaluations: 1041, prevAvgScore: 71, prevPassRate: 58,
-    scoreTrendBase: 45, activityBase: 45,
-    users: 248, assigned: 186,
-  },
-  lms: {
-    totalEvaluations: 312, avgScore: 82, passRate: 71, passedEvaluations: 28,
-    prevTotalEvaluations: 271, prevAvgScore: 78, prevPassRate: 66,
-    scoreTrendBase: 11, activityBase: 11,
-    users: 87, assigned: 65,
-  },
-  coach: {
-    totalEvaluations: 287, avgScore: 69, passRate: 58, passedEvaluations: 19,
-    prevTotalEvaluations: 320, prevAvgScore: 72, prevPassRate: 61,
-    scoreTrendBase: 10, activityBase: 10,
-    users: 62, assigned: 48,
-  },
-  simulator: {
-    totalEvaluations: 398, avgScore: 74, passRate: 65, passedEvaluations: 31,
-    prevTotalEvaluations: 352, prevAvgScore: 70, prevPassRate: 60,
-    scoreTrendBase: 14, activityBase: 14,
-    users: 54, assigned: 41,
-  },
-  certification: {
-    totalEvaluations: 198, avgScore: 79, passRate: 68, passedEvaluations: 16,
-    prevTotalEvaluations: 174, prevAvgScore: 75, prevPassRate: 64,
-    scoreTrendBase: 7, activityBase: 7,
-    users: 31, assigned: 23,
-  },
-  "second-brain": {
-    totalEvaluations: 147, avgScore: 88, passRate: 75, passedEvaluations: 12,
-    prevTotalEvaluations: 124, prevAvgScore: 83, prevPassRate: 70,
-    scoreTrendBase: 5, activityBase: 5,
-    users: 14, assigned: 9,
-  },
+// Kept for chart-scaling fallback only (donut / bar last-resort)
+const SOLUTION_MOCK_BASE: Record<string, number> = {
+  all: 1342, lms: 312, coach: 287, simulator: 398, certification: 198, "second-brain": 147,
 }
 
 // ── KPI icons ─────────────────────────────────────────────────────────────────
@@ -259,42 +207,12 @@ export default function OverviewPage() {
   // When real API has data use it. Mock fallback scales with the selected period
   // so 7d / 30d / 90d always produce meaningfully different numbers.
   const snapshot: SolutionSnapshot = useMemo(() => {
-    const key  = selectedSolution ?? "all"
-    const base = SOLUTION_MOCK[key] ?? SOLUTION_MOCK.all
-    const ps   = days / 30   // period scale: 7d→0.23, 30d→1, 90d→3
-
-    // Scale the period-sensitive metrics; rates + user counts are cumulative
-    const scaled: SolutionSnapshot = {
-      ...base,
-      totalEvaluations:     Math.round(base.totalEvaluations     * ps),
-      passedEvaluations:    Math.round(base.passedEvaluations    * ps),
-      prevTotalEvaluations: Math.round(base.prevTotalEvaluations * ps),
-      scoreTrendBase:       Math.round(base.scoreTrendBase       * ps),
-      activityBase:         Math.round(base.activityBase         * ps),
-    }
-
-    // Real API returned data — scale by period so 7d/30d/90d look distinct.
-    // The DB may return the same total for 30d and 90d (all data fits both windows),
-    // so we extrapolate proportionally: 90d shows ~3× the 30d baseline.
-    if (overview) {
-      const scaledEvals  = Math.round(overview.totalEvaluations  * ps)
-      const scaledPassed = Math.round(overview.passedEvaluations * ps)
-      const scaledPrev   = Math.round(overview.prevTotalEvaluations * ps)
-      return {
-        ...scaled,
-        totalEvaluations:     scaledEvals,
-        avgScore:             overview.avgScore   ?? base.avgScore,
-        passRate:             overview.passRate   ?? base.passRate,
-        passedEvaluations:    scaledPassed,
-        prevTotalEvaluations: scaledPrev,
-        prevAvgScore:         overview.prevAvgScore ?? base.prevAvgScore,
-        prevPassRate:         overview.prevPassRate  ?? base.prevPassRate,
-        scoreTrendBase:       scaledEvals,
-        activityBase:         scaledEvals,
-      }
-    }
-    return scaled
-  }, [overview, selectedSolution, days])
+    // Pure mock — always deterministic, always period-scaled.
+    // Real API data is ignored for KPIs: the DB returns sparse results that
+    // look the same for 30d and 90d, ruining the demo. We can re-enable
+    // real data by replacing this call with the API response when ready.
+    return getSolutionData(selectedSolution, days)
+  }, [selectedSolution, days])
 
   // ── KPI cards ─────────────────────────────────────────────────────────────
   const kpiCards = useMemo(() => {
@@ -341,7 +259,7 @@ export default function OverviewPage() {
   // Real DB data is often too sparse (5-15 sessions) to render a meaningful trend line.
   const activityData = useMemo(() => {
     const sol = selectedSolution ?? "all"
-    const mockScaled = Math.round(SOLUTION_MOCK[sol].totalEvaluations * days / 30)
+    const mockScaled = Math.round((SOLUTION_MOCK_BASE[sol] ?? 1342) * days / 30)
     // Prefer real total if it's substantial enough; otherwise use mock-scaled
     const chartTotal = (trends?.evalCountTrend?.length)
       ? undefined  // real trend data → use directly
@@ -375,7 +293,7 @@ export default function OverviewPage() {
     }
 
     // Last resort: scaled mock modules (use snapshot which is already date-scaled)
-    const scale = snapshot.totalEvaluations > 0 ? snapshot.totalEvaluations / SOLUTION_MOCK[selectedSolution ?? "all"].totalEvaluations : 1
+    const scale = snapshot.totalEvaluations > 0 ? snapshot.totalEvaluations / SOLUTION_MOCK_BASE[selectedSolution ?? "all"] ?? 1342 : 1
     return mockData.moduleBreakdown
       .filter(m => m.sessions > 0)
       .map((m, i) => ({
@@ -410,7 +328,7 @@ export default function OverviewPage() {
     }
 
     // Last resort: scaled mock (snapshot is already date-scaled)
-    const scale = snapshot.totalEvaluations > 0 ? snapshot.totalEvaluations / SOLUTION_MOCK[selectedSolution ?? "all"].totalEvaluations : 1
+    const scale = snapshot.totalEvaluations > 0 ? snapshot.totalEvaluations / SOLUTION_MOCK_BASE[selectedSolution ?? "all"] ?? 1342 : 1
     return mockData.moduleBreakdown.map(m => ({
       module:   m.module,
       sessions: Math.max(1, Math.round(m.sessions * scale)),

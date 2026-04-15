@@ -13,8 +13,8 @@ import { useDashboardStore } from "@/lib/store"
 import { useT } from "@/lib/lang-store"
 import { useApi, buildApiUrl } from "@/lib/hooks/useApi"
 import { calcDelta } from "@/lib/utils"
+import { getSolutionData } from "@/lib/solution-data"
 import type {
-  OverviewApiResponse,
   TrendsApiResponse,
   UsecaseBreakdownApiResponse,
   UsecaseApiRow,
@@ -32,53 +32,24 @@ export default function SimulatorPage() {
   const { dateRange } = useDashboardStore()
   const t = useT()
 
-  // Mock data for KPI slots not in analytics DB (configuredScenarios, assignedUsers)
   const mockData = getSimulatorData(dateRange)
-  const days = Math.round(
-    (dateRange.to.getTime() - dateRange.from.getTime()) / 86_400_000
-  )
+  const days = Math.round((dateRange.to.getTime() - dateRange.from.getTime()) / 86_400_000)
 
-  // ── Real API calls (solution-filtered) ───────────────────────────────────
-  const overviewUrl = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to) + "&solution=simulator"
-  const { data: overview, loading: overviewLoading, error: overviewError } =
-    useApi<OverviewApiResponse>(overviewUrl)
+  const d = getSolutionData("simulator", days)
 
   const trendsUrl = buildApiUrl("/api/dashboard/trends", dateRange.from, dateRange.to) + "&solution=simulator"
   const { data: trends, loading: trendsLoading } = useApi<TrendsApiResponse>(trendsUrl)
 
   const ucUrl = buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to) + "&solution=simulator"
-  const { data: ucBreakdown, loading: ucLoading } =
-    useApi<UsecaseBreakdownApiResponse>(ucUrl)
+  const { data: ucBreakdown, loading: ucLoading } = useApi<UsecaseBreakdownApiResponse>(ucUrl)
 
-  // ── KPI cards: mix real + mock ──────────────────────────────────────────────
-  // Slots 0–1 (configuredScenarios, assignedUsers) → mock (coach DB)
-  // Slots 2–3 (totalSessions, avgScore) → real analytics DB, fallback 398/74
-  const kpis = useMemo(() => {
-    const mockKpis = Object.values(mockData.kpis)
-    if (overviewLoading || !overview) return mockKpis
+  const kpis = useMemo(() => [
+    { label: 'Configured Scenarios', labelKey: 'configuredScenarios' as const, value: 3,            delta: 0,                                                            tier: 'B' as const },
+    { label: 'Assigned Users',       labelKey: 'assignedUsers'       as const, value: d.users,      delta: calcDelta(d.users, Math.round(d.users * 0.93)),               tier: 'A' as const },
+    { label: 'Total Sessions',       labelKey: 'totalSessions'       as const, value: d.totalEvaluations,  delta: calcDelta(d.totalEvaluations, d.prevTotalEvaluations), tier: 'B' as const },
+    { label: 'Avg Score',            labelKey: 'avgScore'            as const, value: d.avgScore,   delta: calcDelta(d.avgScore, d.prevAvgScore), unit: 'pts',           tier: 'B' as const },
+  ], [d])
 
-    return [
-      mockKpis[0], // configuredScenarios — mock
-      mockKpis[1], // assignedUsers — mock
-      {
-        label:    'Total Sessions',
-        labelKey: 'totalSessions' as const,
-        value:    overview.totalEvaluations,
-        delta:    calcDelta(overview.totalEvaluations, overview.prevTotalEvaluations),
-        tier:     'B' as const,
-      },
-      {
-        label:    'Avg Score',
-        labelKey: 'avgScore' as const,
-        value:    overview.avgScore ?? 74,
-        delta:    calcDelta(overview.avgScore, overview.prevAvgScore),
-        unit:     'pts',
-        tier:     'B' as const,
-      },
-    ]
-  }, [overview, overviewLoading, mockData.kpis])
-
-  // ── Score trend (real) ───────────────────────────────────────────────────
   const scoreTrendData = useMemo(
     () => trends?.scoreTrend?.length ? trends.scoreTrend : mockData.scoreTrend,
     [trends, mockData.scoreTrend]
@@ -128,12 +99,6 @@ export default function SimulatorPage() {
     <div className="min-h-screen">
       <DashboardHeader title={t.simTitle} subtitle={t.simSub} />
       <div className="p-6 space-y-6">
-
-        {overviewError && (
-          <div className="rounded-lg border border-rose-500/30 bg-rose-500/5 px-4 py-3 text-sm text-rose-600 dark:text-rose-400">
-            {t.errorLoading}: {overviewError}
-          </div>
-        )}
 
         {/* KPI cards */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">

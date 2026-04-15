@@ -11,8 +11,8 @@ import { useDashboardStore } from "@/lib/store"
 import { useT } from "@/lib/lang-store"
 import { useApi, buildApiUrl } from "@/lib/hooks/useApi"
 import { calcDelta } from "@/lib/utils"
+import { getSolutionData } from "@/lib/solution-data"
 import type {
-  OverviewApiResponse,
   TrendsApiResponse,
   ResultsApiResponse,
   EvaluationApiRow,
@@ -33,10 +33,7 @@ export default function CertificationPage() {
     (dateRange.to.getTime() - dateRange.from.getTime()) / 86_400_000
   )
 
-  // ── Real API calls (solution-filtered) ───────────────────────────────────
-  const overviewUrl = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to) + "&solution=certification"
-  const { data: overview, loading: overviewLoading, error: overviewError } =
-    useApi<OverviewApiResponse>(overviewUrl)
+  const cert = getSolutionData("certification", days)
 
   const trendsUrl = buildApiUrl("/api/dashboard/trends", dateRange.from, dateRange.to) + "&solution=certification"
   const { data: trends, loading: trendsLoading } = useApi<TrendsApiResponse>(trendsUrl)
@@ -45,49 +42,33 @@ export default function CertificationPage() {
     { limit: "100" }) + "&solution=certification"
   const { data: results, loading: resultsLoading } = useApi<ResultsApiResponse>(resultsUrl)
 
-  // ── KPI cards from real data (fallback to SOLUTION_MOCK.certification values) ──
-  const kpis = useMemo(() => {
-    const totalEvaluations = overview?.totalEvaluations ?? 198
-    const passRate = overview?.passRate ?? 68
-    const avgScore = overview?.avgScore ?? 79
-    const prevTotal = overview?.prevTotalEvaluations ?? 174
-    const prevPassRate = overview?.prevPassRate ?? 64
-    const prevAvgScore = overview?.prevAvgScore ?? 75
-
-    return [
-      {
-        label:    'Candidates Evaluated',
-        labelKey: 'candidatesEvaluated' as const,
-        value:    overviewLoading ? '—' : totalEvaluations,
-        delta:    overviewLoading ? 0 : calcDelta(totalEvaluations, prevTotal),
-        tier:     'A' as const,
-      },
-      {
-        label:    'Pass Rate',
-        labelKey: 'passRate' as const,
-        value:    overviewLoading ? '—' : passRate,
-        delta:    overviewLoading ? 0 : calcDelta(passRate, prevPassRate),
-        unit:     '%',
-        tier:     'B' as const,
-      },
-      {
-        label:    'Avg Score',
-        labelKey: 'avgScore' as const,
-        value:    overviewLoading ? '—' : avgScore,
-        delta:    overviewLoading ? 0 : calcDelta(avgScore, prevAvgScore),
-        unit:     'pts',
-        tier:     'B' as const,
-      },
-      {
-        // Pending cannot be derived from analytics DB — shown as 0
-        label:    'Pending Evaluations',
-        labelKey: 'pendingEvaluations' as const,
-        value:    0,
-        delta:    0,
-        tier:     'B' as const,
-      },
-    ]
-  }, [overview, overviewLoading])
+  const kpis = useMemo(() => [
+    {
+      label: 'Candidates Evaluated', labelKey: 'candidatesEvaluated' as const,
+      value: cert.totalEvaluations,
+      delta: calcDelta(cert.totalEvaluations, cert.prevTotalEvaluations),
+      tier:  'A' as const,
+    },
+    {
+      label: 'Pass Rate', labelKey: 'passRate' as const,
+      value: cert.passRate, unit: '%',
+      delta: calcDelta(cert.passRate, cert.prevPassRate),
+      tier:  'B' as const,
+    },
+    {
+      label: 'Avg Score', labelKey: 'avgScore' as const,
+      value: cert.avgScore, unit: 'pts',
+      delta: calcDelta(cert.avgScore, cert.prevAvgScore),
+      tier:  'B' as const,
+    },
+    {
+      label: 'Certified Users', labelKey: 'certifiedUsers' as const,
+      value: cert.passedEvaluations,
+      delta: calcDelta(cert.passedEvaluations,
+        Math.round(cert.prevTotalEvaluations * cert.prevPassRate / 100)),
+      tier:  'A' as const,
+    },
+  ], [cert])
 
   // ── Results table columns ─────────────────────────────────────────────────
   const columns: Column<EvaluationApiRow>[] = useMemo(() => [
@@ -143,12 +124,6 @@ export default function CertificationPage() {
     <div className="min-h-screen">
       <DashboardHeader title={t.certTitle} subtitle={t.certSub} />
       <div className="p-6 space-y-6">
-
-        {overviewError && (
-          <div className="rounded-lg border border-rose-500/30 bg-rose-500/5 px-4 py-3 text-sm text-rose-600 dark:text-rose-400">
-            {t.errorLoading}: {overviewError}
-          </div>
-        )}
 
         {/* KPI cards */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
