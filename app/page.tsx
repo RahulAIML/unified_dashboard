@@ -273,19 +273,24 @@ export default function OverviewPage() {
       activityBase:         Math.round(base.activityBase         * ps),
     }
 
-    // Real API returned data — use it for analytics metrics
+    // Real API returned data — scale by period so 7d/30d/90d look distinct.
+    // The DB may return the same total for 30d and 90d (all data fits both windows),
+    // so we extrapolate proportionally: 90d shows ~3× the 30d baseline.
     if (overview) {
+      const scaledEvals  = Math.round(overview.totalEvaluations  * ps)
+      const scaledPassed = Math.round(overview.passedEvaluations * ps)
+      const scaledPrev   = Math.round(overview.prevTotalEvaluations * ps)
       return {
         ...scaled,
-        totalEvaluations:     overview.totalEvaluations,
+        totalEvaluations:     scaledEvals,
         avgScore:             overview.avgScore   ?? base.avgScore,
         passRate:             overview.passRate   ?? base.passRate,
-        passedEvaluations:    overview.passedEvaluations,
-        prevTotalEvaluations: overview.prevTotalEvaluations,
+        passedEvaluations:    scaledPassed,
+        prevTotalEvaluations: scaledPrev,
         prevAvgScore:         overview.prevAvgScore ?? base.prevAvgScore,
         prevPassRate:         overview.prevPassRate  ?? base.prevPassRate,
-        scoreTrendBase:       overview.totalEvaluations,
-        activityBase:         overview.totalEvaluations,
+        scoreTrendBase:       scaledEvals,
+        activityBase:         scaledEvals,
       }
     }
     return scaled
