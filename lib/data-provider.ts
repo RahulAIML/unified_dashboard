@@ -246,9 +246,18 @@ async function getOverviewKpisReal(
   async function fetchPeriod(pFrom: Date, pTo: Date) {
     const dateParams = [fmtDatetime(pFrom), fmtDatetime(pTo)]
 
-    const scoreRows = await safeQuery<{ total: number; avg_score: number | null }>(
-      `SELECT COUNT(DISTINCT saved_report_id) AS total,
-              ROUND(AVG(value_num), 1)        AS avg_score
+    // Total sessions — all reports in the period (not limited to those with overall_score)
+    const totalRows = await safeQuery<{ total: number }>(
+      `SELECT COUNT(DISTINCT saved_report_id) AS total
+       FROM report_field_current rfc
+       WHERE rfc.report_created_at BETWEEN ? AND ?${uc}`,
+      [...dateParams, ...ucParams]
+    )
+    if (!totalRows) return null
+
+    // Avg score — only for sessions that have the overall_score field
+    const scoreRows = await safeQuery<{ avg_score: number | null }>(
+      `SELECT ROUND(AVG(value_num), 1) AS avg_score
        FROM report_field_current rfc
        WHERE rfc.field_key = 'overall_score'
          AND rfc.report_created_at BETWEEN ? AND ?${uc}`,
@@ -266,7 +275,7 @@ async function getOverviewKpisReal(
     )
     if (!pfRows) return null
 
-    const total    = scoreRows[0]?.total    ?? 0
+    const total    = totalRows[0]?.total    ?? 0
     const avgScore = scoreRows[0]?.avg_score ?? null
     const passed   = pfRows[0]?.passed      ?? 0
     const totalRes = pfRows[0]?.total_res   ?? 0
@@ -328,8 +337,7 @@ async function getTrendsReal(
       `SELECT DATE(report_created_at)           AS date,
               COUNT(DISTINCT saved_report_id)   AS value
        FROM report_field_current rfc
-       WHERE rfc.field_key = 'overall_score'
-         AND rfc.report_created_at BETWEEN ? AND ?${uc}
+       WHERE rfc.report_created_at BETWEEN ? AND ?${uc}
        GROUP BY DATE(report_created_at)
        ORDER BY date`,
       [...dateParams, ...ucParams]
@@ -350,7 +358,8 @@ async function getEvaluationResultsReal(
   limit = 50
 ): Promise<EvaluationRow[] | null> {
   const { from, to, usecaseIds } = filters
-  const { clause: ucS, params: ucSParams } = usecaseClause(usecaseIds, "s")
+  // Use alias "base" so usecase filter applies to the driving subquery
+  const { clause: ucBase, params: ucParams } = usecaseClause(usecaseIds, "base")
 
   const rows = await safeQuery<{
     saved_report_id: number
@@ -359,20 +368,28 @@ async function getEvaluationResultsReal(
     result: string | null
     report_created_at: string
   }>(
-    `SELECT s.saved_report_id,
-            s.usecase_id,
-            s.value_num               AS score,
-            r.value_text              AS result,
-            DATE(s.report_created_at) AS report_created_at
-     FROM report_field_current s
+    // Drive from all distinct sessions; LEFT JOIN for score and result
+    // so sessions without overall_score still appear in the list.
+    `SELECT base.saved_report_id,
+            base.usecase_id,
+            sc.value_num               AS score,
+            r.value_text               AS result,
+            DATE(base.report_created_at) AS report_created_at
+     FROM (
+       SELECT DISTINCT saved_report_id, usecase_id, report_created_at
+       FROM report_field_current
+       WHERE report_created_at BETWEEN ? AND ?
+     ) base
+     LEFT JOIN report_field_current sc
+            ON sc.saved_report_id = base.saved_report_id
+           AND sc.field_key       = 'overall_score'
      LEFT JOIN report_field_current r
-            ON s.saved_report_id = r.saved_report_id
-           AND r.field_key       = 'overall_result'
-     WHERE s.field_key = 'overall_score'
-       AND s.report_created_at BETWEEN ? AND ?${ucS}
-     ORDER BY s.report_created_at DESC
+            ON r.saved_report_id  = base.saved_report_id
+           AND r.field_key        = 'overall_result'
+     WHERE 1=1${ucBase}
+     ORDER BY base.report_created_at DESC
      LIMIT ?`,
-    [fmtDatetime(from), fmtDatetime(to), ...ucSParams, limit]
+    [fmtDatetime(from), fmtDatetime(to), ...ucParams, limit]
   )
 
   if (!rows) return null
@@ -391,7 +408,8 @@ async function getUsecaseBreakdownReal(
   filters: AnalyticsFilters
 ): Promise<UsecaseRow[] | null> {
   const { from, to, usecaseIds } = filters
-  const { clause: uc, params: ucParams } = usecaseClause(usecaseIds)
+  // Use alias "base" for the outer WHERE clause (usecase filter on base table)
+  const { clause: ucBase, params: ucParams } = usecaseClause(usecaseIds, "base")
 
   const rows = await safeQuery<{
     usecase_id: number
@@ -400,19 +418,27 @@ async function getUsecaseBreakdownReal(
     passed: number
     total_results: number
   }>(
-    `SELECT s.usecase_id,
-            COUNT(DISTINCT s.saved_report_id)                           AS total_evaluations,
-            ROUND(AVG(s.value_num), 1)                                  AS avg_score,
+    // Drive from ALL sessions in the period, then LEFT JOIN for score/result.
+    // This ensures usecases that lack overall_score still appear in the table.
+    `SELECT base.usecase_id,
+            COUNT(DISTINCT base.saved_report_id)                              AS total_evaluations,
+            ROUND(AVG(sc.value_num), 1)                                       AS avg_score,
             COUNT(DISTINCT CASE WHEN r.value_text != 'Deficiente'
-                                THEN r.saved_report_id END)             AS passed,
-            COUNT(DISTINCT r.saved_report_id)                           AS total_results
-     FROM report_field_current s
+                                THEN r.saved_report_id END)                   AS passed,
+            COUNT(DISTINCT r.saved_report_id)                                 AS total_results
+     FROM (
+       SELECT DISTINCT usecase_id, saved_report_id
+       FROM report_field_current
+       WHERE report_created_at BETWEEN ? AND ?
+     ) base
+     LEFT JOIN report_field_current sc
+            ON sc.saved_report_id = base.saved_report_id
+           AND sc.field_key       = 'overall_score'
      LEFT JOIN report_field_current r
-            ON s.saved_report_id = r.saved_report_id
-           AND r.field_key       = 'overall_result'
-     WHERE s.field_key = 'overall_score'
-       AND s.report_created_at BETWEEN ? AND ?${uc}
-     GROUP BY s.usecase_id
+            ON r.saved_report_id  = base.saved_report_id
+           AND r.field_key        = 'overall_result'
+     WHERE 1=1${ucBase}
+     GROUP BY base.usecase_id
      ORDER BY total_evaluations DESC
      LIMIT 20`,
     [fmtDatetime(from), fmtDatetime(to), ...ucParams]
