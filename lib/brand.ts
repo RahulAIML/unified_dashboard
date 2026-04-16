@@ -13,7 +13,7 @@ export const brand = {
   accentColor: "#DC2626",
 
   /** Path relative to /public — shown in sidebar top-left */
-  logo: "/rolplay-logo.png",
+  logo: "/logo.jpg",
 
   /** Alt text for the logo */
   logoAlt: "Rolplay",
