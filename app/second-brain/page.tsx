@@ -1,25 +1,24 @@
 "use client"
-import { brand } from "@/lib/brand"
 
 import { Database, FileType, Layers, BarChart2 } from "lucide-react"
 import { DashboardHeader } from "@/components/DashboardHeader"
-import { SummaryCard } from "@/components/SummaryCard"
 import { ChartCard } from "@/components/ChartCard"
-import { ActivityLineChart } from "@/components/charts/ActivityLineChart"
-import { DataTable, type Column } from "@/components/DataTable"
-import { getSecondBrainData } from "@/lib/mock-data"
 import { useDashboardStore } from "@/lib/store"
 import { useT } from "@/lib/lang-store"
-import type { DocRow } from "@/lib/types"
-
-const TYPE_COLORS: Record<string, string> = {
-  pdf:  "bg-primary/10 text-primary",
-  docx: "bg-primary/10 text-primary",
-  pptx: "bg-primary/10 text-primary",
-  xlsx: "bg-primary/10 text-primary",
-  txt:  "bg-primary/10 text-primary",
-  mp4:  "bg-primary/10 text-primary",
-}
+import { useApi, buildApiUrl } from "@/lib/hooks/useApi"
+import { brand } from "@/lib/brand"
+import type {
+  OverviewApiResponse,
+  TrendsApiResponse,
+  UsecaseBreakdownApiResponse,
+  UsecaseApiRow,
+} from "@/lib/types"
+import { SummaryCard } from "@/components/SummaryCard"
+import { ActivityLineChart } from "@/components/charts/ActivityLineChart"
+import { DataTable, type Column } from "@/components/DataTable"
+import { cn } from "@/lib/utils"
+import { useMemo } from "react"
+import { calcDelta } from "@/lib/utils"
 
 const icons = [
   <Database  key="d" className="w-4 h-4" />,
@@ -28,89 +27,145 @@ const icons = [
   <BarChart2 key="b" className="w-4 h-4" />,
 ]
 
+function EmptyState({ label }: { label?: string }) {
+  return (
+    <div className="h-48 flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+      <BarChart2 className="w-8 h-8 opacity-30" />
+      <span>{label ?? "No data available"}</span>
+    </div>
+  )
+}
+
 export default function SecondBrainPage() {
   const { dateRange } = useDashboardStore()
   const t = useT()
-  const data = getSecondBrainData(dateRange)
   const days = Math.round((dateRange.to.getTime() - dateRange.from.getTime()) / 86_400_000)
 
-  // ── KPI cards: fixed values consistent with SOLUTION_MOCK["second-brain"] ──
-  // Slot 0: Knowledge Documents — 47 (fixed, SB-specific document count)
-  // Slot 1: Document Types — 5 (fixed, number of file type categories)
-  // Slot 2: Use Case Coverage — 2 (second-brain usecases: 396, 397 → 2 covered)
-  // Slot 3: Avg Segments / Doc — 12 (fixed)
-  const kpis = [
-    {
-      label:    'Knowledge Documents',
-      labelKey: 'knowledgeDocuments' as const,
-      value:    47,
-      delta:    0,
-      tier:     'A' as const,
-    },
-    {
-      label:    'Document Types',
-      labelKey: 'documentTypes' as const,
-      value:    5,
-      delta:    0,
-      tier:     'A' as const,
-    },
-    {
-      label:    'Use Case Coverage',
-      labelKey: 'useCaseCoverage' as const,
-      value:    2,
-      delta:    0,
-      tier:     'A' as const,
-    },
-    {
-      label:    'Avg Segments / Doc',
-      labelKey: 'avgSegmentsPerDoc' as const,
-      value:    12,
-      delta:    0,
-      tier:     'B' as const,
-    },
-  ]
+  const overviewUrl = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to) + "&solution=second-brain"
+  const trendsUrl   = buildApiUrl("/api/dashboard/trends",   dateRange.from, dateRange.to) + "&solution=second-brain"
+  const ucUrl       = buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to) + "&solution=second-brain"
 
-  const columns: Column<DocRow>[] = [
-    { key: "name",         header: t.colDocument, render: r => <span className="font-medium font-mono text-xs">{r.name}</span> },
+  const { data: overview, loading: overviewLoading } = useApi<OverviewApiResponse>(overviewUrl)
+  const { data: trends,   loading: trendsLoading }   = useApi<TrendsApiResponse>(trendsUrl)
+  const { data: ucBreakdown, loading: ucLoading }    = useApi<UsecaseBreakdownApiResponse>(ucUrl)
+
+  const hasData = overview && overview.totalEvaluations > 0
+
+  const kpis = useMemo(() => {
+    if (!hasData) return []
+    return [
+      {
+        label: "Total Interactions", labelKey: "practiceSessions" as const,
+        value: overview!.totalEvaluations,
+        delta: calcDelta(overview!.totalEvaluations, overview!.prevTotalEvaluations),
+        tier: "A" as const,
+      },
+      {
+        label: "Pass Rate", labelKey: "passRate" as const,
+        value: overview!.passRate ?? 0, unit: "%",
+        delta: calcDelta(overview!.passRate ?? 0, overview!.prevPassRate ?? 0),
+        tier: "B" as const,
+      },
+      {
+        label: "Avg Score", labelKey: "avgScore" as const,
+        value: overview!.avgScore ?? 0, unit: "pts",
+        delta: calcDelta(overview!.avgScore ?? 0, overview!.prevAvgScore ?? 0),
+        tier: "B" as const,
+      },
+      {
+        label: "Passed Interactions", labelKey: "certifiedUsers" as const,
+        value: overview!.passedEvaluations,
+        delta: calcDelta(
+          overview!.passedEvaluations,
+          overview!.prevTotalEvaluations > 0
+            ? Math.round(overview!.prevTotalEvaluations * (overview!.prevPassRate ?? 0) / 100)
+            : 0
+        ),
+        tier: "A" as const,
+      },
+    ]
+  }, [overview, hasData])
+
+  const activityData = useMemo(
+    () => trends?.evalCountTrend ?? [],
+    [trends]
+  )
+
+  const ucColumns: Column<UsecaseApiRow>[] = useMemo(() => [
+    { key: "usecaseId",        header: t.colUseCase,  render: r => <span className="font-medium">UC-{r.usecaseId}</span> },
+    { key: "totalEvaluations", header: t.colSessions, render: r => <span className="tabular-nums">{r.totalEvaluations}</span> },
+    { key: "avgScore",         header: t.colAvgScore, render: r => r.avgScore != null ? <span className="tabular-nums">{r.avgScore} pts</span> : <span className="text-muted-foreground">—</span> },
     {
-      key: "type", header: t.colType,
-      render: r => (
-        <span className={`inline-flex px-2 py-0.5 rounded text-xs font-bold uppercase ${TYPE_COLORS[r.type] ?? "bg-muted"}`}>
-          {r.type}
+      key: "passRate", header: t.colPassRate,
+      render: r => r.passRate != null ? (
+        <span className={cn(
+          "inline-flex px-2 py-0.5 rounded-full text-xs font-medium",
+          r.passRate >= 70 ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+            : r.passRate >= 50 ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+            : "bg-rose-500/15 text-rose-600 dark:text-rose-400"
+        )}>
+          {r.passRate}%
         </span>
-      )
+      ) : <span className="text-muted-foreground">—</span>,
     },
-    { key: "usecaseName",  header: t.colUseCase,   render: r => <span className="text-muted-foreground">{r.usecaseName}</span> },
-    { key: "segmentCount", header: t.colSegments,  render: r => <span className="tabular-nums">{r.segmentCount}</span> },
-    { key: "dateAdded",    header: t.colDateAdded, render: r => <span className="text-muted-foreground text-xs">{r.dateAdded}</span> },
-  ]
+    { key: "passed", header: t.colPassed, render: r => <span className="tabular-nums">{r.passed}</span> },
+  ], [t])
 
   return (
     <div className="min-h-screen">
       <DashboardHeader title={t.sbTitle} subtitle={t.sbSub} />
       <div className="p-6 space-y-6">
+
+        {/* KPI cards */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-          {kpis.map((kpi, i) => (
-            <SummaryCard key={kpi.label} kpi={kpi} index={i} icon={icons[i]}
-              accent={["from-primary/10 to-primary/5","from-primary/10 to-primary/5",
-                       "from-primary/10 to-primary/5","from-primary/10 to-primary/5"][i]}
-            />
-          ))}
+          {overviewLoading
+            ? Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
+                  <div className="h-[3px]" style={{ background: brand.primaryColor }} />
+                  <div className="p-5 space-y-3 animate-pulse">
+                    <div className="h-3 w-24 rounded bg-muted" />
+                    <div className="h-8 w-20 rounded bg-muted" />
+                  </div>
+                </div>
+              ))
+            : kpis.length > 0
+              ? kpis.map((kpi, i) => <SummaryCard key={kpi.label} kpi={kpi} index={i} icon={icons[i]} />)
+              : Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+                    <div className="h-[3px]" style={{ background: brand.primaryColor }} />
+                    <div className="p-5 text-center text-sm text-muted-foreground py-8">No data available</div>
+                  </div>
+                ))
+          }
         </div>
-        <ChartCard title={t.documentUploads} subtitle={`${t.documentUploadsSub} — ${t.last} ${days} ${t.days}`}>
-          <ActivityLineChart data={data.uploadTrend} label="Documents" color={brand.chartColors[0]} />
+
+        {/* Activity trend */}
+        <ChartCard title={t.activityTrend} subtitle={`${t.evalCountSub} — ${t.last} ${days} ${t.days}`}>
+          {trendsLoading
+            ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
+            : activityData.length > 0
+              ? <ActivityLineChart data={activityData} label="Interactions" color={brand.chartColors[0]} />
+              : <EmptyState />
+          }
         </ChartCard>
+
+        {/* Use case breakdown */}
         <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
           <div className="mb-4">
-            <h3 className="text-sm font-semibold">{t.documentInventory}</h3>
+            <h3 className="text-sm font-semibold">{t.usecaseBreakdown}</h3>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {data.docTable.length} {days < 90 ? `${t.documentsSub} ${days} ${t.days}` : t.documentsSubAll}
+              {ucLoading ? t.loading : `${ucBreakdown?.data?.length ?? 0} ${t.usecaseBreakdownSub}`}
               <span className="ml-2 text-[10px] font-medium bg-primary/10 text-primary px-1.5 py-0.5 rounded">
-                {t.sourceSB}
+                {t.navSecondBrain}
               </span>
             </p>
           </div>
-          <DataTable data={data.docTable} columns={columns} pageSize={10} />
+          {ucLoading
+            ? <div className="py-10 text-center text-sm text-muted-foreground">{t.loading}</div>
+            : ucBreakdown?.data?.length
+              ? <DataTable data={ucBreakdown.data} columns={ucColumns} pageSize={10} />
+              : <div className="py-10 text-center text-sm text-muted-foreground">No data available</div>
+          }
         </div>
       </div>
     </div>

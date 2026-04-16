@@ -1,16 +1,44 @@
 "use client"
 
+import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { motion } from "framer-motion"
 import {
   LayoutDashboard, BookOpen, BrainCircuit, Gamepad2,
-  BadgeCheck, Database, Sun, Moon, ChevronRight, Settings
+  BadgeCheck, Database, Sun, Moon, Settings
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useTheme } from "./ThemeProvider"
 import { useT } from "@/lib/lang-store"
 import { brand } from "@/lib/brand"
+
+function LogoImage() {
+  const [failed, setFailed] = useState(false)
+
+  if (failed) {
+    return (
+      <div
+        className="w-10 h-10 rounded-lg flex items-center justify-center text-white font-extrabold text-lg shrink-0"
+        style={{ background: brand.primaryColor }}
+      >
+        R
+      </div>
+    )
+  }
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={brand.logo}
+      alt={brand.logoAlt}
+      width={40}
+      height={40}
+      className="rounded-lg object-contain shrink-0"
+      onError={() => setFailed(true)}
+    />
+  )
+}
 
 export function Sidebar() {
   const pathname = usePathname()
@@ -30,27 +58,18 @@ export function Sidebar() {
   return (
     <aside className="w-64 shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col">
 
-      {/* Brand header — yellow accent bar on top */}
+      {/* Brand header */}
       <div className="relative h-20 flex items-center gap-3 px-5 border-b border-sidebar-border overflow-hidden">
-        {/* Coppel yellow top stripe */}
-        <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ background: brand.accentColor }} />
+        {/* Red top stripe */}
+        <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ background: brand.primaryColor }} />
 
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={brand.logo}
-          alt={brand.logoAlt}
-          width={52}
-          height={52}
-          className="rounded-lg object-contain shrink-0 shadow-sm"
-          style={{ border: `2px solid ${brand.accentColor}` }}
-        />
+        <LogoImage />
+
         <div className="min-w-0">
-          {/* "Coppel" in blue, "Analytics" in yellow */}
-          <p className="text-sm font-extrabold tracking-tight leading-tight truncate">
-            <span style={{ color: brand.primaryColor }}>Coppel </span>
-            <span style={{ color: brand.accentColor }}>Analytics</span>
+          <p className="text-sm font-extrabold tracking-tight leading-tight truncate text-sidebar-foreground">
+            {brand.appName}
           </p>
-          <p className="text-[10px] text-muted-foreground/60 leading-tight">Analytics Dashboard</p>
+          <p className="text-[10px] text-sidebar-foreground/50 leading-tight">Analytics Dashboard</p>
         </div>
       </div>
 
@@ -73,10 +92,7 @@ export function Sidebar() {
                 <Icon className="w-4 h-4 shrink-0" />
                 <span>{label}</span>
                 {active && (
-                  <span
-                    className="ml-auto w-1.5 h-1.5 rounded-full shrink-0"
-                    style={{ background: brand.accentColor }}
-                  />
+                  <span className="ml-auto w-1.5 h-1.5 rounded-full bg-white/60 shrink-0" />
                 )}
               </motion.div>
             </Link>
@@ -93,7 +109,7 @@ export function Sidebar() {
           {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           {theme === "dark" ? t.lightMode : t.darkMode}
         </button>
-        <p className="text-xs text-muted-foreground/50 mt-2 px-3">{t.phaseLabel}</p>
+        <p className="text-xs text-sidebar-foreground/30 mt-2 px-3">{t.phaseLabel}</p>
       </div>
     </aside>
   )

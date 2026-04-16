@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
-import { BookOpen, Users, CheckCircle, Star } from "lucide-react"
+import { BookOpen, Users, CheckCircle, Star, BarChart2 } from "lucide-react"
 import { DashboardHeader } from "@/components/DashboardHeader"
 import { SummaryCard } from "@/components/SummaryCard"
 import { ChartCard } from "@/components/ChartCard"
@@ -13,8 +13,12 @@ import { useApi, buildApiUrl } from "@/lib/hooks/useApi"
 import { calcDelta } from "@/lib/utils"
 import { brand } from "@/lib/brand"
 import { cn } from "@/lib/utils"
-import { getSolutionData } from "@/lib/solution-data"
-import type { UsecaseBreakdownApiResponse, UsecaseApiRow } from "@/lib/types"
+import type {
+  OverviewApiResponse,
+  TrendsApiResponse,
+  UsecaseBreakdownApiResponse,
+  UsecaseApiRow,
+} from "@/lib/types"
 
 const icons = [
   <Users       key="u" className="w-4 h-4" />,
@@ -23,49 +27,70 @@ const icons = [
   <BookOpen    key="b" className="w-4 h-4" />,
 ]
 
+function EmptyState() {
+  return (
+    <div className="h-48 flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+      <BarChart2 className="w-8 h-8 opacity-30" />
+      <span>No data available</span>
+    </div>
+  )
+}
+
 export default function LmsPage() {
   const { dateRange } = useDashboardStore()
   const t = useT()
   const days = Math.round((dateRange.to.getTime() - dateRange.from.getTime()) / 86_400_000)
 
-  const d = getSolutionData("lms", days)
+  const overviewUrl = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to) + "&solution=lms"
+  const trendsUrl   = buildApiUrl("/api/dashboard/trends",   dateRange.from, dateRange.to) + "&solution=lms"
+  const ucUrl       = buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to) + "&solution=lms"
 
-  // Charts still use real API when available
-  const trendsUrl = buildApiUrl("/api/dashboard/trends", dateRange.from, dateRange.to) + "&solution=lms"
-  const ucUrl     = buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to) + "&solution=lms"
-  const { data: trends, loading: trendsLoading } = useApi<any>(trendsUrl)
-  const { data: ucBreakdown, loading: ucLoading } = useApi<UsecaseBreakdownApiResponse>(ucUrl)
+  const { data: overview, loading: overviewLoading } = useApi<OverviewApiResponse>(overviewUrl)
+  const { data: trends,   loading: trendsLoading }   = useApi<TrendsApiResponse>(trendsUrl)
+  const { data: ucBreakdown, loading: ucLoading }    = useApi<UsecaseBreakdownApiResponse>(ucUrl)
 
-  const kpis = useMemo(() => [
-    {
-      label: "Enrolled Users", labelKey: "enrolledUsers" as const,
-      value: d.users,
-      delta: calcDelta(d.users, Math.round(d.users * 0.88)),
-      tier: "A" as const,
-    },
-    {
-      label: "Completion Rate", labelKey: "completionRate" as const,
-      value: d.passRate, unit: "%",
-      delta: calcDelta(d.passRate, d.prevPassRate),
-      tier: "B" as const,
-    },
-    {
-      label: "Avg Quiz Score", labelKey: "avgQuizScore" as const,
-      value: d.avgScore, unit: "pts",
-      delta: calcDelta(d.avgScore, d.prevAvgScore),
-      tier: "B" as const,
-    },
-    {
-      label: "Modules Completed", labelKey: "modulesCompleted" as const,
-      value: d.passedEvaluations,
-      delta: calcDelta(d.passedEvaluations, d.prevTotalEvaluations > 0
-        ? Math.round(d.prevTotalEvaluations * d.prevPassRate / 100) : null),
-      tier: "A" as const,
-    },
-  ], [d])
+  const hasData = overview && overview.totalEvaluations > 0
+
+  const kpis = useMemo(() => {
+    if (!hasData) return []
+    return [
+      {
+        label: "Enrolled Users", labelKey: "enrolledUsers" as const,
+        value: overview!.passedEvaluations + overview!.totalEvaluations,
+        delta: calcDelta(
+          overview!.passedEvaluations + overview!.totalEvaluations,
+          overview!.prevTotalEvaluations
+        ),
+        tier: "A" as const,
+      },
+      {
+        label: "Completion Rate", labelKey: "completionRate" as const,
+        value: overview!.passRate ?? 0, unit: "%",
+        delta: calcDelta(overview!.passRate ?? 0, overview!.prevPassRate ?? 0),
+        tier: "B" as const,
+      },
+      {
+        label: "Avg Quiz Score", labelKey: "avgQuizScore" as const,
+        value: overview!.avgScore ?? 0, unit: "pts",
+        delta: calcDelta(overview!.avgScore ?? 0, overview!.prevAvgScore ?? 0),
+        tier: "B" as const,
+      },
+      {
+        label: "Modules Completed", labelKey: "modulesCompleted" as const,
+        value: overview!.passedEvaluations,
+        delta: calcDelta(
+          overview!.passedEvaluations,
+          overview!.prevTotalEvaluations > 0
+            ? Math.round(overview!.prevTotalEvaluations * (overview!.prevPassRate ?? 0) / 100)
+            : 0
+        ),
+        tier: "A" as const,
+      },
+    ]
+  }, [overview, hasData])
 
   const activityData = useMemo(
-    () => trends?.evalCountTrend?.length ? trends.evalCountTrend : [],
+    () => trends?.evalCountTrend ?? [],
     [trends]
   )
 
@@ -88,19 +113,41 @@ export default function LmsPage() {
     <div className="min-h-screen">
       <DashboardHeader title={t.lmsTitle} subtitle={t.lmsSub} />
       <div className="p-6 space-y-6">
+
+        {/* KPI cards */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-          {kpis.map((kpi, i) => <SummaryCard key={kpi.label} kpi={kpi} index={i} icon={icons[i]} />)}
+          {overviewLoading
+            ? Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
+                  <div className="h-[3px]" style={{ background: brand.primaryColor }} />
+                  <div className="p-5 space-y-3 animate-pulse">
+                    <div className="h-3 w-24 rounded bg-muted" />
+                    <div className="h-8 w-20 rounded bg-muted" />
+                  </div>
+                </div>
+              ))
+            : kpis.length > 0
+              ? kpis.map((kpi, i) => <SummaryCard key={kpi.label} kpi={kpi} index={i} icon={icons[i]} />)
+              : Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+                    <div className="h-[3px]" style={{ background: brand.primaryColor }} />
+                    <div className="p-5 text-center text-sm text-muted-foreground py-8">No data available</div>
+                  </div>
+                ))
+          }
         </div>
 
+        {/* Activity chart */}
         <ChartCard title={t.activityTrend} subtitle={`${t.evalCountSub} — ${t.last} ${days} ${t.days}`}>
           {trendsLoading
             ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
             : activityData.length > 0
               ? <ActivityLineChart data={activityData} label="Sessions" color={brand.chartColors[0]} />
-              : <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.noData}</div>
+              : <EmptyState />
           }
         </ChartCard>
 
+        {/* Usecase breakdown table */}
         <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
           <div className="mb-4">
             <h3 className="text-sm font-semibold">{t.usecaseBreakdown}</h3>
@@ -113,7 +160,7 @@ export default function LmsPage() {
             ? <div className="py-10 text-center text-sm text-muted-foreground">{t.loading}</div>
             : ucBreakdown?.data?.length
               ? <DataTable data={ucBreakdown.data} columns={ucColumns} pageSize={8} />
-              : <div className="py-10 text-center text-sm text-muted-foreground">{t.noData}</div>
+              : <div className="py-10 text-center text-sm text-muted-foreground">No data available</div>
           }
         </div>
       </div>

@@ -55,8 +55,8 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  /* Coppel blue #1E40AF → HSL 226 71% 40% */
-  --primary: 226 71% 40%;
+  /* Rolplay red #DC2626 → HSL 0 72% 51% */
+  --primary: 0 72% 51%;
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
@@ -64,26 +64,25 @@
   --muted-foreground: oklch(0.556 0 0);
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
-  /* Coppel yellow #FACC15 — available via var(--brand-accent) */
-  --brand-accent: 48 96% 53%;
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: hsl(var(--primary));
-  /* Chart palette: blue → yellow → teal → indigo → amber */
-  --chart-1: oklch(0.42 0.19 265);   /* Coppel blue  */
-  --chart-2: oklch(0.86 0.19 95);    /* Coppel yellow */
-  --chart-3: oklch(0.65 0.16 195);   /* teal          */
-  --chart-4: oklch(0.55 0.18 280);   /* indigo        */
-  --chart-5: oklch(0.75 0.17 60);    /* amber         */
+  /* Chart palette: red family */
+  --chart-1: oklch(0.52 0.22 27);    /* red-600   */
+  --chart-2: oklch(0.35 0.17 27);    /* red-800   */
+  --chart-3: oklch(0.60 0.22 27);    /* red-500   */
+  --chart-4: oklch(0.43 0.20 27);    /* red-700   */
+  --chart-5: oklch(0.72 0.19 27);    /* red-400   */
   --radius: 0.75rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
+  /* Sidebar: always dark (black) */
+  --sidebar: oklch(0.10 0 0);
+  --sidebar-foreground: oklch(0.92 0 0);
   --sidebar-primary: hsl(var(--primary));
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-accent: oklch(0.18 0 0);
+  --sidebar-accent-foreground: oklch(0.92 0 0);
+  --sidebar-border: oklch(0.22 0 0);
   --sidebar-ring: hsl(var(--primary));
 }
 
@@ -94,8 +93,8 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  /* Coppel blue lifted slightly for dark mode readability */
-  --primary: 226 75% 58%;
+  /* Rolplay red slightly brighter for dark mode */
+  --primary: 0 75% 58%;
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
@@ -103,24 +102,24 @@
   --muted-foreground: oklch(0.708 0 0);
   --accent: oklch(0.269 0 0);
   --accent-foreground: oklch(0.985 0 0);
-  --brand-accent: 48 96% 53%;
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: hsl(var(--primary));
-  /* Chart palette dark — slightly brighter for contrast on dark bg */
-  --chart-1: oklch(0.55 0.2 265);    /* Coppel blue  */
-  --chart-2: oklch(0.88 0.19 95);    /* Coppel yellow */
-  --chart-3: oklch(0.68 0.16 195);   /* teal          */
-  --chart-4: oklch(0.62 0.18 280);   /* indigo        */
-  --chart-5: oklch(0.78 0.17 60);    /* amber         */
-  --sidebar: oklch(0.145 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
+  /* Chart palette dark — slightly brighter for contrast */
+  --chart-1: oklch(0.62 0.23 27);
+  --chart-2: oklch(0.45 0.19 27);
+  --chart-3: oklch(0.70 0.22 27);
+  --chart-4: oklch(0.53 0.21 27);
+  --chart-5: oklch(0.78 0.18 27);
+  /* Sidebar stays dark */
+  --sidebar: oklch(0.10 0 0);
+  --sidebar-foreground: oklch(0.92 0 0);
   --sidebar-primary: hsl(var(--primary));
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-accent: oklch(0.18 0 0);
+  --sidebar-accent-foreground: oklch(0.92 0 0);
+  --sidebar-border: oklch(0.22 0 0);
   --sidebar-ring: hsl(var(--primary));
 }
 

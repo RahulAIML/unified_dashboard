@@ -1,41 +1,36 @@
 /**
  * lib/brand.ts — single source of truth for client branding.
- *
- * To re-brand for a different demo:
- *  1. Update the values below
- *  2. Drop the logo file into /public/
- *  3. Done — no other files need touching.
  */
 
 export const brand = {
   /** Displayed in sidebar, browser tab, and page <title> */
-  appName: "Coppel Analytics",
+  appName: "Rolplay",
 
   /** Hex — maps to CSS --primary (buttons, active states, links) */
-  primaryColor: "#1E40AF",
+  primaryColor: "#DC2626",
 
-  /** Hex — Coppel yellow (highlights, second series in charts) */
-  accentColor: "#FACC15",
+  /** Hex — secondary accent (stripes, badges) */
+  accentColor: "#DC2626",
 
   /** Path relative to /public — shown in sidebar top-left */
-  logo: "/logo.jpg",
+  logo: "/rolplay-logo.png",
 
   /** Alt text for the logo */
-  logoAlt: "Coppel",
+  logoAlt: "Rolplay",
 
   /**
    * Hardcoded hex palette for Recharts (CSS variables don't work in SVG fill/stroke).
-   * Index 0 = primary blue, Index 1 = yellow, rest = blue/yellow family.
+   * Index 0 = primary red, rest = red/dark family.
    */
   chartColors: [
-    "#1E40AF", // Coppel blue
-    "#FACC15", // Coppel yellow
-    "#2563EB", // blue-600
-    "#FDE68A", // yellow-200
-    "#1D4ED8", // blue-700
-    "#FCD34D", // yellow-300
-    "#3B82F6", // blue-500
-    "#60A5FA", // blue-400
+    "#DC2626", // red-600
+    "#991B1B", // red-800
+    "#EF4444", // red-500
+    "#B91C1C", // red-700
+    "#F87171", // red-400
+    "#7F1D1D", // red-900
+    "#FCA5A5", // red-300
+    "#450A0A", // red-950
   ],
 } as const
 

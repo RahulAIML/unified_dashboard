@@ -13,16 +13,11 @@
  */
 
 import { query } from "./db"
-import {
-  getGlobalOverviewData,
-  getSimulatorData,
-  getCertificationData,
-} from "./mock-data"
 import type { DateRange } from "./types"
 
 // ── Env switch ────────────────────────────────────────────────────────────────
-// Default: false (mock only).  Set USE_REAL_DB=true in .env.local to enable.
-const USE_REAL_DB = process.env.USE_REAL_DB === "true"
+// Default: true (always try real DB).  Set USE_REAL_DB=false in .env.local to disable.
+const USE_REAL_DB = process.env.USE_REAL_DB !== "false"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -221,63 +216,22 @@ function toNullableNumber(v: number | string | null | undefined): number | null 
   return null
 }
 
-// ── Mock implementations ──────────────────────────────────────────────────────
-function getOverviewKpisMock(filters: AnalyticsFilters): OverviewKpis {
-  const range   = toRange(filters)
-  const mock    = getGlobalOverviewData(range)
-  const prior   = priorPeriod(filters.from, filters.to)
-  const prevMock = getGlobalOverviewData({ from: prior.from, to: prior.to })
+// ── Empty fallbacks (returned when DB is unavailable) ─────────────────────────
+
+function getOverviewKpisEmpty(): OverviewKpis {
   return {
-    totalEvaluations:     toNumber(mock.kpis.totalSessions.value),
-    avgScore:             toNullableNumber(mock.kpis.avgScore.value),
-    passRate:             toNullableNumber(mock.kpis.passRate.value),
-    passedEvaluations:    toNumber(mock.kpis.certifiedUsers.value),
-    prevTotalEvaluations: toNumber(prevMock.kpis.totalSessions.value),
-    prevAvgScore:         toNullableNumber(prevMock.kpis.avgScore.value),
-    prevPassRate:         toNullableNumber(prevMock.kpis.passRate.value),
+    totalEvaluations:     0,
+    avgScore:             null,
+    passRate:             null,
+    passedEvaluations:    0,
+    prevTotalEvaluations: 0,
+    prevAvgScore:         null,
+    prevPassRate:         null,
   }
 }
 
-function getTrendsMock(filters: AnalyticsFilters): TrendsResult {
-  const range   = toRange(filters)
-  const overview  = getGlobalOverviewData(range)
-  const simulator = getSimulatorData(range)
-  const cert      = getCertificationData(range)
-  return {
-    scoreTrend:    simulator.scoreTrend    as TrendPoint[],
-    passFailTrend: cert.passFail           as TrendPoint[],
-    evalCountTrend: overview.activityTrend as TrendPoint[],
-  }
-}
-
-function getUsecaseBreakdownMock(filters: AnalyticsFilters): UsecaseRow[] {
-  const breakdown = getGlobalOverviewData(toRange(filters)).moduleBreakdown
-  return breakdown.map((row, i) => {
-    const total  = toNumber(row.sessions)
-    const passed = toNumber(row.passed)
-    return {
-      usecaseId:        i + 1,
-      totalEvaluations: total,
-      avgScore:         null,
-      passRate:         total > 0 ? Math.round((passed / total) * 100) : null,
-      passed,
-    }
-  })
-}
-
-function getEvaluationResultsMock(
-  filters: AnalyticsFilters,
-  limit = 50
-): EvaluationRow[] {
-  const rows = getCertificationData(toRange(filters)).resultsTable
-  return rows.slice(0, limit).map((r, i) => ({
-    savedReportId: 1000 + i,
-    usecaseId:     (i % 8) + 1,
-    score:         r.score,
-    result:        r.segment,
-    passed:        r.passed,
-    date:          r.date,
-  }))
+function getTrendsEmpty(): TrendsResult {
+  return { scoreTrend: [], passFailTrend: [], evalCountTrend: [] }
 }
 
 // ── Real DB implementations ───────────────────────────────────────────────────
@@ -487,7 +441,7 @@ export async function getOverviewKpis(
     const data = await getOverviewKpisReal(filters)
     if (data) return data
   }
-  return getOverviewKpisMock(filters)
+  return getOverviewKpisEmpty()
 }
 
 export async function getTrends(
@@ -497,7 +451,7 @@ export async function getTrends(
     const data = await getTrendsReal(filters)
     if (data) return data
   }
-  return getTrendsMock(filters)
+  return getTrendsEmpty()
 }
 
 export async function getEvaluationResults(
@@ -508,7 +462,7 @@ export async function getEvaluationResults(
     const data = await getEvaluationResultsReal(filters, limit)
     if (data) return data
   }
-  return getEvaluationResultsMock(filters, limit)
+  return []
 }
 
 export async function getUsecaseBreakdown(
@@ -518,7 +472,7 @@ export async function getUsecaseBreakdown(
     const data = await getUsecaseBreakdownReal(filters)
     if (data) return data
   }
-  return getUsecaseBreakdownMock(filters)
+  return []
 }
 
 export async function getDrilldown(

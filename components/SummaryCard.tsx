@@ -30,12 +30,12 @@ export function SummaryCard({ kpi, index = 0, icon }: Props) {
       whileHover={{ y: -2, transition: { duration: 0.15 } }}
       className="relative overflow-hidden rounded-xl border border-border bg-card shadow-sm hover:shadow-md transition-shadow"
     >
-      {/* Coppel yellow top stripe */}
-      <div className="h-[3px] w-full" style={{ background: brand.accentColor }} />
+      {/* Red top stripe */}
+      <div className="h-[3px] w-full" style={{ background: brand.primaryColor }} />
 
-      {/* Subtle blue tint on background */}
+      {/* Subtle red tint on background */}
       <div
-        className="absolute inset-0 pointer-events-none opacity-[0.04]"
+        className="absolute inset-0 pointer-events-none opacity-[0.03]"
         style={{ background: brand.primaryColor }}
       />
 
@@ -45,11 +45,11 @@ export function SummaryCard({ kpi, index = 0, icon }: Props) {
             {displayLabel}
           </span>
           <div className="flex items-center gap-2">
-            {/* Tier badge — yellow for A, blue-tinted for others */}
+            {/* Tier badge */}
             <span
               className="text-[10px] font-bold px-1.5 py-0.5 rounded"
               style={isPrimary
-                ? { background: brand.accentColor, color: "#1a1a1a" }
+                ? { background: brand.primaryColor, color: "#ffffff" }
                 : { background: `${brand.primaryColor}20`, color: brand.primaryColor }
               }
             >
@@ -60,7 +60,7 @@ export function SummaryCard({ kpi, index = 0, icon }: Props) {
         </div>
 
         <div className="flex items-end justify-between">
-          {/* KPI value in Coppel blue */}
+          {/* KPI value in brand red */}
           <span
             className="text-3xl font-bold tracking-tight"
             style={{ color: brand.primaryColor }}

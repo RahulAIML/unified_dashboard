@@ -1,25 +1,24 @@
 "use client"
-import { brand } from "@/lib/brand"
 
 import { useMemo } from "react"
-import { Gamepad2, Users, PlayCircle, Award } from "lucide-react"
+import { Gamepad2, Users, PlayCircle, Award, BarChart2 } from "lucide-react"
 import { DashboardHeader } from "@/components/DashboardHeader"
 import { SummaryCard } from "@/components/SummaryCard"
 import { ChartCard } from "@/components/ChartCard"
 import { ActivityLineChart } from "@/components/charts/ActivityLineChart"
 import { DataTable, type Column } from "@/components/DataTable"
-import { getSimulatorData } from "@/lib/mock-data"
 import { useDashboardStore } from "@/lib/store"
 import { useT } from "@/lib/lang-store"
 import { useApi, buildApiUrl } from "@/lib/hooks/useApi"
 import { calcDelta } from "@/lib/utils"
-import { getSolutionData } from "@/lib/solution-data"
+import { brand } from "@/lib/brand"
+import { cn } from "@/lib/utils"
 import type {
+  OverviewApiResponse,
   TrendsApiResponse,
   UsecaseBreakdownApiResponse,
   UsecaseApiRow,
 } from "@/lib/types"
-import { cn } from "@/lib/utils"
 
 const icons = [
   <Gamepad2   key="g" className="w-4 h-4" />,
@@ -28,55 +27,81 @@ const icons = [
   <Award      key="a" className="w-4 h-4" />,
 ]
 
+function EmptyState() {
+  return (
+    <div className="h-48 flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+      <BarChart2 className="w-8 h-8 opacity-30" />
+      <span>No data available</span>
+    </div>
+  )
+}
+
 export default function SimulatorPage() {
   const { dateRange } = useDashboardStore()
   const t = useT()
-
-  const mockData = getSimulatorData(dateRange)
   const days = Math.round((dateRange.to.getTime() - dateRange.from.getTime()) / 86_400_000)
 
-  const d = getSolutionData("simulator", days)
+  const overviewUrl = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to) + "&solution=simulator"
+  const trendsUrl   = buildApiUrl("/api/dashboard/trends",   dateRange.from, dateRange.to) + "&solution=simulator"
+  const ucUrl       = buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to) + "&solution=simulator"
 
-  const trendsUrl = buildApiUrl("/api/dashboard/trends", dateRange.from, dateRange.to) + "&solution=simulator"
-  const { data: trends, loading: trendsLoading } = useApi<TrendsApiResponse>(trendsUrl)
+  const { data: overview, loading: overviewLoading } = useApi<OverviewApiResponse>(overviewUrl)
+  const { data: trends,   loading: trendsLoading }   = useApi<TrendsApiResponse>(trendsUrl)
+  const { data: ucBreakdown, loading: ucLoading }    = useApi<UsecaseBreakdownApiResponse>(ucUrl)
 
-  const ucUrl = buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to) + "&solution=simulator"
-  const { data: ucBreakdown, loading: ucLoading } = useApi<UsecaseBreakdownApiResponse>(ucUrl)
+  const hasData = overview && overview.totalEvaluations > 0
 
-  const kpis = useMemo(() => [
-    { label: 'Configured Scenarios', labelKey: 'configuredScenarios' as const, value: 3,            delta: 0,                                                            tier: 'B' as const },
-    { label: 'Assigned Users',       labelKey: 'assignedUsers'       as const, value: d.users,      delta: calcDelta(d.users, Math.round(d.users * 0.93)),               tier: 'A' as const },
-    { label: 'Total Sessions',       labelKey: 'totalSessions'       as const, value: d.totalEvaluations,  delta: calcDelta(d.totalEvaluations, d.prevTotalEvaluations), tier: 'B' as const },
-    { label: 'Avg Score',            labelKey: 'avgScore'            as const, value: d.avgScore,   delta: calcDelta(d.avgScore, d.prevAvgScore), unit: 'pts',           tier: 'B' as const },
-  ], [d])
+  const kpis = useMemo(() => {
+    if (!hasData) return []
+    return [
+      {
+        label: "Total Sessions", labelKey: "totalSessions" as const,
+        value: overview!.totalEvaluations,
+        delta: calcDelta(overview!.totalEvaluations, overview!.prevTotalEvaluations),
+        tier: "A" as const,
+      },
+      {
+        label: "Pass Rate", labelKey: "passRate" as const,
+        value: overview!.passRate ?? 0, unit: "%",
+        delta: calcDelta(overview!.passRate ?? 0, overview!.prevPassRate ?? 0),
+        tier: "B" as const,
+      },
+      {
+        label: "Avg Score", labelKey: "avgScore" as const,
+        value: overview!.avgScore ?? 0, unit: "pts",
+        delta: calcDelta(overview!.avgScore ?? 0, overview!.prevAvgScore ?? 0),
+        tier: "B" as const,
+      },
+      {
+        label: "Certified Users", labelKey: "certifiedUsers" as const,
+        value: overview!.passedEvaluations,
+        delta: calcDelta(
+          overview!.passedEvaluations,
+          overview!.prevTotalEvaluations > 0
+            ? Math.round(overview!.prevTotalEvaluations * (overview!.prevPassRate ?? 0) / 100)
+            : 0
+        ),
+        tier: "A" as const,
+      },
+    ]
+  }, [overview, hasData])
 
   const scoreTrendData = useMemo(
-    () => trends?.scoreTrend?.length ? trends.scoreTrend : mockData.scoreTrend,
-    [trends, mockData.scoreTrend]
+    () => trends?.scoreTrend ?? [],
+    [trends]
   )
 
-  // ── Usecase breakdown table columns ──────────────────────────────────────
   const ucColumns: Column<UsecaseApiRow>[] = useMemo(() => [
+    { key: "usecaseId",        header: t.colScenario,  render: r => <span className="font-medium">UC-{r.usecaseId}</span> },
+    { key: "totalEvaluations", header: t.colSessions,  render: r => <span className="tabular-nums">{r.totalEvaluations}</span> },
     {
-      key: "usecaseId",
-      header: t.colScenario,
-      render: r => <span className="font-medium">UC-{r.usecaseId}</span>,
-    },
-    {
-      key: "totalEvaluations",
-      header: t.colSessions,
-      render: r => <span className="tabular-nums">{r.totalEvaluations}</span>,
-    },
-    {
-      key: "avgScore",
-      header: t.colAvgScore,
+      key: "avgScore", header: t.colAvgScore,
       render: r => r.avgScore != null
         ? <span className="tabular-nums">{r.avgScore} pts</span>
         : <span className="text-muted-foreground">—</span>,
     },
     {
-      key: "passRate",
-      header: t.colPassRate,
+      key: "passRate", header: t.colPassRate,
       render: r => r.passRate != null ? (
         <span className={cn(
           "inline-flex px-2 py-0.5 rounded-full text-xs font-medium",
@@ -88,11 +113,7 @@ export default function SimulatorPage() {
         </span>
       ) : <span className="text-muted-foreground">—</span>,
     },
-    {
-      key: "passed",
-      header: t.colPassed,
-      render: r => <span className="tabular-nums">{r.passed}</span>,
-    },
+    { key: "passed", header: t.colPassed, render: r => <span className="tabular-nums">{r.passed}</span> },
   ], [t])
 
   return (
@@ -102,26 +123,34 @@ export default function SimulatorPage() {
 
         {/* KPI cards */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-          {kpis.map((kpi, i) => (
-            <SummaryCard key={kpi.label} kpi={kpi} index={i} icon={icons[i]}
-              accent={[
-                "from-primary/10 to-primary/5",
-                "from-primary/10 to-primary/5",
-                "from-primary/10 to-primary/5",
-                "from-primary/10 to-primary/5",
-              ][i]}
-            />
-          ))}
+          {overviewLoading
+            ? Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
+                  <div className="h-[3px]" style={{ background: brand.primaryColor }} />
+                  <div className="p-5 space-y-3 animate-pulse">
+                    <div className="h-3 w-24 rounded bg-muted" />
+                    <div className="h-8 w-20 rounded bg-muted" />
+                  </div>
+                </div>
+              ))
+            : kpis.length > 0
+              ? kpis.map((kpi, i) => <SummaryCard key={kpi.label} kpi={kpi} index={i} icon={icons[i]} />)
+              : Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+                    <div className="h-[3px]" style={{ background: brand.primaryColor }} />
+                    <div className="p-5 text-center text-sm text-muted-foreground py-8">No data available</div>
+                  </div>
+                ))
+          }
         </div>
 
         {/* Score trend */}
-        <ChartCard
-          title={t.scoreTrend}
-          subtitle={`${t.scoreTrendSub} — ${t.last} ${days} ${t.days}`}
-        >
+        <ChartCard title={t.scoreTrend} subtitle={`${t.scoreTrendSub} — ${t.last} ${days} ${t.days}`}>
           {trendsLoading
             ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
-            : <ActivityLineChart data={scoreTrendData} label="Avg Score" color={brand.chartColors[0]} />
+            : scoreTrendData.length > 0
+              ? <ActivityLineChart data={scoreTrendData} label="Avg Score" color={brand.chartColors[0]} />
+              : <EmptyState />
           }
         </ChartCard>
 
@@ -132,8 +161,7 @@ export default function SimulatorPage() {
             <p className="text-xs text-muted-foreground mt-0.5">
               {ucLoading
                 ? t.loading
-                : `${ucBreakdown?.data?.length ?? 0} ${t.usecaseBreakdownSub}`
-              }
+                : `${ucBreakdown?.data?.length ?? 0} ${t.usecaseBreakdownSub}`}
               <span className="ml-2 text-[10px] font-medium bg-primary/10 text-primary px-1.5 py-0.5 rounded">
                 {t.sourceSim}
               </span>
@@ -143,10 +171,9 @@ export default function SimulatorPage() {
             ? <div className="py-10 text-center text-sm text-muted-foreground">{t.loading}</div>
             : ucBreakdown?.data?.length
               ? <DataTable data={ucBreakdown.data} columns={ucColumns} pageSize={8} />
-              : <div className="py-10 text-center text-sm text-muted-foreground">{t.noData}</div>
+              : <div className="py-10 text-center text-sm text-muted-foreground">No data available</div>
           }
         </div>
-
       </div>
     </div>
   )

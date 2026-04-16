@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
-import { BadgeCheck, TrendingUp, Award, Clock } from "lucide-react"
+import { BadgeCheck, TrendingUp, Award, Users, BarChart2 } from "lucide-react"
 import { DashboardHeader } from "@/components/DashboardHeader"
 import { SummaryCard } from "@/components/SummaryCard"
 import { ChartCard } from "@/components/ChartCard"
@@ -11,20 +11,30 @@ import { useDashboardStore } from "@/lib/store"
 import { useT } from "@/lib/lang-store"
 import { useApi, buildApiUrl } from "@/lib/hooks/useApi"
 import { calcDelta } from "@/lib/utils"
-import { getSolutionData } from "@/lib/solution-data"
+import { brand } from "@/lib/brand"
+import { cn } from "@/lib/utils"
 import type {
+  OverviewApiResponse,
   TrendsApiResponse,
   ResultsApiResponse,
   EvaluationApiRow,
 } from "@/lib/types"
-import { cn } from "@/lib/utils"
 
 const icons = [
   <BadgeCheck key="b" className="w-4 h-4" />,
   <TrendingUp key="t" className="w-4 h-4" />,
   <Award      key="a" className="w-4 h-4" />,
-  <Clock      key="c" className="w-4 h-4" />,
+  <Users      key="u" className="w-4 h-4" />,
 ]
+
+function EmptyState() {
+  return (
+    <div className="h-48 flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+      <BarChart2 className="w-8 h-8 opacity-30" />
+      <span>No data available</span>
+    </div>
+  )
+}
 
 export default function CertificationPage() {
   const { dateRange } = useDashboardStore()
@@ -33,44 +43,51 @@ export default function CertificationPage() {
     (dateRange.to.getTime() - dateRange.from.getTime()) / 86_400_000
   )
 
-  const cert = getSolutionData("certification", days)
+  const overviewUrl = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to) + "&solution=certification"
+  const trendsUrl   = buildApiUrl("/api/dashboard/trends",   dateRange.from, dateRange.to) + "&solution=certification"
+  const resultsUrl  = buildApiUrl("/api/dashboard/results",  dateRange.from, dateRange.to, { limit: "100" }) + "&solution=certification"
 
-  const trendsUrl = buildApiUrl("/api/dashboard/trends", dateRange.from, dateRange.to) + "&solution=certification"
-  const { data: trends, loading: trendsLoading } = useApi<TrendsApiResponse>(trendsUrl)
+  const { data: overview, loading: overviewLoading } = useApi<OverviewApiResponse>(overviewUrl)
+  const { data: trends,   loading: trendsLoading }   = useApi<TrendsApiResponse>(trendsUrl)
+  const { data: results,  loading: resultsLoading }  = useApi<ResultsApiResponse>(resultsUrl)
 
-  const resultsUrl = buildApiUrl("/api/dashboard/results", dateRange.from, dateRange.to,
-    { limit: "100" }) + "&solution=certification"
-  const { data: results, loading: resultsLoading } = useApi<ResultsApiResponse>(resultsUrl)
+  const hasData = overview && overview.totalEvaluations > 0
 
-  const kpis = useMemo(() => [
-    {
-      label: 'Candidates Evaluated', labelKey: 'candidatesEvaluated' as const,
-      value: cert.totalEvaluations,
-      delta: calcDelta(cert.totalEvaluations, cert.prevTotalEvaluations),
-      tier:  'A' as const,
-    },
-    {
-      label: 'Pass Rate', labelKey: 'passRate' as const,
-      value: cert.passRate, unit: '%',
-      delta: calcDelta(cert.passRate, cert.prevPassRate),
-      tier:  'B' as const,
-    },
-    {
-      label: 'Avg Score', labelKey: 'avgScore' as const,
-      value: cert.avgScore, unit: 'pts',
-      delta: calcDelta(cert.avgScore, cert.prevAvgScore),
-      tier:  'B' as const,
-    },
-    {
-      label: 'Certified Users', labelKey: 'certifiedUsers' as const,
-      value: cert.passedEvaluations,
-      delta: calcDelta(cert.passedEvaluations,
-        Math.round(cert.prevTotalEvaluations * cert.prevPassRate / 100)),
-      tier:  'A' as const,
-    },
-  ], [cert])
+  const kpis = useMemo(() => {
+    if (!hasData) return []
+    return [
+      {
+        label: "Candidates Evaluated", labelKey: "candidatesEvaluated" as const,
+        value: overview!.totalEvaluations,
+        delta: calcDelta(overview!.totalEvaluations, overview!.prevTotalEvaluations),
+        tier: "A" as const,
+      },
+      {
+        label: "Pass Rate", labelKey: "passRate" as const,
+        value: overview!.passRate ?? 0, unit: "%",
+        delta: calcDelta(overview!.passRate ?? 0, overview!.prevPassRate ?? 0),
+        tier: "B" as const,
+      },
+      {
+        label: "Avg Score", labelKey: "avgScore" as const,
+        value: overview!.avgScore ?? 0, unit: "pts",
+        delta: calcDelta(overview!.avgScore ?? 0, overview!.prevAvgScore ?? 0),
+        tier: "B" as const,
+      },
+      {
+        label: "Certified Users", labelKey: "certifiedUsers" as const,
+        value: overview!.passedEvaluations,
+        delta: calcDelta(
+          overview!.passedEvaluations,
+          overview!.prevTotalEvaluations > 0
+            ? Math.round(overview!.prevTotalEvaluations * (overview!.prevPassRate ?? 0) / 100)
+            : 0
+        ),
+        tier: "A" as const,
+      },
+    ]
+  }, [overview, hasData])
 
-  // ── Results table columns ─────────────────────────────────────────────────
   const columns: Column<EvaluationApiRow>[] = useMemo(() => [
     {
       key: "savedReportId",
@@ -80,9 +97,11 @@ export default function CertificationPage() {
     {
       key: "usecaseId",
       header: t.colUsecaseId,
-      render: r => <span className="text-muted-foreground">
-        {r.usecaseId != null ? `UC-${r.usecaseId}` : '—'}
-      </span>,
+      render: r => (
+        <span className="text-muted-foreground">
+          {r.usecaseId != null ? `UC-${r.usecaseId}` : "—"}
+        </span>
+      ),
     },
     {
       key: "score",
@@ -108,7 +127,7 @@ export default function CertificationPage() {
     {
       key: "result",
       header: t.colSegment,
-      render: r => <span className="text-muted-foreground text-xs">{r.result ?? '—'}</span>,
+      render: r => <span className="text-muted-foreground text-xs">{r.result ?? "—"}</span>,
     },
     {
       key: "date",
@@ -117,7 +136,6 @@ export default function CertificationPage() {
     },
   ], [t])
 
-  // ── Pass/fail trend data ──────────────────────────────────────────────────
   const passFailData = trends?.passFailTrend ?? []
 
   return (
@@ -127,16 +145,27 @@ export default function CertificationPage() {
 
         {/* KPI cards */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-          {kpis.map((kpi, i) => (
-            <SummaryCard key={kpi.label} kpi={kpi} index={i} icon={icons[i]}
-              accent={[
-                "from-primary/10 to-primary/5",
-                "from-primary/10 to-primary/5",
-                "from-primary/10 to-primary/5",
-                "from-primary/10 to-primary/5",
-              ][i]}
-            />
-          ))}
+          {overviewLoading
+            ? Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
+                  <div className="h-[3px]" style={{ background: brand.primaryColor }} />
+                  <div className="p-5 space-y-3 animate-pulse">
+                    <div className="h-3 w-24 rounded bg-muted" />
+                    <div className="h-8 w-20 rounded bg-muted" />
+                  </div>
+                </div>
+              ))
+            : kpis.length > 0
+              ? kpis.map((kpi, i) => (
+                  <SummaryCard key={kpi.label} kpi={kpi} index={i} icon={icons[i]} />
+                ))
+              : Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+                    <div className="h-[3px]" style={{ background: brand.primaryColor }} />
+                    <div className="p-5 text-center text-sm text-muted-foreground py-8">No data available</div>
+                  </div>
+                ))
+          }
         </div>
 
         {/* Pass/Fail chart */}
@@ -146,9 +175,9 @@ export default function CertificationPage() {
         >
           {trendsLoading
             ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
-            : passFailData.length === 0
-              ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.noData}</div>
-              : <StackedBarChart data={passFailData} />
+            : passFailData.length > 0
+              ? <StackedBarChart data={passFailData} />
+              : <EmptyState />
           }
         </ChartCard>
 
@@ -159,8 +188,7 @@ export default function CertificationPage() {
             <p className="text-xs text-muted-foreground mt-0.5">
               {resultsLoading
                 ? t.loading
-                : `${results?.data?.length ?? 0} ${t.evaluationsSub} ${days} ${t.days}`
-              }
+                : `${results?.data?.length ?? 0} ${t.evaluationsSub} ${days} ${t.days}`}
               <span className="ml-2 text-[10px] font-medium bg-primary/10 text-primary px-1.5 py-0.5 rounded">
                 {t.sourceCert}
               </span>
@@ -168,14 +196,11 @@ export default function CertificationPage() {
           </div>
           {resultsLoading
             ? <div className="py-10 text-center text-sm text-muted-foreground">{t.loading}</div>
-            : <DataTable
-                data={results?.data ?? []}
-                columns={columns}
-                pageSize={10}
-              />
+            : results?.data?.length
+              ? <DataTable data={results.data} columns={columns} pageSize={10} />
+              : <div className="py-10 text-center text-sm text-muted-foreground">No data available</div>
           }
         </div>
-
       </div>
     </div>
   )
