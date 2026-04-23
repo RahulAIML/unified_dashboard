@@ -198,9 +198,12 @@ export function AIAssistant() {
       })
 
       const json = await res.json()
-      if (!res.ok) throw new Error(json?.error ?? "AI error")
+      if (!res.ok) throw new Error(json?.data?.message ?? json?.error ?? "AI error")
 
-      setMessages(prev => [...prev, { role: "assistant", content: json.answer }])
+      // API wraps response in { success, data: { answer }, meta } — unwrap .data
+      const answer = json?.data?.answer ?? json?.answer ?? ""
+      if (!answer) throw new Error("Empty AI response")
+      setMessages(prev => [...prev, { role: "assistant", content: answer }])
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error"
       setError(`AI unavailable: ${msg}`)
