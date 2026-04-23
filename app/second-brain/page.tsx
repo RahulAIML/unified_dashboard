@@ -1,6 +1,6 @@
 "use client"
 
-import { Database, FileType, Layers, BarChart2, AlertTriangle } from "lucide-react"
+import { Database, FileType, Layers, BarChart2, AlertTriangle, Users, BookOpen, Activity, CheckCircle } from "lucide-react"
 import { DashboardHeader } from "@/components/DashboardHeader"
 import { ChartCard } from "@/components/ChartCard"
 import { useDashboardStore } from "@/lib/store"
@@ -21,11 +21,56 @@ import { useMemo } from "react"
 import { calcDeltaPct, estimatePassedSessions } from "@/lib/kpi-builder"
 import { csvFilename } from "@/lib/csv-export"
 
+// ── Types for the Second Brain external API ───────────────────────────────────
+
+interface SBCourse {
+  id: string | number
+  name?: string
+  title?: string
+  enrolled_users?: number
+  completion_rate?: number
+  total_lessons?: number
+  status?: string
+}
+
+interface SBUser {
+  id: string | number
+  name?: string
+  email?: string
+  role?: string
+  status?: string
+  last_active?: string
+}
+
+interface SBOrganization {
+  id?: string | number
+  name?: string
+  total_users?: number
+  active_users?: number
+  total_courses?: number
+}
+
+interface SBProfileData {
+  organization?: SBOrganization
+  courses?: SBCourse[]
+  users?: SBUser[]
+  [key: string]: unknown
+}
+
+// ── Small helpers ─────────────────────────────────────────────────────────────
+
 const icons = [
+  <Users     key="u" className="w-4 h-4" />,
+  <BookOpen  key="b" className="w-4 h-4" />,
+  <Activity  key="a" className="w-4 h-4" />,
+  <CheckCircle key="c" className="w-4 h-4" />,
+]
+
+const oldIcons = [
   <Database  key="d" className="w-4 h-4" />,
   <FileType  key="f" className="w-4 h-4" />,
   <Layers    key="l" className="w-4 h-4" />,
-  <BarChart2 key="b" className="w-4 h-4" />,
+  <BarChart2 key="b2" className="w-4 h-4" />,
 ]
 
 function EmptyState({ label }: { label?: string }) {
@@ -46,11 +91,14 @@ function ErrorBanner({ message }: { message: string }) {
   )
 }
 
+// ── Component ─────────────────────────────────────────────────────────────────
+
 export default function SecondBrainPage() {
   const { dateRange, clientId, refreshKey } = useDashboardStore()
   const t     = useT()
   const days = Math.round((dateRange.to.getTime() - dateRange.from.getTime()) / 86_400_000)
 
+  // ── Legacy RolPlay DB data (kept for eval trend / breakdown) ─────────────
   const overviewUrl = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to, { solution: "second-brain", clientId, rk: refreshKey })
   const trendsUrl   = buildApiUrl("/api/dashboard/trends",   dateRange.from, dateRange.to, { solution: "second-brain", clientId, rk: refreshKey })
   const ucUrl       = buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to, { solution: "second-brain", clientId, rk: refreshKey })
@@ -59,13 +107,53 @@ export default function SecondBrainPage() {
   const { data: trends,   loading: trendsLoading,   error: trendsError }   = useApi<TrendsApiResponse>(trendsUrl)
   const { data: ucBreakdown, loading: ucLoading,    error: ucError }       = useApi<UsecaseBreakdownApiResponse>(ucUrl)
 
+  // ── Second Brain hosted API data ─────────────────────────────────────────
+  const { data: sbProfile, loading: sbLoading, error: sbError } = useApi<SBProfileData>("/api/second-brain/profile")
+
+  // ── KPI cards from Second Brain API (preferred) or fallback to DB ─────────
+  const sbKpis = useMemo(() => {
+    if (!sbProfile) return null
+
+    const org     = sbProfile.organization ?? {}
+    const courses  = sbProfile.courses ?? []
+    const users    = sbProfile.users ?? []
+
+    const totalUsers   = org.total_users  ?? users.length
+    const activeUsers  = org.active_users ?? users.filter((u: SBUser) => u.status === "active").length
+    const totalCourses = org.total_courses ?? courses.length
+    const avgCompletion = courses.length > 0
+      ? Math.round(courses.reduce((s: number, c: SBCourse) => s + (c.completion_rate ?? 0), 0) / courses.length)
+      : null
+
+    return [
+      {
+        label: "Total Users",   labelKey: "practiceSessions" as const,
+        value: totalUsers,      delta: 0, tier: "A" as const,
+      },
+      {
+        label: "Active Users",  labelKey: "totalSessions" as const,
+        value: activeUsers,     delta: totalUsers > 0 ? Math.round((activeUsers / totalUsers) * 100) : 0,
+        unit: totalUsers > 0 ? "%" : undefined,
+        tier: "B" as const,
+      },
+      {
+        label: "Total Courses", labelKey: "passRate" as const,
+        value: totalCourses,    delta: 0, tier: "A" as const,
+      },
+      {
+        label: "Avg Completion", labelKey: "avgScore" as const,
+        value: avgCompletion ?? 0, unit: "%", delta: 0, tier: "B" as const,
+      },
+    ]
+  }, [sbProfile])
+
+  // ── Fallback KPIs from legacy DB ──────────────────────────────────────────
   const hasData = overview && overview.totalEvaluations > 0
 
-  const kpis = useMemo(() => {
+  const dbKpis = useMemo(() => {
     if (!hasData) return []
     return [
       {
-        // Second Brain: evaluations = interactions with the knowledge base
         label: "Total Interactions", labelKey: "practiceSessions" as const,
         value: overview!.totalEvaluations,
         delta: calcDeltaPct(overview!.totalEvaluations, overview!.prevTotalEvaluations),
@@ -84,7 +172,6 @@ export default function SecondBrainPage() {
         tier: "B" as const,
       },
       {
-        // FIX: was "Certified Users" — correct label for SB is "Passed Interactions"
         label: "Passed Interactions", labelKey: "totalSessions" as const,
         value: overview!.passedEvaluations,
         delta: calcDeltaPct(
@@ -96,11 +183,44 @@ export default function SecondBrainPage() {
     ]
   }, [overview, hasData])
 
+  // Prefer Second Brain API KPIs; fall back to DB KPIs
+  const kpis      = sbKpis ?? dbKpis
+  const kpiIcons  = sbKpis ? icons : oldIcons
+  const kpiSource = sbKpis ? "second-brain-api" : "rolplay-db"
+
   const activityData = useMemo(
     () => trends?.evalCountTrend ?? [],
     [trends]
   )
 
+  // ── Course table columns ──────────────────────────────────────────────────
+  const courseColumns: Column<SBCourse>[] = useMemo(() => [
+    { key: "name",            header: "Course",      render: r => <span className="font-medium">{r.name ?? r.title ?? `Course ${r.id}`}</span> },
+    { key: "total_lessons",   header: "Lessons",     render: r => <span className="tabular-nums">{r.total_lessons ?? "—"}</span> },
+    { key: "enrolled_users",  header: "Enrolled",    render: r => <span className="tabular-nums">{r.enrolled_users ?? "—"}</span> },
+    {
+      key: "completion_rate", header: "Completion",
+      render: r => r.completion_rate != null ? (
+        <span className={cn(
+          "inline-flex px-2 py-0.5 rounded-full text-xs font-medium",
+          r.completion_rate >= 70 ? "bg-primary/10 text-primary"
+            : r.completion_rate >= 40 ? "bg-secondary text-secondary-foreground"
+            : "bg-destructive/10 text-destructive"
+        )}>
+          {r.completion_rate}%
+        </span>
+      ) : <span className="text-muted-foreground">—</span>,
+    },
+    {
+      key: "status", header: "Status",
+      render: r => <span className={cn(
+        "inline-flex px-2 py-0.5 rounded-full text-xs font-medium capitalize",
+        r.status === "active" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+      )}>{r.status ?? "—"}</span>,
+    },
+  ], [])
+
+  // ── Use-case table columns (legacy DB) ────────────────────────────────────
   const ucColumns: Column<UsecaseApiRow>[] = useMemo(() => [
     { key: "usecaseId",        header: t.colUseCase,  render: r => <span className="font-medium">UC-{r.usecaseId}</span> },
     { key: "totalEvaluations", header: t.colSessions, render: r => <span className="tabular-nums">{r.totalEvaluations}</span> },
@@ -121,17 +241,41 @@ export default function SecondBrainPage() {
     { key: "passed", header: t.colPassed, render: r => <span className="tabular-nums">{r.passed}</span> },
   ], [t])
 
+  const courses = sbProfile?.courses ?? []
+
   return (
     <div className="min-h-screen">
       <DashboardHeader title={t.sbTitle} subtitle={t.sbSub} />
       <div className="p-6 space-y-6">
 
+        {/* Second Brain API status banner */}
+        {sbError && (
+          <div className="flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>Second Brain live data unavailable — showing evaluation data. ({sbError})</span>
+          </div>
+        )}
+
         {/* Error banners */}
-        {overviewError && <ErrorBanner message={`${t.errorLoading}: ${overviewError}`} />}
+        {overviewError && !sbKpis && <ErrorBanner message={`${t.errorLoading}: ${overviewError}`} />}
+
+        {/* Source badge */}
+        {!sbLoading && (
+          <div className="flex items-center gap-2">
+            <span className={cn(
+              "text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded",
+              kpiSource === "second-brain-api"
+                ? "bg-primary/10 text-primary"
+                : "bg-muted text-muted-foreground"
+            )}>
+              {kpiSource === "second-brain-api" ? "🔗 Live from Second Brain API" : "📊 Evaluation DB data"}
+            </span>
+          </div>
+        )}
 
         {/* KPI cards */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-          {overviewLoading
+          {(overviewLoading || sbLoading)
             ? Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
                   <div className="h-[3px] bg-primary" />
@@ -142,7 +286,7 @@ export default function SecondBrainPage() {
                 </div>
               ))
             : kpis.length > 0
-              ? kpis.map((kpi, i) => <SummaryCard key={kpi.label} kpi={kpi} index={i} icon={icons[i]} />)
+              ? kpis.map((kpi, i) => <SummaryCard key={kpi.label} kpi={kpi} index={i} icon={kpiIcons[i]} />)
               : Array.from({ length: 4 }).map((_, i) => (
                   <div key={i} className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
                     <div className="h-[3px] bg-primary" />
@@ -152,7 +296,44 @@ export default function SecondBrainPage() {
           }
         </div>
 
-        {/* Activity trend */}
+        {/* Course table — from Second Brain API */}
+        {(sbKpis || sbLoading) && (
+          <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+            <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
+              <div>
+                <h3 className="text-sm font-semibold flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-primary" />
+                  Courses
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {sbLoading ? t.loading : `${courses.length} courses available`}
+                  <span className="ml-2 text-[10px] font-medium bg-primary/10 text-primary px-1.5 py-0.5 rounded">
+                    Second Brain API
+                  </span>
+                </p>
+              </div>
+              <ExportButton
+                data={courses}
+                filename={csvFilename("second-brain-courses")}
+                columns={[
+                  { header: "Course",      value: r => r.name ?? r.title ?? r.id },
+                  { header: "Lessons",     value: r => r.total_lessons },
+                  { header: "Enrolled",    value: r => r.enrolled_users },
+                  { header: "Completion%", value: r => r.completion_rate },
+                  { header: "Status",      value: r => r.status },
+                ]}
+              />
+            </div>
+            {sbLoading
+              ? <div className="py-10 text-center text-sm text-muted-foreground">{t.loading}</div>
+              : courses.length > 0
+                ? <DataTable data={courses} columns={courseColumns} pageSize={10} />
+                : <div className="py-10 text-center text-sm text-muted-foreground">No courses found</div>
+            }
+          </div>
+        )}
+
+        {/* Activity trend — from legacy DB */}
         {trendsError && <ErrorBanner message={`${t.errorLoading}: ${trendsError}`} />}
         <ChartCard title={t.activityTrend} subtitle={`${t.evalCountSub} — ${t.last} ${days} ${t.days}`}>
           {trendsLoading
@@ -163,7 +344,7 @@ export default function SecondBrainPage() {
           }
         </ChartCard>
 
-        {/* Use case breakdown */}
+        {/* Use case breakdown — from legacy DB */}
         {ucError && <ErrorBanner message={`${t.errorLoading}: ${ucError}`} />}
         <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
