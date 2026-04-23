@@ -1,12 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
 import { Calendar, Filter } from "lucide-react"
 import { useDashboardStore } from "@/lib/store"
 import { useLangStore, useT } from "@/lib/lang-store"
+import { useClientBrand } from "@/lib/hooks/useClientBrand"
 import { cn } from "@/lib/utils"
-import { brand } from "@/lib/brand"
 import type { Module } from "@/lib/types"
 
 const MODULES: { id: Module; label: string }[] = [
@@ -24,16 +24,25 @@ const DATE_PRESETS = [
 ]
 
 interface Props {
-  title: string
-  subtitle?: string
+  title:             string
+  subtitle?:         string
   showModuleFilter?: boolean
 }
 
 export function DashboardHeader({ title, subtitle, showModuleFilter = false }: Props) {
-  const { selectedSolution, setSolution, setDateRange } = useDashboardStore()
+  const { selectedSolution, setSolution, setDateRange, setClientId } = useDashboardStore()
   const { lang, toggle: toggleLang } = useLangStore()
-  const t = useT()
+  const t     = useT()
+  const brand = useClientBrand()
   const [activeDays, setActiveDays] = useState(30)
+
+  // ── Step 10: Read ?client= from URL on mount and sync to store ──────────────
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const params   = new URLSearchParams(window.location.search)
+    const clientId = params.get("client")
+    if (clientId) setClientId(clientId)
+  }, [setClientId])
 
   function applyPreset(days: number) {
     setActiveDays(days)
@@ -45,7 +54,7 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
 
   return (
     <div className="border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-10">
-      {/* Blue → yellow gradient accent bar */}
+      {/* Brand gradient accent bar */}
       <div
         className="h-[3px] w-full"
         style={{ background: `linear-gradient(90deg, ${brand.primaryColor}, ${brand.accentColor})` }}
@@ -67,7 +76,7 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
               className="px-2.5 py-1 rounded-lg text-xs font-semibold border border-border bg-muted hover:bg-muted/70 transition-colors tabular-nums"
               aria-label="Toggle language"
             >
-              {lang === 'en' ? 'ES' : 'EN'}
+              {lang === "en" ? "ES" : "EN"}
             </button>
 
             {/* Date presets */}
@@ -81,7 +90,11 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
                     "px-3 py-1 rounded-md text-xs font-semibold transition-all",
                     activeDays !== days && "text-muted-foreground hover:text-foreground"
                   )}
-                  style={activeDays === days ? { background: brand.primaryColor, color: "#fff" } : {}}
+                  style={
+                    activeDays === days
+                      ? { background: brand.primaryColor, color: "#fff" }
+                      : {}
+                  }
                 >
                   {label}
                 </button>
@@ -127,7 +140,11 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
                     "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all",
                     !active && "border-border text-muted-foreground hover:border-foreground/30"
                   )}
-                  style={active ? { background: brand.primaryColor, color: "#fff", borderColor: "transparent" } : {}}
+                  style={
+                    active
+                      ? { background: brand.primaryColor, color: "#fff", borderColor: "transparent" }
+                      : {}
+                  }
                 >
                   <span
                     className="w-1.5 h-1.5 rounded-full shrink-0"

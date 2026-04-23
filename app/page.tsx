@@ -13,9 +13,10 @@ import { DataTable, type Column } from "@/components/DataTable"
 import { useDashboardStore }  from "@/lib/store"
 import { useT }               from "@/lib/lang-store"
 import { useApi, buildApiUrl } from "@/lib/hooks/useApi"
+import { useClientBrand }     from "@/lib/hooks/useClientBrand"
 import { calcDelta }          from "@/lib/utils"
-import { brand }              from "@/lib/brand"
 import { cn }                 from "@/lib/utils"
+import Link from "next/link"
 import type {
   OverviewApiResponse,
   TrendsApiResponse,
@@ -24,9 +25,6 @@ import type {
   EvaluationApiRow,
 } from "@/lib/types"
 import type { Module } from "@/lib/types"
-
-// ── Donut colour palette ──────────────────────────────────────────────────────
-const DONUT_COLORS = brand.chartColors
 
 // ── KPI icons ─────────────────────────────────────────────────────────────────
 const kpiIcons = [
@@ -80,7 +78,9 @@ function AnimatedValue({ value }: { value: number | string }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function OverviewPage() {
   const { dateRange, selectedSolution } = useDashboardStore()
-  const t = useT()
+  const t           = useT()
+  const brand       = useClientBrand()
+  const DONUT_COLORS = brand.chartColors
 
   // Shimmer for 400 ms on solution/date change
   const [shimmer, setShimmer] = useState(false)
@@ -179,7 +179,15 @@ export default function OverviewPage() {
     {
       key: "savedReportId",
       header: t.colReportId,
-      render: r => <span className="font-medium font-mono text-xs">#{r.savedReportId}</span>,
+      render: r => (
+        <Link
+          href={`/drilldown/${r.savedReportId}`}
+          className="font-medium font-mono text-xs hover:underline underline-offset-2"
+          style={{ color: brand.primaryColor }}
+        >
+          #{r.savedReportId}
+        </Link>
+      ),
     },
     {
       key: "usecaseId",

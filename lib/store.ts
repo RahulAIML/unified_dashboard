@@ -2,14 +2,18 @@ import { create } from 'zustand'
 import type { Module, DateRange } from './types'
 
 interface DashboardState {
-  selectedModules: Module[]
+  selectedModules:  Module[]
   /** Single-solution KPI filter. null = "All solutions" */
   selectedSolution: Module | null
-  dateRange: DateRange
+  dateRange:        DateRange
+  /** Active client ID — set from ?client= URL param. null = default (rolplay). */
+  clientId:         string | null
+
   setModules:   (modules: Module[]) => void
   setDateRange: (range: DateRange) => void
   toggleModule: (module: Module) => void
   setSolution:  (solution: Module | null) => void
+  setClientId:  (id: string) => void
 }
 
 const ALL_MODULES: Module[] = ['lms', 'coach', 'simulator', 'certification', 'second-brain']
@@ -25,9 +29,11 @@ export const useDashboardStore = create<DashboardState>((set) => ({
   selectedModules:  ALL_MODULES,
   selectedSolution: null,
   dateRange:        defaultRange(),
+  clientId:         null,
 
   setModules:   (modules)   => set({ selectedModules: modules }),
   setDateRange: (dateRange) => set({ dateRange }),
+  setClientId:  (clientId)  => set({ clientId }),
 
   toggleModule: (module) =>
     set((state) => ({
@@ -36,7 +42,7 @@ export const useDashboardStore = create<DashboardState>((set) => ({
         : [...state.selectedModules, module],
     })),
 
-  // clicking the already-active solution deselects → back to "All"
+  // Clicking the already-active solution deselects → back to "All"
   setSolution: (solution) =>
     set((state) => ({
       selectedSolution: state.selectedSolution === solution ? null : solution,

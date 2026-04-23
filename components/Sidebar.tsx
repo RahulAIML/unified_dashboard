@@ -11,9 +11,10 @@ import {
 import { cn } from "@/lib/utils"
 import { useTheme } from "./ThemeProvider"
 import { useT } from "@/lib/lang-store"
-import { brand } from "@/lib/brand"
+import { useClientBrand } from "@/lib/hooks/useClientBrand"
 
 function LogoImage() {
+  const brand = useClientBrand()
   const [failed, setFailed] = useState(false)
 
   if (failed) {
@@ -22,7 +23,7 @@ function LogoImage() {
         className="w-10 h-10 rounded-lg flex items-center justify-center text-white font-extrabold text-lg shrink-0"
         style={{ background: brand.primaryColor }}
       >
-        R
+        {brand.name.charAt(0)}
       </div>
     )
   }
@@ -43,16 +44,17 @@ function LogoImage() {
 export function Sidebar() {
   const pathname = usePathname()
   const { theme, toggle } = useTheme()
-  const t = useT()
+  const t     = useT()
+  const brand = useClientBrand()
 
   const nav = [
-    { href: "/",               label: t.navOverview,        icon: LayoutDashboard },
-    { href: "/lms",            label: t.navLms,             icon: BookOpen        },
-    { href: "/coach",          label: t.navCoach,           icon: BrainCircuit    },
-    { href: "/simulator",      label: t.navSimulator,       icon: Gamepad2        },
-    { href: "/certification",  label: t.navCertification,   icon: BadgeCheck      },
-    { href: "/second-brain",   label: t.navSecondBrain,     icon: Database        },
-    { href: "/settings",       label: t.navSettings,        icon: Settings        },
+    { href: "/",              label: t.navOverview,      icon: LayoutDashboard },
+    { href: "/lms",           label: t.navLms,           icon: BookOpen        },
+    { href: "/coach",         label: t.navCoach,         icon: BrainCircuit    },
+    { href: "/simulator",     label: t.navSimulator,     icon: Gamepad2        },
+    { href: "/certification", label: t.navCertification, icon: BadgeCheck      },
+    { href: "/second-brain",  label: t.navSecondBrain,   icon: Database        },
+    { href: "/settings",      label: t.navSettings,      icon: Settings        },
   ]
 
   return (
@@ -60,14 +62,14 @@ export function Sidebar() {
 
       {/* Brand header */}
       <div className="relative h-20 flex items-center gap-3 px-5 border-b border-sidebar-border overflow-hidden">
-        {/* Red top stripe */}
+        {/* Primary colour top stripe */}
         <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ background: brand.primaryColor }} />
 
         <LogoImage />
 
         <div className="min-w-0">
           <p className="text-sm font-extrabold tracking-tight leading-tight truncate text-sidebar-foreground">
-            {brand.appName}
+            {brand.name}
           </p>
           <p className="text-[10px] text-sidebar-foreground/50 leading-tight">Analytics Dashboard</p>
         </div>
