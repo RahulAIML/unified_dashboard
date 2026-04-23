@@ -31,7 +31,8 @@ export const CLIENTS: Record<string, ClientBrand> = {
     logoAlt:      "Rolplay",
     primaryHslLight: "0 72% 51%",
     primaryHslDark:  "0 75% 58%",
-    accentHsl:       "0 72% 51%",
+    // Secondary brand: black (use for accents only, not backgrounds)
+    accentHsl:       "0 0% 0%",
   },
 
   coppel: {

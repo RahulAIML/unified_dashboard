@@ -57,7 +57,7 @@
   --popover-foreground: oklch(0.145 0 0);
   --primary: 0 72% 51%;
   --primary-foreground: oklch(0.985 0 0);
-  --brand-accent: hsl(var(--primary));
+  --brand-accent: hsl(0 0% 0%);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
@@ -96,7 +96,7 @@
   /* Rolplay red slightly brighter for dark mode */
   --primary: 0 75% 58%;
   --primary-foreground: oklch(0.985 0 0);
-  --brand-accent: hsl(var(--primary));
+  --brand-accent: hsl(0 0% 0%);
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
