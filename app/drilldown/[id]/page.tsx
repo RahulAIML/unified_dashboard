@@ -116,6 +116,11 @@ export default function DrilldownPage() {
       .then(async (res) => {
         const json = await res.json()
         if (!res.ok) throw new Error(json?.error ?? `HTTP ${res.status}`)
+        // Unwrap standard API contract { success, data, meta }
+        if (json && typeof json === "object" && "success" in json && "data" in json) {
+          if (!json.success) throw new Error(json.error ?? "API returned success: false")
+          return json.data as DrilldownData
+        }
         return json as DrilldownData
       })
       .then((d) => { setData(d); setLoading(false) })

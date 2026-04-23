@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
+import Link from "next/link"
 import { BadgeCheck, TrendingUp, Award, Users, BarChart2 } from "lucide-react"
 import { DashboardHeader } from "@/components/DashboardHeader"
 import { SummaryCard } from "@/components/SummaryCard"
@@ -93,7 +94,15 @@ export default function CertificationPage() {
     {
       key: "savedReportId",
       header: t.colReportId,
-      render: r => <span className="font-medium font-mono text-xs">#{r.savedReportId}</span>,
+      render: r => (
+        <Link
+          href={`/drilldown/${r.savedReportId}`}
+          className="font-medium font-mono text-xs hover:underline underline-offset-2"
+          style={{ color: brand.primaryColor }}
+        >
+          #{r.savedReportId}
+        </Link>
+      ),
     },
     {
       key: "usecaseId",
