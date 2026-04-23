@@ -56,6 +56,9 @@ export function ActivityLineChart({
     date: d.date.slice(5), // MM-DD
   }))
 
+  // Adapt tick interval to data density so labels are never hidden on small sets
+  const xInterval = data.length <= 10 ? 0 : data.length <= 30 ? 2 : 6
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -81,7 +84,7 @@ export function ActivityLineChart({
             tick={{ fontSize: 11, fill: "currentColor", opacity: 0.5 }}
             axisLine={false}
             tickLine={false}
-            interval={6}
+            interval={xInterval}
           />
           <YAxis
             tick={{ fontSize: 11, fill: "currentColor", opacity: 0.5 }}

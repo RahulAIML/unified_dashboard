@@ -2,7 +2,7 @@
 
 import { useMemo, useEffect, useReducer, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Target, PlayCircle, TrendingUp, BadgeCheck, BarChart2 } from "lucide-react"
+import { Target, PlayCircle, TrendingUp, BadgeCheck, BarChart2, AlertTriangle } from "lucide-react"
 import { DashboardHeader }    from "@/components/DashboardHeader"
 import { SummaryCard }        from "@/components/SummaryCard"
 import { ChartCard }          from "@/components/ChartCard"
@@ -59,6 +59,16 @@ function EmptyState({ message }: { message?: string }) {
   )
 }
 
+// ── Error banner ──────────────────────────────────────────────────────────────
+function ErrorBanner({ message }: { message: string }) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+      <AlertTriangle className="w-4 h-4 shrink-0" />
+      <span>{message}</span>
+    </div>
+  )
+}
+
 // ── Animated number ───────────────────────────────────────────────────────────
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function OverviewPage() {
@@ -104,10 +114,10 @@ export default function OverviewPage() {
     rk: refreshKey,
   })
 
-  const { data: overview,   loading: overviewLoading }   = useApi<OverviewApiResponse>(overviewUrl)
-  const { data: trends,     loading: trendsLoading }      = useApi<TrendsApiResponse>(trendsUrl)
-  const { data: ucBreakdown, loading: ucLoading }         = useApi<UsecaseBreakdownApiResponse>(ucUrl)
-  const { data: results,    loading: resultsLoading }     = useApi<ResultsApiResponse>(resultsUrl)
+  const { data: overview,    loading: overviewLoading, error: overviewError }  = useApi<OverviewApiResponse>(overviewUrl)
+  const { data: trends,      loading: trendsLoading,   error: trendsError }    = useApi<TrendsApiResponse>(trendsUrl)
+  const { data: ucBreakdown, loading: ucLoading,       error: ucError }        = useApi<UsecaseBreakdownApiResponse>(ucUrl)
+  const { data: results,     loading: resultsLoading,  error: resultsError }   = useApi<ResultsApiResponse>(resultsUrl)
 
   const hasOverviewData = overview && overview.totalEvaluations > 0
 
@@ -288,6 +298,12 @@ export default function OverviewPage() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* API error banners */}
+        {overviewError && <ErrorBanner message={`${t.errorLoading}: ${overviewError}`} />}
+        {trendsError   && <ErrorBanner message={`${t.errorLoading} (trends): ${trendsError}`} />}
+        {ucError       && <ErrorBanner message={`${t.errorLoading} (breakdown): ${ucError}`} />}
+        {resultsError  && <ErrorBanner message={`${t.errorLoading} (results): ${resultsError}`} />}
 
         {/* KPI cards */}
         <div className="flex items-center justify-end">

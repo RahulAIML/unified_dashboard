@@ -28,7 +28,10 @@ function timeoutError(label: string, ms: number) {
 
 async function queryViaBridge<T>(sql: string, params: unknown[] = []): Promise<T[]> {
   const url    = process.env.BRIDGE_URL!
-  const secret = process.env.BRIDGE_SECRET ?? "REDACTED_BRIDGE_SECRET"
+  const secret = process.env.BRIDGE_SECRET
+  if (!secret) {
+    throw new Error("BRIDGE_SECRET env var is not set — refusing to call bridge without authentication")
+  }
 
   const controller = new AbortController()
   const tid = setTimeout(() => controller.abort(), DB_BRIDGE_TIMEOUT_MS)
@@ -132,7 +135,7 @@ export async function fetchBridge<T = Record<string, unknown>>(
   params?: Record<string, string>
 ): Promise<T | null> {
   const url    = process.env.BRIDGE_URL
-  const secret = process.env.BRIDGE_SECRET ?? "REDACTED_BRIDGE_SECRET"
+  const secret = process.env.BRIDGE_SECRET ?? ""
 
   if (!url) return null
 

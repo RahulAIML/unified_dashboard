@@ -104,14 +104,18 @@ export default function DrilldownPage() {
   const refreshKey = useDashboardStore((s) => s.refreshKey)
   const id     = params?.id as string | undefined
 
+  // Validate: ID must be a positive integer string
+  const idNum = id ? parseInt(id, 10) : NaN
+  const idValid = Number.isFinite(idNum) && idNum > 0 && String(idNum) === id
+
   const drilldownUrl = useMemo(() => {
-    if (!id) return null
+    if (!idValid) return null
     const qs = new URLSearchParams()
     if (clientId) qs.set("clientId", clientId)
     qs.set("rk", String(refreshKey))
     const suffix = qs.toString()
     return suffix ? `/api/dashboard/drilldown/${id}?${suffix}` : `/api/dashboard/drilldown/${id}`
-  }, [id, clientId, refreshKey])
+  }, [id, idValid, clientId, refreshKey])
 
   const { data, loading, error } = useApi<DrilldownData>(drilldownUrl)
   const [page,    setPage]    = useState(0)
@@ -167,6 +171,28 @@ export default function DrilldownPage() {
   // Reset page when search changes (done in the input handler)
 
   // ── Render ────────────────────────────────────────────────────────────────
+
+  // Guard: render early if the ID is not a valid positive integer
+  if (!idValid) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 text-center p-6">
+        <BarChart2 className="w-12 h-12 opacity-20 text-muted-foreground" />
+        <p className="text-lg font-semibold">Invalid session ID</p>
+        <p className="text-sm text-muted-foreground">
+          The report ID <code className="font-mono bg-muted px-1.5 py-0.5 rounded">{id ?? "(empty)"}</code> is not valid.
+          IDs must be positive integers.
+        </p>
+        <button
+          onClick={() => router.back()}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Go back
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {/* Top bar */}

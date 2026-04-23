@@ -144,8 +144,14 @@ export function AIAssistant() {
 
       if (!ovRes.ok || !trRes.ok) throw new Error("API unavailable")
 
-      const ov = (await ovRes.json()) as OverviewApiResponse
-      const tr = (await trRes.json()) as TrendsApiResponse
+      // API routes wrap responses in { success, data: T, meta } — unwrap .data
+      const ovEnv = await ovRes.json() as { success: boolean; data: OverviewApiResponse }
+      const trEnv = await trRes.json() as { success: boolean; data: TrendsApiResponse }
+
+      if (!ovEnv.success || !trEnv.success) throw new Error("API returned error")
+
+      const ov = ovEnv.data
+      const tr = trEnv.data
 
       const lines = [
         `Time period: last ${dateLabel}`,

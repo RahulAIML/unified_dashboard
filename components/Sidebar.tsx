@@ -61,8 +61,11 @@ export function Sidebar() {
 
       {/* Brand header */}
       <div className="relative h-20 flex items-center gap-3 px-5 border-b border-sidebar-border overflow-hidden">
-        {/* Primary colour top stripe */}
-        <div className="absolute top-0 left-0 right-0 h-[3px] bg-sidebar-primary" />
+        {/* Brand top gradient stripe — matches drilldown/header stripe */}
+        <div
+          className="absolute top-0 left-0 right-0 h-[3px]"
+          style={{ background: `linear-gradient(90deg, hsl(var(--primary)), var(--brand-accent, hsl(var(--primary))))` }}
+        />
 
         <LogoImage />
 

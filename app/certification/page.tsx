@@ -2,16 +2,18 @@
 
 import { useMemo } from "react"
 import Link from "next/link"
-import { BadgeCheck, TrendingUp, Award, Users, BarChart2 } from "lucide-react"
+import { BadgeCheck, TrendingUp, Award, Users, BarChart2, AlertTriangle } from "lucide-react"
 import { DashboardHeader } from "@/components/DashboardHeader"
 import { SummaryCard } from "@/components/SummaryCard"
 import { ChartCard } from "@/components/ChartCard"
 import { StackedBarChart } from "@/components/charts/StackedBarChart"
 import { DataTable, type Column } from "@/components/DataTable"
+import { ExportButton } from "@/components/ExportButton"
 import { useDashboardStore } from "@/lib/store"
 import { useT } from "@/lib/lang-store"
 import { useApi, buildApiUrl } from "@/lib/hooks/useApi"
 import { calcDeltaPct, estimatePassedSessions } from "@/lib/kpi-builder"
+import { csvFilename } from "@/lib/csv-export"
 import { cn } from "@/lib/utils"
 import type {
   OverviewApiResponse,
@@ -36,6 +38,15 @@ function EmptyState() {
   )
 }
 
+function ErrorBanner({ message }: { message: string }) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+      <AlertTriangle className="w-4 h-4 shrink-0" />
+      <span>{message}</span>
+    </div>
+  )
+}
+
 export default function CertificationPage() {
   const { dateRange, clientId, refreshKey } = useDashboardStore()
   const t     = useT()
@@ -47,9 +58,9 @@ export default function CertificationPage() {
   const trendsUrl   = buildApiUrl("/api/dashboard/trends",   dateRange.from, dateRange.to, { solution: "certification", clientId, rk: refreshKey })
   const resultsUrl  = buildApiUrl("/api/dashboard/results",  dateRange.from, dateRange.to, { limit: 100, solution: "certification", clientId, rk: refreshKey })
 
-  const { data: overview, loading: overviewLoading } = useApi<OverviewApiResponse>(overviewUrl)
-  const { data: trends,   loading: trendsLoading }   = useApi<TrendsApiResponse>(trendsUrl)
-  const { data: results,  loading: resultsLoading }  = useApi<ResultsApiResponse>(resultsUrl)
+  const { data: overview, loading: overviewLoading, error: overviewError } = useApi<OverviewApiResponse>(overviewUrl)
+  const { data: trends,   loading: trendsLoading,   error: trendsError }   = useApi<TrendsApiResponse>(trendsUrl)
+  const { data: results,  loading: resultsLoading,  error: resultsError }  = useApi<ResultsApiResponse>(resultsUrl)
 
   const hasData = overview && overview.totalEvaluations > 0
 
@@ -148,6 +159,9 @@ export default function CertificationPage() {
       <DashboardHeader title={t.certTitle} subtitle={t.certSub} />
       <div className="p-6 space-y-6">
 
+        {/* Error banners */}
+        {overviewError && <ErrorBanner message={`${t.errorLoading}: ${overviewError}`} />}
+
         {/* KPI cards */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
           {overviewLoading
@@ -174,6 +188,7 @@ export default function CertificationPage() {
         </div>
 
         {/* Pass/Fail chart */}
+        {trendsError && <ErrorBanner message={`${t.errorLoading}: ${trendsError}`} />}
         <ChartCard
           title={t.passFailOverTime}
           subtitle={`${t.passFailSub} — ${t.last} ${days} ${t.days}`}
@@ -187,17 +202,32 @@ export default function CertificationPage() {
         </ChartCard>
 
         {/* Results table */}
+        {resultsError && <ErrorBanner message={`${t.errorLoading}: ${resultsError}`} />}
         <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
-          <div className="mb-4">
-            <h3 className="text-sm font-semibold">{t.evaluationResults}</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {resultsLoading
-                ? t.loading
-                : `${results?.data?.length ?? 0} ${t.evaluationsSub} ${days} ${t.days}`}
-              <span className="ml-2 text-[10px] font-medium bg-primary/10 text-primary px-1.5 py-0.5 rounded">
-                {t.sourceCert}
-              </span>
-            </p>
+          <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <h3 className="text-sm font-semibold">{t.evaluationResults}</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {resultsLoading
+                  ? t.loading
+                  : `${results?.data?.length ?? 0} ${t.evaluationsSub} ${days} ${t.days}`}
+                <span className="ml-2 text-[10px] font-medium bg-primary/10 text-primary px-1.5 py-0.5 rounded">
+                  {t.sourceCert}
+                </span>
+              </p>
+            </div>
+            <ExportButton
+              data={results?.data ?? []}
+              filename={csvFilename("certification-results")}
+              columns={[
+                { header: "Report ID",       value: r => r.savedReportId },
+                { header: "Use Case ID",     value: r => r.usecaseId },
+                { header: "Score (pts)",     value: r => r.score },
+                { header: "Result",          value: r => r.passed ? "PASS" : "FAIL" },
+                { header: "Segment",         value: r => r.result },
+                { header: "Date",            value: r => r.date },
+              ]}
+            />
           </div>
           {resultsLoading
             ? <div className="py-10 text-center text-sm text-muted-foreground">{t.loading}</div>

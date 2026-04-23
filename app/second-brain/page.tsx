@@ -1,6 +1,6 @@
 "use client"
 
-import { Database, FileType, Layers, BarChart2 } from "lucide-react"
+import { Database, FileType, Layers, BarChart2, AlertTriangle } from "lucide-react"
 import { DashboardHeader } from "@/components/DashboardHeader"
 import { ChartCard } from "@/components/ChartCard"
 import { useDashboardStore } from "@/lib/store"
@@ -15,9 +15,11 @@ import type {
 import { SummaryCard } from "@/components/SummaryCard"
 import { ActivityLineChart } from "@/components/charts/ActivityLineChart"
 import { DataTable, type Column } from "@/components/DataTable"
+import { ExportButton } from "@/components/ExportButton"
 import { cn } from "@/lib/utils"
 import { useMemo } from "react"
 import { calcDeltaPct, estimatePassedSessions } from "@/lib/kpi-builder"
+import { csvFilename } from "@/lib/csv-export"
 
 const icons = [
   <Database  key="d" className="w-4 h-4" />,
@@ -35,6 +37,15 @@ function EmptyState({ label }: { label?: string }) {
   )
 }
 
+function ErrorBanner({ message }: { message: string }) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+      <AlertTriangle className="w-4 h-4 shrink-0" />
+      <span>{message}</span>
+    </div>
+  )
+}
+
 export default function SecondBrainPage() {
   const { dateRange, clientId, refreshKey } = useDashboardStore()
   const t     = useT()
@@ -44,9 +55,9 @@ export default function SecondBrainPage() {
   const trendsUrl   = buildApiUrl("/api/dashboard/trends",   dateRange.from, dateRange.to, { solution: "second-brain", clientId, rk: refreshKey })
   const ucUrl       = buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to, { solution: "second-brain", clientId, rk: refreshKey })
 
-  const { data: overview, loading: overviewLoading } = useApi<OverviewApiResponse>(overviewUrl)
-  const { data: trends,   loading: trendsLoading }   = useApi<TrendsApiResponse>(trendsUrl)
-  const { data: ucBreakdown, loading: ucLoading }    = useApi<UsecaseBreakdownApiResponse>(ucUrl)
+  const { data: overview, loading: overviewLoading, error: overviewError } = useApi<OverviewApiResponse>(overviewUrl)
+  const { data: trends,   loading: trendsLoading,   error: trendsError }   = useApi<TrendsApiResponse>(trendsUrl)
+  const { data: ucBreakdown, loading: ucLoading,    error: ucError }       = useApi<UsecaseBreakdownApiResponse>(ucUrl)
 
   const hasData = overview && overview.totalEvaluations > 0
 
@@ -54,6 +65,7 @@ export default function SecondBrainPage() {
     if (!hasData) return []
     return [
       {
+        // Second Brain: evaluations = interactions with the knowledge base
         label: "Total Interactions", labelKey: "practiceSessions" as const,
         value: overview!.totalEvaluations,
         delta: calcDeltaPct(overview!.totalEvaluations, overview!.prevTotalEvaluations),
@@ -72,7 +84,8 @@ export default function SecondBrainPage() {
         tier: "B" as const,
       },
       {
-        label: "Passed Interactions", labelKey: "certifiedUsers" as const,
+        // FIX: was "Certified Users" — correct label for SB is "Passed Interactions"
+        label: "Passed Interactions", labelKey: "totalSessions" as const,
         value: overview!.passedEvaluations,
         delta: calcDeltaPct(
           overview!.passedEvaluations,
@@ -113,6 +126,9 @@ export default function SecondBrainPage() {
       <DashboardHeader title={t.sbTitle} subtitle={t.sbSub} />
       <div className="p-6 space-y-6">
 
+        {/* Error banners */}
+        {overviewError && <ErrorBanner message={`${t.errorLoading}: ${overviewError}`} />}
+
         {/* KPI cards */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
           {overviewLoading
@@ -137,6 +153,7 @@ export default function SecondBrainPage() {
         </div>
 
         {/* Activity trend */}
+        {trendsError && <ErrorBanner message={`${t.errorLoading}: ${trendsError}`} />}
         <ChartCard title={t.activityTrend} subtitle={`${t.evalCountSub} — ${t.last} ${days} ${t.days}`}>
           {trendsLoading
             ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
@@ -147,15 +164,29 @@ export default function SecondBrainPage() {
         </ChartCard>
 
         {/* Use case breakdown */}
+        {ucError && <ErrorBanner message={`${t.errorLoading}: ${ucError}`} />}
         <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
-          <div className="mb-4">
-            <h3 className="text-sm font-semibold">{t.usecaseBreakdown}</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {ucLoading ? t.loading : `${ucBreakdown?.data?.length ?? 0} ${t.usecaseBreakdownSub}`}
-              <span className="ml-2 text-[10px] font-medium bg-primary/10 text-primary px-1.5 py-0.5 rounded">
-                {t.navSecondBrain}
-              </span>
-            </p>
+          <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <h3 className="text-sm font-semibold">{t.usecaseBreakdown}</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {ucLoading ? t.loading : `${ucBreakdown?.data?.length ?? 0} ${t.usecaseBreakdownSub}`}
+                <span className="ml-2 text-[10px] font-medium bg-primary/10 text-primary px-1.5 py-0.5 rounded">
+                  {t.navSecondBrain}
+                </span>
+              </p>
+            </div>
+            <ExportButton
+              data={ucBreakdown?.data ?? []}
+              filename={csvFilename("second-brain-breakdown")}
+              columns={[
+                { header: "Use Case ID",        value: r => r.usecaseId },
+                { header: "Total Interactions",  value: r => r.totalEvaluations },
+                { header: "Avg Score (pts)",     value: r => r.avgScore },
+                { header: "Pass Rate (%)",       value: r => r.passRate },
+                { header: "Passed",              value: r => r.passed },
+              ]}
+            />
           </div>
           {ucLoading
             ? <div className="py-10 text-center text-sm text-muted-foreground">{t.loading}</div>

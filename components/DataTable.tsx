@@ -45,11 +45,19 @@ export function DataTable<T extends object>({
 
   const sorted = sortKey
     ? [...filtered].sort((a, b) => {
-        const av = String((a as Record<string, unknown>)[sortKey] ?? "")
-        const bv = String((b as Record<string, unknown>)[sortKey] ?? "")
+        const av = (a as Record<string, unknown>)[sortKey]
+        const bv = (b as Record<string, unknown>)[sortKey]
+        // Sort numerically when both values are finite numbers
+        const an = Number(av)
+        const bn = Number(bv)
+        if (Number.isFinite(an) && Number.isFinite(bn)) {
+          return sortDir === "asc" ? an - bn : bn - an
+        }
+        const as_ = String(av ?? "")
+        const bs_ = String(bv ?? "")
         return sortDir === "asc"
-          ? av > bv ? 1 : -1
-          : av < bv ? 1 : -1
+          ? as_ > bs_ ? 1 : -1
+          : as_ < bs_ ? 1 : -1
       })
     : filtered
 

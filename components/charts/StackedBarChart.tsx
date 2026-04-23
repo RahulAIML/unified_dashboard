@@ -47,6 +47,7 @@ export function StackedBarChart({
   failColor = "var(--destructive)",
 }: Props) {
   const formatted = data.map(d => ({ ...d, date: d.date.slice(5) }))
+  const xInterval = data.length <= 10 ? 0 : data.length <= 30 ? 2 : 6
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -57,7 +58,7 @@ export function StackedBarChart({
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={formatted} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="currentColor" strokeOpacity={0.06} vertical={false} />
-          <XAxis dataKey="date" tick={{ fontSize: 11, fill: "currentColor", opacity: 0.5 }} axisLine={false} tickLine={false} interval={6} />
+          <XAxis dataKey="date" tick={{ fontSize: 11, fill: "currentColor", opacity: 0.5 }} axisLine={false} tickLine={false} interval={xInterval} />
           <YAxis tick={{ fontSize: 11, fill: "currentColor", opacity: 0.5 }} axisLine={false} tickLine={false} />
           <Tooltip content={<CustomTooltip />} />
           <Legend wrapperStyle={{ fontSize: 11 }} />

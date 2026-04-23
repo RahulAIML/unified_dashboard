@@ -1,16 +1,18 @@
 "use client"
 
 import { useMemo } from "react"
-import { BrainCircuit, Users, PlayCircle, TrendingUp, BarChart2 } from "lucide-react"
+import { BrainCircuit, Users, PlayCircle, CheckCircle2, BarChart2, AlertTriangle } from "lucide-react"
 import { DashboardHeader } from "@/components/DashboardHeader"
 import { SummaryCard } from "@/components/SummaryCard"
 import { ChartCard } from "@/components/ChartCard"
 import { ActivityLineChart } from "@/components/charts/ActivityLineChart"
 import { DataTable, type Column } from "@/components/DataTable"
+import { ExportButton } from "@/components/ExportButton"
 import { useDashboardStore } from "@/lib/store"
 import { useT } from "@/lib/lang-store"
 import { useApi, buildApiUrl } from "@/lib/hooks/useApi"
 import { calcDeltaPct, estimatePassedSessions } from "@/lib/kpi-builder"
+import { csvFilename } from "@/lib/csv-export"
 import type {
   OverviewApiResponse,
   TrendsApiResponse,
@@ -23,7 +25,7 @@ const icons = [
   <BrainCircuit key="b" className="w-4 h-4" />,
   <Users        key="u" className="w-4 h-4" />,
   <PlayCircle   key="p" className="w-4 h-4" />,
-  <TrendingUp   key="t" className="w-4 h-4" />,
+  <CheckCircle2 key="c" className="w-4 h-4" />,
 ]
 
 function EmptyState() {
@@ -31,6 +33,15 @@ function EmptyState() {
     <div className="h-48 flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
       <BarChart2 className="w-8 h-8 opacity-30" />
       <span>No data available</span>
+    </div>
+  )
+}
+
+function ErrorBanner({ message }: { message: string }) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+      <AlertTriangle className="w-4 h-4 shrink-0" />
+      <span>{message}</span>
     </div>
   )
 }
@@ -44,9 +55,9 @@ export default function CoachPage() {
   const trendsUrl   = buildApiUrl("/api/dashboard/trends",   dateRange.from, dateRange.to, { solution: "coach", clientId, rk: refreshKey })
   const ucUrl       = buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to, { solution: "coach", clientId, rk: refreshKey })
 
-  const { data: overview, loading: overviewLoading } = useApi<OverviewApiResponse>(overviewUrl)
-  const { data: trends,   loading: trendsLoading }   = useApi<TrendsApiResponse>(trendsUrl)
-  const { data: ucBreakdown, loading: ucLoading }    = useApi<UsecaseBreakdownApiResponse>(ucUrl)
+  const { data: overview, loading: overviewLoading, error: overviewError } = useApi<OverviewApiResponse>(overviewUrl)
+  const { data: trends,   loading: trendsLoading,   error: trendsError }   = useApi<TrendsApiResponse>(trendsUrl)
+  const { data: ucBreakdown, loading: ucLoading,    error: ucError }       = useApi<UsecaseBreakdownApiResponse>(ucUrl)
 
   const hasData = overview && overview.totalEvaluations > 0
 
@@ -72,7 +83,8 @@ export default function CoachPage() {
         tier: "B" as const,
       },
       {
-        label: "Certified Users", labelKey: "certifiedUsers" as const,
+        // FIX: was misleadingly labeled "Certified Users" — this is coaching, not certification
+        label: "Passed Sessions", labelKey: "totalSessions" as const,
         value: overview!.passedEvaluations,
         delta: calcDeltaPct(
           overview!.passedEvaluations,
@@ -113,6 +125,9 @@ export default function CoachPage() {
       <DashboardHeader title={t.coachTitle} subtitle={t.coachSub} />
       <div className="p-6 space-y-6">
 
+        {/* Error banners */}
+        {overviewError && <ErrorBanner message={`${t.errorLoading}: ${overviewError}`} />}
+
         {/* KPI cards */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
           {overviewLoading
@@ -137,6 +152,7 @@ export default function CoachPage() {
         </div>
 
         {/* Activity chart */}
+        {trendsError && <ErrorBanner message={`${t.errorLoading}: ${trendsError}`} />}
         <ChartCard title={t.useCaseDeployment} subtitle={`${t.useCaseDeploymentSub} — ${t.last} ${days} ${t.days}`}>
           {trendsLoading
             ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
@@ -147,15 +163,29 @@ export default function CoachPage() {
         </ChartCard>
 
         {/* Usecase breakdown table */}
+        {ucError && <ErrorBanner message={`${t.errorLoading}: ${ucError}`} />}
         <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
-          <div className="mb-4">
-            <h3 className="text-sm font-semibold">{t.usecaseBreakdown}</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {ucLoading ? t.loading : `${ucBreakdown?.data?.length ?? 0} ${t.usecaseBreakdownSub}`}
-              <span className="ml-2 text-[10px] font-medium bg-primary/10 text-primary px-1.5 py-0.5 rounded">
-                {t.sourceCoach}
-              </span>
-            </p>
+          <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <h3 className="text-sm font-semibold">{t.usecaseBreakdown}</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {ucLoading ? t.loading : `${ucBreakdown?.data?.length ?? 0} ${t.usecaseBreakdownSub}`}
+                <span className="ml-2 text-[10px] font-medium bg-primary/10 text-primary px-1.5 py-0.5 rounded">
+                  {t.sourceCoach}
+                </span>
+              </p>
+            </div>
+            <ExportButton
+              data={ucBreakdown?.data ?? []}
+              filename={csvFilename("coach-usecase-breakdown")}
+              columns={[
+                { header: "Use Case ID",        value: r => r.usecaseId },
+                { header: "Total Sessions",      value: r => r.totalEvaluations },
+                { header: "Avg Score (pts)",     value: r => r.avgScore },
+                { header: "Pass Rate (%)",       value: r => r.passRate },
+                { header: "Passed",              value: r => r.passed },
+              ]}
+            />
           </div>
           {ucLoading
             ? <div className="py-10 text-center text-sm text-muted-foreground">{t.loading}</div>
