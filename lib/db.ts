@@ -15,22 +15,43 @@
 
 import mysql from "mysql2/promise"
 
+const DB_BRIDGE_TIMEOUT_MS = Number(process.env.DB_BRIDGE_TIMEOUT_MS ?? 12_000)
+const DB_QUERY_TIMEOUT_MS  = Number(process.env.DB_QUERY_TIMEOUT_MS  ?? 12_000)
+
+function timeoutError(label: string, ms: number) {
+  const err = new Error(`${label} timeout after ${ms}ms`)
+  ;(err as NodeJS.ErrnoException).code = "ETIMEDOUT"
+  return err
+}
+
 // ── Mode A: PHP bridge ────────────────────────────────────────────────────────
 
 async function queryViaBridge<T>(sql: string, params: unknown[] = []): Promise<T[]> {
   const url    = process.env.BRIDGE_URL!
   const secret = process.env.BRIDGE_SECRET ?? "REDACTED_BRIDGE_SECRET"
 
-  const res = await fetch(url, {
-    method:  "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Bridge-Key":  secret,
-    },
-    body: JSON.stringify({ sql, params }),
-    // Next.js: don't cache DB responses
-    cache: "no-store",
-  })
+  const controller = new AbortController()
+  const tid = setTimeout(() => controller.abort(), DB_BRIDGE_TIMEOUT_MS)
+
+  let res: Response
+  try {
+    res = await fetch(url, {
+      method:  "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Bridge-Key":  secret,
+      },
+      body: JSON.stringify({ sql, params }),
+      // Next.js: don't cache DB responses
+      cache: "no-store",
+      signal: controller.signal,
+    })
+  } catch (err: unknown) {
+    if ((err as Error)?.name === "AbortError") throw timeoutError("Bridge query", DB_BRIDGE_TIMEOUT_MS)
+    throw err
+  } finally {
+    clearTimeout(tid)
+  }
 
   if (!res.ok) {
     throw new Error(`Bridge HTTP ${res.status}: ${await res.text()}`)
@@ -74,9 +95,20 @@ function getPool(): mysql.Pool {
 }
 
 async function queryDirect<T>(sql: string, params: unknown[] = []): Promise<T[]> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [rows] = await getPool().execute(sql, params as any)
-  return rows as T[]
+  const execPromise = (async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const [rows] = await getPool().execute(sql, params as any)
+    return rows as T[]
+  })()
+
+  const timeoutPromise = new Promise<T[]>((_, reject) => {
+    const tid = setTimeout(() => {
+      clearTimeout(tid)
+      reject(timeoutError("DB query", DB_QUERY_TIMEOUT_MS))
+    }, DB_QUERY_TIMEOUT_MS)
+  })
+
+  return Promise.race([execPromise, timeoutPromise])
 }
 
 // ── Public query() — auto-selects mode ───────────────────────────────────────
@@ -106,11 +138,15 @@ export async function fetchBridge<T = Record<string, unknown>>(
 
   const qs = new URLSearchParams({ action, ...params }).toString()
 
+  const controller = new AbortController()
+  const tid = setTimeout(() => controller.abort(), DB_BRIDGE_TIMEOUT_MS)
+
   try {
     const res = await fetch(`${url}?${qs}`, {
       method:  "GET",
       headers: { "X-Bridge-Key": secret },
       cache:   "no-store",
+      signal:  controller.signal,
     })
 
     if (!res.ok) return null
@@ -119,5 +155,7 @@ export async function fetchBridge<T = Record<string, unknown>>(
     return json.success ? json.data : null
   } catch {
     return null
+  } finally {
+    clearTimeout(tid)
   }
 }

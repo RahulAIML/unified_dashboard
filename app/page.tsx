@@ -1,8 +1,8 @@
 "use client"
 
-import { useMemo, useState, useEffect, useRef } from "react"
+import { useMemo, useEffect, useReducer, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Target, PlayCircle, Award, TrendingUp, BadgeCheck, BarChart2 } from "lucide-react"
+import { Target, PlayCircle, TrendingUp, BadgeCheck, BarChart2 } from "lucide-react"
 import { DashboardHeader }    from "@/components/DashboardHeader"
 import { SummaryCard }        from "@/components/SummaryCard"
 import { ChartCard }          from "@/components/ChartCard"
@@ -10,12 +10,13 @@ import { ActivityLineChart }  from "@/components/charts/ActivityLineChart"
 import { ModuleBarChart }     from "@/components/charts/ModuleBarChart"
 import { DonutChart }         from "@/components/charts/DonutChart"
 import { DataTable, type Column } from "@/components/DataTable"
+import { ExportButton } from "@/components/ExportButton"
 import { useDashboardStore }  from "@/lib/store"
 import { useT }               from "@/lib/lang-store"
 import { useApi, buildApiUrl } from "@/lib/hooks/useApi"
-import { useClientBrand }     from "@/lib/hooks/useClientBrand"
-import { calcDelta }          from "@/lib/utils"
+import { calcDeltaPct, estimatePassedSessions } from "@/lib/kpi-builder"
 import { cn }                 from "@/lib/utils"
+import { csvFilename } from "@/lib/csv-export"
 import Link from "next/link"
 import type {
   OverviewApiResponse,
@@ -35,10 +36,10 @@ const kpiIcons = [
 ]
 
 // ── Skeleton shimmer ──────────────────────────────────────────────────────────
-function KpiSkeleton({ color }: { color: string }) {
+function KpiSkeleton() {
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
-      <div className="h-[3px]" style={{ background: color }} />
+      <div className="h-[3px] bg-primary" />
       <div className="p-5 space-y-3 animate-pulse">
         <div className="h-3 w-24 rounded bg-muted" />
         <div className="h-8 w-20 rounded bg-muted" />
@@ -59,38 +60,20 @@ function EmptyState({ message }: { message?: string }) {
 }
 
 // ── Animated number ───────────────────────────────────────────────────────────
-function AnimatedValue({ value }: { value: number | string }) {
-  return (
-    <AnimatePresence mode="wait">
-      <motion.span
-        key={String(value)}
-        initial={{ opacity: 0, y: -8 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 8 }}
-        transition={{ duration: 0.2 }}
-      >
-        {value}
-      </motion.span>
-    </AnimatePresence>
-  )
-}
-
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function OverviewPage() {
-  const { dateRange, selectedSolution } = useDashboardStore()
+  const { dateRange, selectedSolution, clientId, refreshKey } = useDashboardStore()
   const t           = useT()
-  const brand       = useClientBrand()
-  const DONUT_COLORS = brand.chartColors
 
   // Shimmer for 400 ms on solution/date change
-  const [shimmer, setShimmer] = useState(false)
+  const [shimmer, dispatchShimmer] = useReducer((_: boolean, next: boolean) => next, false)
   const prevSolution = useRef<Module | null>(null)
 
   useEffect(() => {
     if (prevSolution.current === selectedSolution) return
     prevSolution.current = selectedSolution
-    setShimmer(true)
-    const tid = setTimeout(() => setShimmer(false), 400)
+    dispatchShimmer(true)
+    const tid = setTimeout(() => dispatchShimmer(false), 400)
     return () => clearTimeout(tid)
   }, [selectedSolution])
 
@@ -99,12 +82,27 @@ export default function OverviewPage() {
   )
 
   // ── API URLs ──────────────────────────────────────────────────────────────
-  const solutionParam = selectedSolution ? `&solution=${selectedSolution}` : ""
-
-  const overviewUrl = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to) + solutionParam
-  const trendsUrl   = buildApiUrl("/api/dashboard/trends",   dateRange.from, dateRange.to) + solutionParam
-  const ucUrl       = buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to) + solutionParam
-  const resultsUrl  = buildApiUrl("/api/dashboard/results",  dateRange.from, dateRange.to, { limit: "20" }) + solutionParam
+  const overviewUrl = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to, {
+    solution: selectedSolution,
+    clientId,
+    rk: refreshKey,
+  })
+  const trendsUrl = buildApiUrl("/api/dashboard/trends", dateRange.from, dateRange.to, {
+    solution: selectedSolution,
+    clientId,
+    rk: refreshKey,
+  })
+  const ucUrl = buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to, {
+    solution: selectedSolution,
+    clientId,
+    rk: refreshKey,
+  })
+  const resultsUrl = buildApiUrl("/api/dashboard/results", dateRange.from, dateRange.to, {
+    limit: 20,
+    solution: selectedSolution,
+    clientId,
+    rk: refreshKey,
+  })
 
   const { data: overview,   loading: overviewLoading }   = useApi<OverviewApiResponse>(overviewUrl)
   const { data: trends,     loading: trendsLoading }      = useApi<TrendsApiResponse>(trendsUrl)
@@ -116,7 +114,7 @@ export default function OverviewPage() {
   // ── KPI cards ─────────────────────────────────────────────────────────────
   const kpiCards = useMemo(() => {
     if (!hasOverviewData) return []
-    const d = calcDelta
+    const d = calcDeltaPct
     return [
       {
         label: "Practice Sessions", labelKey: "practiceSessions" as const,
@@ -139,14 +137,40 @@ export default function OverviewPage() {
       {
         label: "Certified Users", labelKey: "certifiedUsers" as const,
         value: overview!.passedEvaluations,
-        delta: d(overview!.passedEvaluations,
-          overview!.prevTotalEvaluations > 0
-            ? Math.round(overview!.prevTotalEvaluations * (overview!.prevPassRate ?? 0) / 100)
-            : 0),
+        delta: d(
+          overview!.passedEvaluations,
+          estimatePassedSessions(overview!.prevTotalEvaluations, overview!.prevPassRate)
+        ),
         tier: "A" as const,
       },
     ]
   }, [overview, hasOverviewData])
+
+  const kpiExportRows = useMemo(() => {
+    if (!overview) return []
+    return [
+      {
+        clientId: clientId ?? "",
+        solution: selectedSolution ?? "all",
+        from: dateRange.from,
+        to: dateRange.to,
+        totalEvaluations: overview.totalEvaluations,
+        avgScore: overview.avgScore,
+        passRate: overview.passRate,
+        passedEvaluations: overview.passedEvaluations,
+        prevTotalEvaluations: overview.prevTotalEvaluations,
+        prevAvgScore: overview.prevAvgScore,
+        prevPassRate: overview.prevPassRate,
+        deltaTotalEvaluations: calcDeltaPct(overview.totalEvaluations, overview.prevTotalEvaluations),
+        deltaAvgScore: calcDeltaPct(overview.avgScore, overview.prevAvgScore, 1),
+        deltaPassRate: calcDeltaPct(overview.passRate, overview.prevPassRate, 1),
+        deltaPassedEvaluations: calcDeltaPct(
+          overview.passedEvaluations,
+          estimatePassedSessions(overview.prevTotalEvaluations, overview.prevPassRate)
+        ),
+      },
+    ]
+  }, [overview, clientId, selectedSolution, dateRange.from, dateRange.to])
 
   // ── Activity trend ────────────────────────────────────────────────────────
   const activityData = useMemo(
@@ -157,10 +181,9 @@ export default function OverviewPage() {
   // ── Donut chart ───────────────────────────────────────────────────────────
   const donutData = useMemo(() => {
     if (!ucBreakdown?.data?.length) return []
-    return ucBreakdown.data.map((row, i) => ({
+    return ucBreakdown.data.map((row) => ({
       name:  `UC-${row.usecaseId}`,
       value: row.totalEvaluations,
-      color: DONUT_COLORS[i % DONUT_COLORS.length],
     }))
   }, [ucBreakdown])
 
@@ -182,8 +205,7 @@ export default function OverviewPage() {
       render: r => (
         <Link
           href={`/drilldown/${r.savedReportId}`}
-          className="font-medium font-mono text-xs hover:underline underline-offset-2"
-          style={{ color: brand.primaryColor }}
+          className="font-medium font-mono text-xs hover:underline underline-offset-2 text-primary"
         >
           #{r.savedReportId}
         </Link>
@@ -212,8 +234,8 @@ export default function OverviewPage() {
         <span className={cn(
           "inline-flex px-2 py-0.5 rounded-full text-xs font-semibold",
           r.passed
-            ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-            : "bg-rose-500/15 text-rose-600 dark:text-rose-400"
+            ? "bg-primary/10 text-primary"
+            : "bg-destructive/10 text-destructive"
         )}>
           {r.passed ? t.passLabel : t.failLabel}
         </span>
@@ -248,12 +270,10 @@ export default function OverviewPage() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.2 }}
-              className="flex items-center gap-2 text-sm font-medium"
-              style={{ color: brand.primaryColor }}
+              className="flex items-center gap-2 text-sm font-medium text-primary"
             >
               <span
-                className="inline-block w-2 h-2 rounded-full"
-                style={{ background: brand.primaryColor }}
+                className="inline-block w-2 h-2 rounded-full bg-primary"
               />
               {t.themeShowing}{" "}
               <span className="capitalize font-bold">
@@ -270,9 +290,32 @@ export default function OverviewPage() {
         </AnimatePresence>
 
         {/* KPI cards */}
+        <div className="flex items-center justify-end">
+          <ExportButton
+            data={kpiExportRows}
+            filename={csvFilename(`kpi-summary-${selectedSolution ?? "all"}`)}
+            columns={[
+              { header: "Client", value: (r) => r.clientId || "" },
+              { header: "Solution", value: (r) => r.solution },
+              { header: "From", value: (r) => r.from },
+              { header: "To", value: (r) => r.to },
+              { header: "Total Evaluations", value: (r) => r.totalEvaluations },
+              { header: "Avg Score", value: (r) => r.avgScore },
+              { header: "Pass Rate (%)", value: (r) => r.passRate },
+              { header: "Passed Evaluations", value: (r) => r.passedEvaluations },
+              { header: "Prev Total Evaluations", value: (r) => r.prevTotalEvaluations },
+              { header: "Prev Avg Score", value: (r) => r.prevAvgScore },
+              { header: "Prev Pass Rate (%)", value: (r) => r.prevPassRate },
+              { header: "Δ Total (%)", value: (r) => r.deltaTotalEvaluations },
+              { header: "Δ Avg Score (%)", value: (r) => r.deltaAvgScore },
+              { header: "Δ Pass Rate (%)", value: (r) => r.deltaPassRate },
+              { header: "Δ Passed (%)", value: (r) => r.deltaPassedEvaluations },
+            ]}
+          />
+        </div>
         <div className="grid grid-cols-2 md:grid-cols-2 xl:grid-cols-4 gap-4">
           {isLoading
-            ? Array.from({ length: 4 }).map((_, i) => <KpiSkeleton key={i} color={brand.primaryColor} />)
+            ? Array.from({ length: 4 }).map((_, i) => <KpiSkeleton key={i} />)
             : kpiCards.length > 0
               ? kpiCards.map((kpi, i) => (
                   <SummaryCard
@@ -287,7 +330,7 @@ export default function OverviewPage() {
                     key={i}
                     className="rounded-xl border border-border bg-card shadow-sm overflow-hidden"
                   >
-                    <div className="h-[3px]" style={{ background: brand.primaryColor }} />
+                    <div className="h-[3px] bg-primary" />
                     <div className="p-5 text-center text-sm text-muted-foreground py-8">
                       No data available
                     </div>

@@ -12,6 +12,7 @@
 
 import { NextResponse } from "next/server"
 import { solutionToUsecaseIds } from "./solution-map"
+import { DEFAULT_CLIENT_ID } from "./client-config"
 
 // ── Standard response shape ───────────────────────────────────────────────────
 
@@ -58,15 +59,15 @@ export function buildSuccess<T>(
  */
 export function buildApiError(
   message: string,
-  status = 500
+  status = 500,
+  filters: Record<string, unknown> = {}
 ): NextResponse {
   return NextResponse.json(
     {
       success: false,
-      data:    null,
-      error:   message,
+      data:    { message },
       meta: {
-        filters:   {},
+        filters,
         timestamp: new Date().toISOString(),
         source:    "db",
       },
@@ -87,6 +88,7 @@ export function parseDateRange(
   const from = new Date(searchParams.get("from") ?? "")
   const to   = new Date(searchParams.get("to")   ?? "")
   if (isNaN(from.getTime()) || isNaN(to.getTime())) return null
+  if (from > to) return null
   return { from, to }
 }
 
@@ -113,8 +115,13 @@ export function parseUsecaseFilter(searchParams: URLSearchParams): {
 
 /**
  * Reads the optional ?clientId= param (for multi-tenant meta tracking).
- * No DB filtering is applied based on clientId in Phase 1.
+ * Phase 1: used for logical tenant isolation via usecase_id mapping.
  */
-export function parseClientId(searchParams: URLSearchParams): string | null {
-  return searchParams.get("clientId") ?? null
+export function parseClientId(searchParams: URLSearchParams): string {
+  // Support both ?clientId= (API) and ?client= (UI) for compatibility.
+  return (
+    searchParams.get("clientId") ??
+    searchParams.get("client") ??
+    DEFAULT_CLIENT_ID
+  )
 }

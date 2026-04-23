@@ -286,7 +286,7 @@ export function AIAssistant() {
               )}
 
               {error && (
-                <p className="text-center text-xs text-rose-500">{error}</p>
+                <p className="text-center text-xs text-destructive">{error}</p>
               )}
             </div>
 

@@ -5,7 +5,6 @@ import { TrendingUp, TrendingDown, Minus } from "lucide-react"
 import { cn, deltaColor } from "@/lib/utils"
 import type { KpiCard } from "@/lib/types"
 import { useT } from "@/lib/lang-store"
-import { brand } from "@/lib/brand"
 
 interface Props {
   kpi: KpiCard
@@ -15,7 +14,7 @@ interface Props {
 }
 
 export function SummaryCard({ kpi, index = 0, icon }: Props) {
-  const t = useT()
+  const t     = useT()
   const { labelKey, label, value, delta, unit, tier } = kpi
   const displayLabel = t[labelKey] ?? label
   const isPositive = delta > 0
@@ -30,14 +29,11 @@ export function SummaryCard({ kpi, index = 0, icon }: Props) {
       whileHover={{ y: -2, transition: { duration: 0.15 } }}
       className="relative overflow-hidden rounded-xl border border-border bg-card shadow-sm hover:shadow-md transition-shadow"
     >
-      {/* Red top stripe */}
-      <div className="h-[3px] w-full" style={{ background: brand.primaryColor }} />
+      {/* Brand top stripe */}
+      <div className="h-[3px] w-full bg-primary" />
 
-      {/* Subtle red tint on background */}
-      <div
-        className="absolute inset-0 pointer-events-none opacity-[0.03]"
-        style={{ background: brand.primaryColor }}
-      />
+      {/* Subtle brand tint on background */}
+      <div className="absolute inset-0 pointer-events-none bg-primary/5" />
 
       <div className="relative p-5">
         <div className="flex items-start justify-between mb-3">
@@ -47,11 +43,10 @@ export function SummaryCard({ kpi, index = 0, icon }: Props) {
           <div className="flex items-center gap-2">
             {/* Tier badge */}
             <span
-              className="text-[10px] font-bold px-1.5 py-0.5 rounded"
-              style={isPrimary
-                ? { background: brand.primaryColor, color: "#ffffff" }
-                : { background: `${brand.primaryColor}20`, color: brand.primaryColor }
-              }
+              className={cn(
+                "text-[10px] font-bold px-1.5 py-0.5 rounded",
+                isPrimary ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary"
+              )}
             >
               T{tier}
             </span>
@@ -60,13 +55,9 @@ export function SummaryCard({ kpi, index = 0, icon }: Props) {
         </div>
 
         <div className="flex items-end justify-between">
-          {/* KPI value in brand red */}
-          <span
-            className="text-3xl font-bold tracking-tight"
-            style={{ color: brand.primaryColor }}
-          >
+          <span className="text-3xl font-bold tracking-tight text-primary">
             {typeof value === "number" ? value.toLocaleString() : value}
-            {unit && <span className="text-lg ml-1" style={{ color: brand.primaryColor, opacity: 0.6 }}>{unit}</span>}
+            {unit && <span className="text-lg ml-1 text-primary/60">{unit}</span>}
           </span>
 
           {delta !== 0 && (

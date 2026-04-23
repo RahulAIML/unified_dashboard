@@ -156,3 +156,78 @@ export function buildKpiSummary(
     passed_sessions: passed,
   }
 }
+
+// ── KPI deltas (current vs previous) ─────────────────────────────────────────
+
+export type DeltaDirection = "up" | "down" | "flat"
+
+/**
+ * Computes % change between current and prior period.
+ * Returns 0 when prev is null/0 or current is null.
+ */
+export function calcDeltaPct(
+  current: number | null | undefined,
+  prev:    number | null | undefined,
+  decimals = 0
+): number {
+  const c = safeNumber(current)
+  const p = safeNumber(prev)
+  if (c === null || p === null || p === 0) return 0
+  const raw = ((c - p) / Math.abs(p)) * 100
+  const factor = Math.pow(10, Math.max(0, decimals))
+  return Math.round(raw * factor) / factor
+}
+
+export function deltaDirection(deltaPct: number): DeltaDirection {
+  if (deltaPct > 0) return "up"
+  if (deltaPct < 0) return "down"
+  return "flat"
+}
+
+/**
+ * Estimates prior passed sessions from (total, passRate%).
+ * Centralised here so pages don't duplicate KPI logic.
+ */
+export function estimatePassedSessions(
+  totalEvaluations: number | null | undefined,
+  passRatePct:      number | null | undefined
+): number {
+  const total = safeNumber(totalEvaluations) ?? 0
+  const pr    = safeNumber(passRatePct) ?? 0
+  if (total <= 0 || pr <= 0) return 0
+  return Math.round((total * pr) / 100)
+}
+
+export interface BuildKpiCardInput<TLabelKey extends string = string> {
+  label: string
+  labelKey: TLabelKey
+  value: number | string
+  prevValue?: number | string | null
+  unit?: string
+  tier: "A" | "B"
+  decimals?: number
+}
+
+/**
+ * Builds a KPI card with a delta% computed via calcDeltaPct.
+ * Centralised here to avoid pages duplicating delta math / rounding rules.
+ */
+export function buildKpiCard<TLabelKey extends string = string>(
+  input: BuildKpiCardInput<TLabelKey>
+) {
+  const decimals = input.decimals ?? 0
+  const delta = calcDeltaPct(
+    typeof input.value === "number" ? input.value : safeNumber(input.value),
+    typeof input.prevValue === "number" ? input.prevValue : safeNumber(input.prevValue),
+    decimals
+  )
+
+  return {
+    label:    input.label,
+    labelKey: input.labelKey,
+    value:    input.value,
+    delta,
+    unit:     input.unit,
+    tier:     input.tier,
+  }
+}

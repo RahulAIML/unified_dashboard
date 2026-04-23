@@ -14,13 +14,13 @@ export interface Column<T> {
   className?: string
 }
 
-interface Props<T extends Record<string, any>> {
+interface Props<T extends object> {
   data: T[]
   columns: Column<T>[]
   pageSize?: number
 }
 
-export function DataTable<T extends Record<string, any>>({
+export function DataTable<T extends object>({
   data,
   columns,
   pageSize = 10,
@@ -38,15 +38,15 @@ export function DataTable<T extends Record<string, any>>({
   }
 
   const filtered = data.filter(row =>
-    Object.values(row).some(v =>
+    Object.values(row as Record<string, unknown>).some(v =>
       String(v ?? "").toLowerCase().includes(search.toLowerCase())
     )
   )
 
   const sorted = sortKey
     ? [...filtered].sort((a, b) => {
-        const av = a[sortKey] ?? ""
-        const bv = b[sortKey] ?? ""
+        const av = String((a as Record<string, unknown>)[sortKey] ?? "")
+        const bv = String((b as Record<string, unknown>)[sortKey] ?? "")
         return sortDir === "asc"
           ? av > bv ? 1 : -1
           : av < bv ? 1 : -1
@@ -107,7 +107,9 @@ export function DataTable<T extends Record<string, any>>({
                 >
                   {columns.map(col => (
                     <td key={String(col.key)} className={cn("px-4 py-3 text-foreground/80", col.className)}>
-                      {col.render ? col.render(row) : String(row[col.key as string] ?? "—")}
+                      {col.render
+                        ? col.render(row)
+                        : String((row as Record<string, unknown>)[String(col.key)] ?? "—")}
                     </td>
                   ))}
                 </motion.tr>

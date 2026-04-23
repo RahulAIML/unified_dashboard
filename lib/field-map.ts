@@ -93,6 +93,9 @@ export const CORE_FIELD_KEYS: ReadonlySet<string> = new Set([
   ...CORE_FIELD_MAP.result,
 ])
 
+export const SCORE_FIELD_KEYS: ReadonlySet<string> = new Set(CORE_FIELD_MAP.score)
+export const RESULT_FIELD_KEYS: ReadonlySet<string> = new Set(CORE_FIELD_MAP.result)
+
 /**
  * Convenience: a flat Set of all EXTRA field_key strings.
  * Used in the drilldown UI to label qualitative fields.

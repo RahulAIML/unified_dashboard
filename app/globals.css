@@ -1,4 +1,4 @@
-@import "tailwindcss";
+﻿@import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
@@ -55,9 +55,9 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  /* Rolplay red #DC2626 → HSL 0 72% 51% */
   --primary: 0 72% 51%;
   --primary-foreground: oklch(0.985 0 0);
+  --brand-accent: hsl(var(--primary));
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
@@ -68,12 +68,12 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: hsl(var(--primary));
-  /* Chart palette: red family */
-  --chart-1: oklch(0.52 0.22 27);    /* red-600   */
-  --chart-2: oklch(0.35 0.17 27);    /* red-800   */
-  --chart-3: oklch(0.60 0.22 27);    /* red-500   */
-  --chart-4: oklch(0.43 0.20 27);    /* red-700   */
-  --chart-5: oklch(0.72 0.19 27);    /* red-400   */
+  /* Chart palette derived from brand tokens */
+  --chart-1: hsl(var(--primary));
+  --chart-2: color-mix(in oklch, hsl(var(--primary)) 75%, black);
+  --chart-3: color-mix(in oklch, hsl(var(--primary)) 70%, white);
+  --chart-4: color-mix(in oklch, hsl(var(--primary)) 55%, black);
+  --chart-5: color-mix(in oklch, var(--brand-accent) 60%, hsl(var(--primary)));
   --radius: 0.75rem;
   /* Sidebar: always dark (black) */
   --sidebar: oklch(0.10 0 0);
@@ -96,6 +96,7 @@
   /* Rolplay red slightly brighter for dark mode */
   --primary: 0 75% 58%;
   --primary-foreground: oklch(0.985 0 0);
+  --brand-accent: hsl(var(--primary));
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
@@ -106,12 +107,12 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: hsl(var(--primary));
-  /* Chart palette dark — slightly brighter for contrast */
-  --chart-1: oklch(0.62 0.23 27);
-  --chart-2: oklch(0.45 0.19 27);
-  --chart-3: oklch(0.70 0.22 27);
-  --chart-4: oklch(0.53 0.21 27);
-  --chart-5: oklch(0.78 0.18 27);
+  /* Chart palette dark â€” slightly brighter for contrast */
+  --chart-1: hsl(var(--primary));
+  --chart-2: color-mix(in oklch, hsl(var(--primary)) 70%, black);
+  --chart-3: color-mix(in oklch, hsl(var(--primary)) 65%, white);
+  --chart-4: color-mix(in oklch, hsl(var(--primary)) 50%, black);
+  --chart-5: color-mix(in oklch, var(--brand-accent) 60%, hsl(var(--primary)));
   /* Sidebar stays dark */
   --sidebar: oklch(0.10 0 0);
   --sidebar-foreground: oklch(0.92 0 0);

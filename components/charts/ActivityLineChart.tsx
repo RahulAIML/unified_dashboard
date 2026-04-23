@@ -6,7 +6,6 @@ import {
   CartesianGrid, Tooltip, Legend
 } from "recharts"
 import type { TimeSeriesPoint } from "@/lib/types"
-import { brand } from "@/lib/brand"
 
 interface Props {
   data: TimeSeriesPoint[]
@@ -16,13 +15,27 @@ interface Props {
   color2?: string
 }
 
-function CustomTooltip({ active, payload, label }: any) {
+type TooltipItem = {
+  name?: string
+  value?: number | string
+  color?: string
+}
+
+function CustomTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean
+  payload?: TooltipItem[]
+  label?: string
+}) {
   if (!active || !payload?.length) return null
   return (
     <div className="bg-card border border-border rounded-lg px-3 py-2 shadow-lg text-sm">
       <p className="font-medium mb-1 text-foreground">{label}</p>
-      {payload.map((p: any) => (
-        <p key={p.name} className="text-muted-foreground">
+      {payload.map((p, i) => (
+        <p key={p.name ?? String(i)} className="text-muted-foreground">
           <span style={{ color: p.color }} className="font-semibold">{p.value}</span>
           {" "}{p.name}
         </p>
@@ -35,8 +48,8 @@ export function ActivityLineChart({
   data,
   label = "Sessions",
   label2,
-  color  = brand.chartColors[0], // Coppel blue  — hardcoded hex, CSS vars don't work in Recharts SVG
-  color2 = brand.chartColors[1], // Coppel yellow
+  color  = "var(--chart-1)",
+  color2 = "var(--chart-5)",
 }: Props) {
   const formatted = data.map(d => ({
     ...d,

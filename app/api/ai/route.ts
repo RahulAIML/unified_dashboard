@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest } from "next/server"
 import { getAIResponse } from "@/lib/ai"
+import { buildApiError, buildSuccess } from "@/lib/api-utils"
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,7 +11,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
-      return NextResponse.json({ error: "Missing prompt" }, { status: 400 })
+      return buildApiError("Missing prompt", 400, { hasPrompt: Boolean(prompt) })
     }
 
     const answer = await getAIResponse(
@@ -18,10 +19,15 @@ export async function POST(req: NextRequest) {
       context ?? "No dashboard context provided."
     )
 
-    return NextResponse.json({ answer })
+    return buildSuccess(
+      { answer },
+      {
+        promptLength: prompt.trim().length,
+        hasContext: Boolean(context && String(context).trim()),
+      }
+    )
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error"
-    console.error("[/api/ai]", message)
-    return NextResponse.json({ error: message }, { status: 500 })
+    console.error("[/api/ai]", err)
+    return buildApiError("Failed to get AI response")
   }
 }

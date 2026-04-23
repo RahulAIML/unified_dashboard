@@ -2,8 +2,11 @@
 
 import { useState } from "react"
 import { CalendarRange } from "lucide-react"
-import { useClientBrand } from "@/lib/hooks/useClientBrand"
 import { cn } from "@/lib/utils"
+
+const DEFAULT_TODAY = new Date()
+const DEFAULT_TODAY_STR = DEFAULT_TODAY.toISOString().slice(0, 10)
+const DEFAULT_LAST30_STR = new Date(DEFAULT_TODAY.getTime() - 30 * 86_400_000).toISOString().slice(0, 10)
 
 interface Props {
   onApply:      (from: Date, to: Date) => void
@@ -21,13 +24,12 @@ interface Props {
  * Validates that from ≤ to before calling onApply.
  */
 export function DateRangePicker({ onApply, initialFrom, initialTo, className }: Props) {
-  const brand = useClientBrand()
   const [open,  setOpen]  = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Initialise from the currently-active range (falls back to last 30d → today)
-  const today  = new Date().toISOString().slice(0, 10)
-  const last30 = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10)
+  const today  = DEFAULT_TODAY_STR
+  const last30 = DEFAULT_LAST30_STR
 
   const [fromStr, setFromStr] = useState(
     initialFrom ? initialFrom.toISOString().slice(0, 10) : last30
@@ -65,10 +67,9 @@ export function DateRangePicker({ onApply, initialFrom, initialTo, className }: 
         className={cn(
           "flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold border transition-all",
           open
-            ? "text-white border-transparent"
+            ? "bg-primary text-primary-foreground border-transparent"
             : "border-border text-muted-foreground hover:text-foreground bg-muted"
         )}
-        style={open ? { background: brand.primaryColor } : {}}
         aria-label="Custom date range"
       >
         <CalendarRange className="w-3.5 h-3.5" />
@@ -106,7 +107,7 @@ export function DateRangePicker({ onApply, initialFrom, initialTo, className }: 
                 type="date"
                 value={toStr}
                 min={fromStr}
-                max={new Date().toISOString().slice(0, 10)}
+                max={DEFAULT_TODAY_STR}
                 onChange={(e) => { setToStr(e.target.value); setError(null) }}
                 className="w-full px-3 py-1.5 text-xs rounded-lg border border-border bg-background focus:outline-none focus:ring-1 focus:ring-primary"
               />
@@ -114,7 +115,7 @@ export function DateRangePicker({ onApply, initialFrom, initialTo, className }: 
 
             {/* Error */}
             {error && (
-              <p className="text-[10px] text-rose-500">{error}</p>
+              <p className="text-[10px] text-destructive">{error}</p>
             )}
 
             {/* Actions */}
@@ -127,8 +128,7 @@ export function DateRangePicker({ onApply, initialFrom, initialTo, className }: 
               </button>
               <button
                 onClick={handleApply}
-                className="flex-1 px-3 py-1.5 text-xs rounded-lg text-white font-semibold transition-colors"
-                style={{ background: brand.primaryColor }}
+                className="flex-1 px-3 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground font-semibold transition-colors hover:bg-primary/90"
               >
                 Apply
               </button>

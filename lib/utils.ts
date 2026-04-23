@@ -14,8 +14,8 @@ export function fmt(value: number | string, unit?: string): string {
 }
 
 export function deltaColor(delta: number): string {
-  if (delta > 0)  return 'text-emerald-500'
-  if (delta < 0)  return 'text-rose-500'
+  if (delta > 0)  return 'text-primary'
+  if (delta < 0)  return 'text-destructive'
   return 'text-muted-foreground'
 }
 
@@ -23,10 +23,4 @@ export function deltaSymbol(delta: number): string {
   if (delta > 0) return '↑'
   if (delta < 0) return '↓'
   return '→'
-}
-
-/** Compute % change between current and prior period value. Safe for null. */
-export function calcDelta(current: number | null, prev: number | null): number {
-  if (current === null || prev === null || prev === 0) return 0
-  return Math.round(((current - prev) / Math.abs(prev)) * 100)
 }

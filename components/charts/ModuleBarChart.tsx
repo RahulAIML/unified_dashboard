@@ -3,23 +3,35 @@
 import { motion } from "framer-motion"
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis,
-  CartesianGrid, Tooltip, Legend, Cell
+  CartesianGrid, Tooltip, Legend
 } from "recharts"
-import { brand } from "@/lib/brand"
-
 interface DataPoint {
   module: string
   sessions: number
   passed: number
 }
 
-function CustomTooltip({ active, payload, label }: any) {
+type TooltipItem = {
+  name?: string
+  value?: number | string
+  color?: string
+}
+
+function CustomTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean
+  payload?: TooltipItem[]
+  label?: string
+}) {
   if (!active || !payload?.length) return null
   return (
     <div className="bg-card border border-border rounded-lg px-3 py-2 shadow-lg text-sm">
       <p className="font-medium mb-1">{label}</p>
-      {payload.map((p: any) => (
-        <p key={p.name} style={{ color: p.color }} className="font-medium">
+      {payload.map((p, i) => (
+        <p key={p.name ?? String(i)} style={{ color: p.color }} className="font-medium">
           {p.value} {p.name}
         </p>
       ))}
@@ -27,10 +39,17 @@ function CustomTooltip({ active, payload, label }: any) {
   )
 }
 
-// Hardcoded hex — CSS vars don't resolve inside Recharts SVG
-const COLORS = [brand.chartColors[0], brand.chartColors[1]]
+interface Props {
+  data:          DataPoint[]
+  sessionsColor?: string
+  passedColor?:  string
+}
 
-export function ModuleBarChart({ data }: { data: DataPoint[] }) {
+export function ModuleBarChart({
+  data,
+  sessionsColor = "var(--chart-1)",
+  passedColor   = "var(--chart-3)",
+}: Props) {
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -54,8 +73,8 @@ export function ModuleBarChart({ data }: { data: DataPoint[] }) {
           />
           <Tooltip content={<CustomTooltip />} />
           <Legend wrapperStyle={{ fontSize: 11 }} />
-          <Bar dataKey="sessions" name="Total Sessions" fill={COLORS[0]} radius={[4, 4, 0, 0]} />
-          <Bar dataKey="passed"   name="Passed"         fill={COLORS[1]} radius={[4, 4, 0, 0]} />
+          <Bar dataKey="sessions" name="Total Sessions" fill={sessionsColor} radius={[4, 4, 0, 0]} />
+          <Bar dataKey="passed"   name="Passed"         fill={passedColor}  radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </motion.div>

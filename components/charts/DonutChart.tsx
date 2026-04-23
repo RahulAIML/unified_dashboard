@@ -3,13 +3,29 @@
 import { motion } from "framer-motion"
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts"
 
-interface Segment { name: string; value: number; color: string }
+interface Segment { name: string; value: number; color?: string }
 
-function CustomTooltip({ active, payload }: any) {
+const PALETTE = [
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
+]
+
+type DonutTooltipItem = {
+  name?: string
+  value?: number | string
+  color?: string
+  payload?: { color?: string }
+}
+
+function CustomTooltip({ active, payload }: { active?: boolean; payload?: DonutTooltipItem[] }) {
   if (!active || !payload?.length) return null
+  const c = payload[0]?.payload?.color ?? payload[0]?.color
   return (
     <div className="bg-card border border-border rounded-lg px-3 py-2 shadow-lg text-sm">
-      <p style={{ color: payload[0].payload.color }} className="font-semibold">{payload[0].name}</p>
+      <p style={c ? { color: c } : {}} className="font-semibold">{payload[0].name}</p>
       <p className="text-muted-foreground">{payload[0].value}</p>
     </div>
   )
@@ -36,7 +52,7 @@ export function DonutChart({ data }: { data: Segment[] }) {
             strokeWidth={0}
           >
             {data.map((entry, i) => (
-              <Cell key={i} fill={entry.color} />
+              <Cell key={i} fill={entry.color ?? PALETTE[i % PALETTE.length]} />
             ))}
           </Pie>
           <Tooltip content={<CustomTooltip />} />

@@ -15,7 +15,7 @@ export async function GET(
       return buildApiError("Invalid report ID", 400)
     }
 
-    const data = await getDrilldown(id)
+    const data = await getDrilldown(id, clientId)
 
     if (!data) {
       return buildApiError("Report not found", 404)

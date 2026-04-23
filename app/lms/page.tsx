@@ -10,8 +10,7 @@ import { DataTable, type Column } from "@/components/DataTable"
 import { useDashboardStore } from "@/lib/store"
 import { useT } from "@/lib/lang-store"
 import { useApi, buildApiUrl } from "@/lib/hooks/useApi"
-import { useClientBrand } from "@/lib/hooks/useClientBrand"
-import { calcDelta } from "@/lib/utils"
+import { calcDeltaPct, estimatePassedSessions } from "@/lib/kpi-builder"
 import { cn } from "@/lib/utils"
 import type {
   OverviewApiResponse,
@@ -37,14 +36,13 @@ function EmptyState() {
 }
 
 export default function LmsPage() {
-  const { dateRange } = useDashboardStore()
+  const { dateRange, clientId, refreshKey } = useDashboardStore()
   const t     = useT()
-  const brand = useClientBrand()
   const days = Math.round((dateRange.to.getTime() - dateRange.from.getTime()) / 86_400_000)
 
-  const overviewUrl = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to) + "&solution=lms"
-  const trendsUrl   = buildApiUrl("/api/dashboard/trends",   dateRange.from, dateRange.to) + "&solution=lms"
-  const ucUrl       = buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to) + "&solution=lms"
+  const overviewUrl = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to, { solution: "lms", clientId, rk: refreshKey })
+  const trendsUrl   = buildApiUrl("/api/dashboard/trends",   dateRange.from, dateRange.to, { solution: "lms", clientId, rk: refreshKey })
+  const ucUrl       = buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to, { solution: "lms", clientId, rk: refreshKey })
 
   const { data: overview, loading: overviewLoading } = useApi<OverviewApiResponse>(overviewUrl)
   const { data: trends,   loading: trendsLoading }   = useApi<TrendsApiResponse>(trendsUrl)
@@ -58,7 +56,7 @@ export default function LmsPage() {
       {
         label: "Enrolled Users", labelKey: "enrolledUsers" as const,
         value: overview!.passedEvaluations + overview!.totalEvaluations,
-        delta: calcDelta(
+        delta: calcDeltaPct(
           overview!.passedEvaluations + overview!.totalEvaluations,
           overview!.prevTotalEvaluations
         ),
@@ -67,23 +65,21 @@ export default function LmsPage() {
       {
         label: "Completion Rate", labelKey: "completionRate" as const,
         value: overview!.passRate ?? 0, unit: "%",
-        delta: calcDelta(overview!.passRate ?? 0, overview!.prevPassRate ?? 0),
+        delta: calcDeltaPct(overview!.passRate ?? 0, overview!.prevPassRate ?? 0),
         tier: "B" as const,
       },
       {
         label: "Avg Quiz Score", labelKey: "avgQuizScore" as const,
         value: overview!.avgScore ?? 0, unit: "pts",
-        delta: calcDelta(overview!.avgScore ?? 0, overview!.prevAvgScore ?? 0),
+        delta: calcDeltaPct(overview!.avgScore ?? 0, overview!.prevAvgScore ?? 0),
         tier: "B" as const,
       },
       {
         label: "Modules Completed", labelKey: "modulesCompleted" as const,
         value: overview!.passedEvaluations,
-        delta: calcDelta(
+        delta: calcDeltaPct(
           overview!.passedEvaluations,
-          overview!.prevTotalEvaluations > 0
-            ? Math.round(overview!.prevTotalEvaluations * (overview!.prevPassRate ?? 0) / 100)
-            : 0
+          estimatePassedSessions(overview!.prevTotalEvaluations, overview!.prevPassRate)
         ),
         tier: "A" as const,
       },
@@ -101,9 +97,9 @@ export default function LmsPage() {
     { key: "avgScore",         header: t.colAvgScore,  render: r => r.avgScore != null ? <span className="tabular-nums">{r.avgScore} pts</span> : <span className="text-muted-foreground">—</span> },
     { key: "passRate", header: t.colPassRate, render: r => r.passRate != null ? (
       <span className={cn("inline-flex px-2 py-0.5 rounded-full text-xs font-medium",
-        r.passRate >= 70 ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-          : r.passRate >= 50 ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
-          : "bg-rose-500/15 text-rose-600 dark:text-rose-400")}>
+        r.passRate >= 70 ? "bg-primary/10 text-primary"
+          : r.passRate >= 50 ? "bg-secondary text-secondary-foreground"
+          : "bg-destructive/10 text-destructive")}>
         {r.passRate}%
       </span>
     ) : <span className="text-muted-foreground">—</span> },
@@ -120,7 +116,7 @@ export default function LmsPage() {
           {overviewLoading
             ? Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
-                  <div className="h-[3px]" style={{ background: brand.primaryColor }} />
+                  <div className="h-[3px] bg-primary" />
                   <div className="p-5 space-y-3 animate-pulse">
                     <div className="h-3 w-24 rounded bg-muted" />
                     <div className="h-8 w-20 rounded bg-muted" />
@@ -131,7 +127,7 @@ export default function LmsPage() {
               ? kpis.map((kpi, i) => <SummaryCard key={kpi.label} kpi={kpi} index={i} icon={icons[i]} />)
               : Array.from({ length: 4 }).map((_, i) => (
                   <div key={i} className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-                    <div className="h-[3px]" style={{ background: brand.primaryColor }} />
+                    <div className="h-[3px] bg-primary" />
                     <div className="p-5 text-center text-sm text-muted-foreground py-8">No data available</div>
                   </div>
                 ))
@@ -143,7 +139,7 @@ export default function LmsPage() {
           {trendsLoading
             ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
             : activityData.length > 0
-              ? <ActivityLineChart data={activityData} label="Sessions" color={brand.chartColors[0]} />
+              ? <ActivityLineChart data={activityData} label="Sessions" />
               : <EmptyState />
           }
         </ChartCard>

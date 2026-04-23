@@ -20,8 +20,7 @@ function LogoImage() {
   if (failed) {
     return (
       <div
-        className="w-10 h-10 rounded-lg flex items-center justify-center text-white font-extrabold text-lg shrink-0"
-        style={{ background: brand.primaryColor }}
+        className="w-10 h-10 rounded-lg flex items-center justify-center text-sidebar-primary-foreground font-extrabold text-lg shrink-0 bg-sidebar-primary"
       >
         {brand.name.charAt(0)}
       </div>
@@ -63,7 +62,7 @@ export function Sidebar() {
       {/* Brand header */}
       <div className="relative h-20 flex items-center gap-3 px-5 border-b border-sidebar-border overflow-hidden">
         {/* Primary colour top stripe */}
-        <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ background: brand.primaryColor }} />
+        <div className="absolute top-0 left-0 right-0 h-[3px] bg-sidebar-primary" />
 
         <LogoImage />
 
@@ -86,15 +85,14 @@ export function Sidebar() {
                 className={cn(
                   "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
                   active
-                    ? "text-white"
+                    ? "bg-sidebar-primary text-sidebar-primary-foreground"
                     : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
                 )}
-                style={active ? { background: brand.primaryColor } : {}}
               >
                 <Icon className="w-4 h-4 shrink-0" />
                 <span>{label}</span>
                 {active && (
-                  <span className="ml-auto w-1.5 h-1.5 rounded-full bg-white/60 shrink-0" />
+                  <span className="ml-auto w-1.5 h-1.5 rounded-full bg-sidebar-foreground/60 shrink-0" />
                 )}
               </motion.div>
             </Link>

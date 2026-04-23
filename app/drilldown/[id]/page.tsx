@@ -1,12 +1,16 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react"
+import { useState, useMemo } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { ArrowLeft, BarChart2, BadgeCheck, XCircle, Hash, CalendarDays, Layers } from "lucide-react"
 import { useClientBrand }                      from "@/lib/hooks/useClientBrand"
-import { normalizeScore }                       from "@/lib/kpi-builder"
-import { CORE_FIELD_KEYS, EXTRA_FIELD_KEYS }    from "@/lib/field-map"
+import { useApi }                              from "@/lib/hooks/useApi"
+import { normalizeResult, normalizeScore }       from "@/lib/kpi-builder"
+import { CORE_FIELD_KEYS, EXTRA_FIELD_KEYS, SCORE_FIELD_KEYS, RESULT_FIELD_KEYS } from "@/lib/field-map"
 import { cn }                                   from "@/lib/utils"
+import { useDashboardStore } from "@/lib/store"
+import { ExportButton } from "@/components/ExportButton"
+import { csvFilename } from "@/lib/csv-export"
 
 // ── Types (mirrors DrilldownResult from data-provider) ────────────────────────
 
@@ -30,8 +34,8 @@ interface DrilldownData {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 // Use the canonical field sets from field-map — CORE fields only for KPI display
 
-const SCORE_FIELDS  = new Set(["overall_score", "final_score"])   // subset of CORE
-const RESULT_FIELDS = new Set(["overall_result", "status"])        // subset of CORE
+const SCORE_FIELDS  = SCORE_FIELD_KEYS
+const RESULT_FIELDS = RESULT_FIELD_KEYS
 
 function resolveDisplay(field: DrilldownField): string {
   const v = field.normalizedValue
@@ -45,16 +49,14 @@ function StatChip({
   icon,
   label,
   value,
-  color,
 }: {
   icon: React.ReactNode
   label: string
   value: string
-  color?: string
 }) {
   return (
     <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-      <div className="h-[3px] w-full" style={{ background: color ?? "#DC2626" }} />
+      <div className="h-[3px] w-full bg-primary" />
       <div className="px-4 py-3 flex items-center gap-3">
         <span className="shrink-0 text-muted-foreground">{icon}</span>
         <div className="min-w-0">
@@ -98,35 +100,24 @@ export default function DrilldownPage() {
   const params = useParams()
   const router = useRouter()
   const brand  = useClientBrand()
+  const clientId = useDashboardStore((s) => s.clientId)
+  const refreshKey = useDashboardStore((s) => s.refreshKey)
   const id     = params?.id as string | undefined
 
-  const [data,    setData]    = useState<DrilldownData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error,   setError]   = useState<string | null>(null)
+  const drilldownUrl = useMemo(() => {
+    if (!id) return null
+    const qs = new URLSearchParams()
+    if (clientId) qs.set("clientId", clientId)
+    qs.set("rk", String(refreshKey))
+    const suffix = qs.toString()
+    return suffix ? `/api/dashboard/drilldown/${id}?${suffix}` : `/api/dashboard/drilldown/${id}`
+  }, [id, clientId, refreshKey])
+
+  const { data, loading, error } = useApi<DrilldownData>(drilldownUrl)
   const [page,    setPage]    = useState(0)
   const [search,  setSearch]  = useState("")
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!id) return
-    setLoading(true)
-    setError(null)
-
-    fetch(`/api/dashboard/drilldown/${id}`)
-      .then(async (res) => {
-        const json = await res.json()
-        if (!res.ok) throw new Error(json?.error ?? `HTTP ${res.status}`)
-        // Unwrap standard API contract { success, data, meta }
-        if (json && typeof json === "object" && "success" in json && "data" in json) {
-          if (!json.success) throw new Error(json.error ?? "API returned success: false")
-          return json.data as DrilldownData
-        }
-        return json as DrilldownData
-      })
-      .then((d) => { setData(d); setLoading(false) })
-      .catch((e) => { setError(String(e?.message ?? e)); setLoading(false) })
-  }, [id])
-
   // ── Derived KPIs ──────────────────────────────────────────────────────────
   const scoreField  = data?.fields.find((f) => SCORE_FIELDS.has(f.fieldKey))
   const resultField = data?.fields.find((f) => RESULT_FIELDS.has(f.fieldKey))
@@ -139,7 +130,7 @@ export default function DrilldownPage() {
   }, [scoreField])
 
   const displayResult = resultField?.valueText ?? null
-  const passed        = displayResult !== null && displayResult !== "Deficiente"
+  const passed        = normalizeResult(displayResult) === "pass"
 
   // ── Filtered + paginated fields ───────────────────────────────────────────
   const filteredFields = useMemo(() => {
@@ -157,8 +148,23 @@ export default function DrilldownPage() {
   const totalPages   = Math.ceil(filteredFields.length / PAGE_SIZE)
   const visibleFields = filteredFields.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
 
-  // Reset page on search
-  useEffect(() => { setPage(0) }, [search])
+  const drilldownExportRows = useMemo(() => {
+    if (!data) return []
+    return data.fields.map((f) => ({
+      savedReportId: data.savedReportId,
+      usecaseId: data.usecaseId,
+      date: data.date,
+      fieldGroup: CORE_FIELD_KEYS.has(f.fieldKey) ? "CORE" : EXTRA_FIELD_KEYS.has(f.fieldKey) ? "EXTRA" : "OTHER",
+      fieldKey: f.fieldKey,
+      fieldLabel: f.fieldLabel,
+      normalizedValue: f.normalizedValue,
+      valueNum: f.valueNum,
+      valueText: f.valueText,
+      valueLongtext: f.valueLongtext,
+    }))
+  }, [data])
+
+  // Reset page when search changes (done in the input handler)
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -178,9 +184,27 @@ export default function DrilldownPage() {
             Back
           </button>
           <div className="h-4 w-px bg-border" />
-          <h1 className="text-sm font-semibold" style={{ color: brand.primaryColor }}>
+          <h1 className="text-sm font-semibold text-primary">
             Session Detail — Report #{id}
           </h1>
+          <div className="ml-auto">
+            <ExportButton
+              data={drilldownExportRows}
+              filename={csvFilename(`drilldown-${id ?? "unknown"}`)}
+              columns={[
+                { header: "Saved Report ID", value: (r) => r.savedReportId },
+                { header: "Usecase ID", value: (r) => r.usecaseId },
+                { header: "Date", value: (r) => r.date },
+                { header: "Field Group", value: (r) => r.fieldGroup },
+                { header: "Field Key", value: (r) => r.fieldKey },
+                { header: "Field Label", value: (r) => r.fieldLabel },
+                { header: "Normalized Value", value: (r) => r.normalizedValue },
+                { header: "Value (num)", value: (r) => r.valueNum },
+                { header: "Value (text)", value: (r) => r.valueText },
+                { header: "Value (longtext)", value: (r) => r.valueLongtext },
+              ]}
+            />
+          </div>
         </div>
       </div>
 
@@ -208,41 +232,36 @@ export default function DrilldownPage() {
                 icon={<Hash className="w-4 h-4" />}
                 label="Report ID"
                 value={`#${data.savedReportId}`}
-                color={brand.primaryColor}
               />
               <StatChip
                 icon={<Layers className="w-4 h-4" />}
                 label="Use Case"
                 value={data.usecaseId != null ? `UC-${data.usecaseId}` : "—"}
-                color={brand.primaryColor}
               />
               <StatChip
                 icon={<CalendarDays className="w-4 h-4" />}
                 label="Date"
                 value={data.date || "—"}
-                color={brand.primaryColor}
               />
               {displayScore ? (
                 <StatChip
                   icon={<BarChart2 className="w-4 h-4" />}
                   label="Score"
                   value={displayScore}
-                  color={brand.primaryColor}
                 />
               ) : (
                 <StatChip
                   icon={
                     displayResult ? (
                       passed
-                        ? <BadgeCheck className="w-4 h-4 text-emerald-500" />
-                        : <XCircle   className="w-4 h-4 text-rose-500" />
+                        ? <BadgeCheck className="w-4 h-4 text-primary" />
+                        : <XCircle   className="w-4 h-4 text-destructive" />
                     ) : (
                       <BarChart2 className="w-4 h-4" />
                     )
                   }
                   label="Result"
                   value={displayResult ?? "—"}
-                  color={brand.primaryColor}
                 />
               )}
             </div>
@@ -254,8 +273,8 @@ export default function DrilldownPage() {
                   className={cn(
                     "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold",
                     passed
-                      ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
-                      : "bg-rose-500/15 text-rose-700 dark:text-rose-400"
+                      ? "bg-primary/10 text-primary"
+                      : "bg-destructive/10 text-destructive"
                   )}
                 >
                   {passed
@@ -285,7 +304,7 @@ export default function DrilldownPage() {
                   type="search"
                   placeholder="Search fields…"
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  onChange={(e) => { setSearch(e.target.value); setPage(0) }}
                   className="px-3 py-1.5 text-xs rounded-lg border border-border bg-muted placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary w-48"
                 />
               </div>
@@ -341,15 +360,12 @@ export default function DrilldownPage() {
                                 {field.fieldKey}
                               </code>
                               {isCore && (
-                                <span
-                                  className="ml-2 text-[9px] font-bold uppercase px-1 py-0.5 rounded"
-                                  style={{ background: brand.primaryColor, color: "#fff" }}
-                                >
+                                <span className="ml-2 text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-primary text-primary-foreground">
                                   {isScore ? "score" : "result"}
                                 </span>
                               )}
                               {isExtra && (
-                                <span className="ml-2 text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-violet-500/15 text-violet-600 dark:text-violet-400">
+                                <span className="ml-2 text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-secondary text-secondary-foreground">
                                   qualitative
                                 </span>
                               )}
@@ -366,11 +382,11 @@ export default function DrilldownPage() {
                                 <span
                                   className={cn(
                                     "inline-flex px-2 py-0.5 rounded-full text-xs font-semibold",
-                                    display === "Deficiente"
-                                      ? "bg-rose-500/15 text-rose-600 dark:text-rose-400"
-                                      : display === "—"
-                                      ? "text-muted-foreground"
-                                      : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                                    normalizeResult(display === "—" ? null : display) === "fail"
+                                      ? "bg-destructive/10 text-destructive"
+                                      : normalizeResult(display === "—" ? null : display) === "pass"
+                                      ? "bg-primary/10 text-primary"
+                                      : "text-muted-foreground"
                                   )}
                                 >
                                   {display}

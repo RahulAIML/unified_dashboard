@@ -12,7 +12,8 @@
 
 import { query }                from "./db"
 import { fieldInClause }        from "./field-map"
-import { normalizeScore }       from "./kpi-builder"
+import { computePassRate, normalizeResult, normalizeScore, safeNumber, safeString } from "./kpi-builder"
+import { applyTenantUsecaseFilter, canClientAccessUsecase } from "./tenant"
 import type { DateRange }       from "./types"
 
 // Explicit re-export so routes can import types from a single place
@@ -28,6 +29,8 @@ export interface AnalyticsFilters {
   to:   Date
   /** Filter by usecase_id. Empty / undefined = no filter (all usecases). */
   usecaseIds?: number[]
+  /** Logical multi-tenant filter (usecase_id mapping), Phase 1. */
+  clientId?: string | null
 }
 
 export interface OverviewKpis {
@@ -107,16 +110,15 @@ export function normalizeField(row: RawFieldRow): {
   let value: number | string | null = null
 
   if (row.value_num !== undefined && row.value_num !== null) {
-    const n = Number(row.value_num)
-    value = Number.isFinite(n) ? n : null
+    value = safeNumber(row.value_num)
   }
 
-  if (value === null && row.value_text?.trim()) {
-    value = row.value_text.trim()
+  if (value === null) {
+    value = safeString(row.value_text)
   }
 
-  if (value === null && row.value_longtext?.trim()) {
-    value = row.value_longtext.trim()
+  if (value === null) {
+    value = safeString(row.value_longtext)
   }
 
   return { key: row.field_key, value }
@@ -185,12 +187,17 @@ function usecaseClause(
   usecaseIds: number[] | undefined,
   alias = "rfc"
 ): { clause: string; params: number[] } {
-  if (!usecaseIds || usecaseIds.length === 0) return { clause: "", params: [] }
+  if (!usecaseIds) return { clause: "", params: [] }
+  if (usecaseIds.length === 0) return { clause: " AND 1=0", params: [] }
   const placeholders = usecaseIds.map(() => "?").join(", ")
   return {
     clause: ` AND ${alias}.usecase_id IN (${placeholders})`,
     params: usecaseIds,
   }
+}
+
+function withTenant(filters: AnalyticsFilters): AnalyticsFilters {
+  return applyTenantUsecaseFilter(filters) as AnalyticsFilters
 }
 
 // ── Empty fallbacks ───────────────────────────────────────────────────────────
@@ -252,7 +259,7 @@ async function getOverviewKpisReal(
 
     // Pass / fail counts — any row whose field_key is in the result alias list
     const pfRows = await safeQuery<{ passed: number; total_res: number }>(
-      `SELECT COUNT(CASE WHEN value_text != 'Deficiente' THEN 1 END) AS passed,
+      `SELECT COUNT(CASE WHEN TRIM(value_text) != 'Deficiente' THEN 1 END) AS passed,
               COUNT(*)                                                 AS total_res
        FROM report_field_current rfc
        WHERE ${resultIn}
@@ -315,8 +322,8 @@ async function getTrendsReal(
     ),
     safeQuery<{ date: string; value: number; value2: number }>(
       `SELECT DATE(report_created_at)                                   AS date,
-              COUNT(CASE WHEN value_text != 'Deficiente' THEN 1 END)    AS value,
-              COUNT(CASE WHEN value_text  = 'Deficiente' THEN 1 END)    AS value2
+              COUNT(CASE WHEN TRIM(value_text) != 'Deficiente' THEN 1 END)    AS value,
+              COUNT(CASE WHEN TRIM(value_text)  = 'Deficiente' THEN 1 END)    AS value2
        FROM report_field_current rfc
        WHERE ${resultIn}
          AND rfc.report_created_at BETWEEN ? AND ?${uc}
@@ -402,7 +409,7 @@ async function getEvaluationResultsReal(
       usecaseId:     r.usecase_id,
       score:         normScore !== null ? Math.round(normScore) : null,
       result:        r.result,
-      passed:        r.result !== null && r.result !== "Deficiente",
+      passed:        normalizeResult(r.result) === "pass",
       date:          String(r.report_created_at).slice(0, 10),
     }
   })
@@ -429,7 +436,7 @@ async function getUsecaseBreakdownReal(
     `SELECT base.usecase_id,
             COUNT(DISTINCT base.saved_report_id)                              AS total_evaluations,
             ROUND(AVG(sc.value_num), 2)                                       AS avg_score,
-            COUNT(DISTINCT CASE WHEN r.value_text != 'Deficiente'
+            COUNT(DISTINCT CASE WHEN TRIM(r.value_text) != 'Deficiente'
                                 THEN r.saved_report_id END)                   AS passed,
             COUNT(DISTINCT r.saved_report_id)                                 AS total_results
      FROM (
@@ -452,22 +459,24 @@ async function getUsecaseBreakdownReal(
 
   if (!rows) return null
 
-  return rows.map((r) => ({
-    usecaseId:        r.usecase_id,
-    totalEvaluations: r.total_evaluations,
-    avgScore:         normalizeScore(r.avg_score),
-    passRate:
-      r.total_results > 0
-        ? Math.round((r.passed / r.total_results) * 100)
-        : null,
-    passed: r.passed,
-  }))
+  return rows.map((r) => {
+    const passed = Number(r.passed ?? 0)
+    const totalResults = Number(r.total_results ?? 0)
+    return {
+      usecaseId:        r.usecase_id,
+      totalEvaluations: Number(r.total_evaluations ?? 0),
+      avgScore:         normalizeScore(r.avg_score),
+      passRate:         computePassRate(passed, totalResults),
+      passed,
+    }
+  })
 }
 
 // ── Real DB: drilldown ────────────────────────────────────────────────────────
 
 export async function getDrilldown(
-  savedReportId: number
+  savedReportId: number,
+  clientId?: string | null
 ): Promise<DrilldownResult | null> {
   if (!(await isDbAvailable())) return null
 
@@ -499,6 +508,12 @@ export async function getDrilldown(
 
   if (!fieldRows || !payloadRows) return null
   if (fieldRows.length === 0 && payloadRows.length === 0) return null
+
+  const resolvedUsecaseId = fieldRows[0]?.usecase_id ?? null
+  if (clientId && resolvedUsecaseId !== null && !canClientAccessUsecase(clientId, resolvedUsecaseId)) {
+    // Prevent cross-tenant drilldown leakage (Phase 1 usecase_id mapping)
+    return null
+  }
 
   let closingJson: Record<string, unknown> | null = null
   try {
@@ -533,6 +548,7 @@ export async function getDrilldown(
 export async function getOverviewKpis(
   filters: AnalyticsFilters
 ): Promise<OverviewKpis> {
+  filters = withTenant(filters)
   if (await isDbAvailable()) {
     const data = await getOverviewKpisReal(filters)
     if (data) return data
@@ -543,6 +559,7 @@ export async function getOverviewKpis(
 export async function getTrends(
   filters: AnalyticsFilters
 ): Promise<TrendsResult> {
+  filters = withTenant(filters)
   if (await isDbAvailable()) {
     const data = await getTrendsReal(filters)
     if (data) return data
@@ -554,6 +571,7 @@ export async function getEvaluationResults(
   filters: AnalyticsFilters,
   limit = 50
 ): Promise<EvaluationRow[]> {
+  filters = withTenant(filters)
   if (await isDbAvailable()) {
     const data = await getEvaluationResultsReal(filters, limit)
     if (data) return data
@@ -564,6 +582,7 @@ export async function getEvaluationResults(
 export async function getUsecaseBreakdown(
   filters: AnalyticsFilters
 ): Promise<UsecaseRow[]> {
+  filters = withTenant(filters)
   if (await isDbAvailable()) {
     const data = await getUsecaseBreakdownReal(filters)
     if (data) return data
