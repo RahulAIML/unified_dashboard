@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from "react"
 
 interface ApiState<T> {
   data:    T | null
@@ -10,8 +10,16 @@ interface ApiState<T> {
 
 /**
  * Generic fetch hook for dashboard API routes.
- * Refetches whenever `url` changes (include query params in the url).
- * Returns { data, loading, error }.
+ *
+ * Auto-unwraps the standard ApiResponse wrapper:
+ *   { success, data, meta } → returns .data as T
+ *
+ * This means pages always receive the typed payload directly — no page
+ * changes are needed when routes adopt the standard contract format.
+ * Falls back to returning the raw response if the wrapper is absent
+ * (backward-compatible).
+ *
+ * Refetches whenever `url` changes. Returns { data, loading, error }.
  */
 export function useApi<T>(url: string | null): ApiState<T> {
   const [state, setState] = useState<ApiState<T>>({
@@ -20,7 +28,6 @@ export function useApi<T>(url: string | null): ApiState<T> {
     error:   null,
   })
 
-  // Track the last url that triggered a request to avoid stale results
   const lastUrl = useRef<string | null>(null)
 
   useEffect(() => {
@@ -32,36 +39,69 @@ export function useApi<T>(url: string | null): ApiState<T> {
     let cancelled = false
     lastUrl.current = url
 
-    setState(s => ({ ...s, loading: true, error: null }))
+    setState((s) => ({ ...s, loading: true, error: null }))
 
     fetch(url)
-      .then(async res => {
+      .then(async (res) => {
         const json = await res.json()
-        if (!res.ok) throw new Error(json?.error ?? `HTTP ${res.status}`)
+
+        if (!res.ok) {
+          // Prefer the error field from the standard contract, then generic message
+          const errMsg = json?.error ?? `HTTP ${res.status}`
+          throw new Error(errMsg)
+        }
+
+        // ── Auto-unwrap standard ApiResponse contract ─────────────────────
+        // Shape: { success: boolean, data: T, meta: {...} }
+        if (
+          json !== null &&
+          typeof json === "object" &&
+          "success" in json &&
+          "data" in json
+        ) {
+          if (!json.success) {
+            throw new Error(json.error ?? "API returned success: false")
+          }
+          return json.data as T
+        }
+
+        // Legacy / non-wrapped response — return as-is
         return json as T
       })
-      .then(data => {
+      .then((data) => {
         if (!cancelled && lastUrl.current === url) {
           setState({ data, loading: false, error: null })
         }
       })
-      .catch(err => {
+      .catch((err) => {
         if (!cancelled && lastUrl.current === url) {
-          setState({ data: null, loading: false, error: String(err?.message ?? err) })
+          setState({
+            data:    null,
+            loading: false,
+            error:   String(err?.message ?? err),
+          })
         }
       })
 
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [url])
 
   return state
 }
 
-/** Build a dashboard API URL with date-range query params. */
+/**
+ * Builds a dashboard API URL with date-range query params.
+ *
+ * @example
+ *   buildApiUrl("/api/dashboard/overview", from, to, { solution: "coach" })
+ *   // → "/api/dashboard/overview?from=...&to=...&solution=coach"
+ */
 export function buildApiUrl(
-  path: string,
-  from: Date,
-  to:   Date,
+  path:  string,
+  from:  Date,
+  to:    Date,
   extra?: Record<string, string>
 ): string {
   const p = new URLSearchParams({

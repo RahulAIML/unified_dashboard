@@ -1,4 +1,24 @@
 // ─────────────────────────────────────────────
+//  Standard API contract types
+// ─────────────────────────────────────────────
+
+export interface ApiMeta {
+  filters:   Record<string, unknown>
+  timestamp: string
+  source:    "db"
+}
+
+/**
+ * Every API route returns this wrapper.
+ * The useApi hook auto-unwraps .data so pages receive T directly.
+ */
+export interface ApiResponse<T> {
+  success: boolean
+  data:    T
+  meta:    ApiMeta
+}
+
+// ─────────────────────────────────────────────
 //  Core domain types — mirrored from DB schema
 // ─────────────────────────────────────────────
 

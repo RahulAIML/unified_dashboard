@@ -1,37 +1,28 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getDashboardOverview } from '@/lib/data-provider'
-import { solutionToUsecaseIds } from '@/lib/solution-map'
+import { NextRequest } from "next/server"
+import { getDashboardOverview } from "@/lib/data-provider"
+import { buildSuccess, buildApiError, parseDateRange, parseUsecaseFilter, parseClientId } from "@/lib/api-utils"
 
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = request.nextUrl
-    const from = new Date(searchParams.get('from') ?? '')
-    const to   = new Date(searchParams.get('to')   ?? '')
+    const sp = request.nextUrl.searchParams
 
-    if (isNaN(from.getTime()) || isNaN(to.getTime())) {
-      return NextResponse.json({ error: 'Invalid date range' }, { status: 400 })
-    }
+    const range = parseDateRange(sp)
+    if (!range) return buildApiError("Invalid date range — provide ?from= and ?to= as ISO strings", 400)
 
-    // Prefer ?solution=lms over raw ?usecaseIds=323,351 (solution mapping wins)
-    const solution = searchParams.get('solution')
-    let usecaseIds: number[] | undefined
+    const { solution, usecaseIds } = parseUsecaseFilter(sp)
+    const clientId                 = parseClientId(sp)
 
-    if (solution) {
-      usecaseIds = solutionToUsecaseIds(solution)
-    } else {
-      const idsParam = searchParams.get('usecaseIds')
-      usecaseIds = idsParam
-        ? idsParam.split(',').map(Number).filter(n => !isNaN(n))
-        : undefined
-    }
+    const data = await getDashboardOverview({ from: range.from, to: range.to, usecaseIds })
 
-    const data = await getDashboardOverview({ from, to, usecaseIds })
-    return NextResponse.json(data)
+    return buildSuccess(data, {
+      from:       range.from.toISOString(),
+      to:         range.to.toISOString(),
+      solution,
+      usecaseIds: usecaseIds ?? null,
+      clientId,
+    })
   } catch (err) {
-    console.error('[/api/dashboard/overview]', err)
-    return NextResponse.json(
-      { error: 'Failed to load overview data' },
-      { status: 500 }
-    )
+    console.error("[/api/dashboard/overview]", err)
+    return buildApiError("Failed to load overview data")
   }
 }

@@ -6,7 +6,7 @@ import { ChartCard } from "@/components/ChartCard"
 import { useDashboardStore } from "@/lib/store"
 import { useT } from "@/lib/lang-store"
 import { useApi, buildApiUrl } from "@/lib/hooks/useApi"
-import { brand } from "@/lib/brand"
+import { useClientBrand } from "@/lib/hooks/useClientBrand"
 import type {
   OverviewApiResponse,
   TrendsApiResponse,
@@ -38,7 +38,8 @@ function EmptyState({ label }: { label?: string }) {
 
 export default function SecondBrainPage() {
   const { dateRange } = useDashboardStore()
-  const t = useT()
+  const t     = useT()
+  const brand = useClientBrand()
   const days = Math.round((dateRange.to.getTime() - dateRange.from.getTime()) / 86_400_000)
 
   const overviewUrl = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to) + "&solution=second-brain"

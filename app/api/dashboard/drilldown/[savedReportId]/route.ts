@@ -1,33 +1,29 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getDrilldown } from '@/lib/data-provider'
+import { NextRequest } from "next/server"
+import { getDrilldown } from "@/lib/data-provider"
+import { buildSuccess, buildApiError, parseClientId } from "@/lib/api-utils"
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ savedReportId: string }> }
 ) {
   try {
     const { savedReportId } = await params
-    const id = Number(savedReportId)
+    const id       = Number(savedReportId)
+    const clientId = parseClientId(request.nextUrl.searchParams)
 
     if (isNaN(id)) {
-      return NextResponse.json({ error: 'Invalid report ID' }, { status: 400 })
+      return buildApiError("Invalid report ID", 400)
     }
 
     const data = await getDrilldown(id)
 
     if (!data) {
-      return NextResponse.json(
-        { error: 'Report not found' },
-        { status: 404 }
-      )
+      return buildApiError("Report not found", 404)
     }
 
-    return NextResponse.json(data)
+    return buildSuccess(data, { savedReportId: id, clientId })
   } catch (err) {
-    console.error('[/api/dashboard/drilldown]', err)
-    return NextResponse.json(
-      { error: 'Failed to load drilldown data' },
-      { status: 500 }
-    )
+    console.error("[/api/dashboard/drilldown]", err)
+    return buildApiError("Failed to load drilldown data")
   }
 }

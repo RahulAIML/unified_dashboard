@@ -6,6 +6,7 @@ import { Calendar, Filter } from "lucide-react"
 import { useDashboardStore } from "@/lib/store"
 import { useLangStore, useT } from "@/lib/lang-store"
 import { useClientBrand } from "@/lib/hooks/useClientBrand"
+import { DateRangePicker } from "@/components/DateRangePicker"
 import { cn } from "@/lib/utils"
 import type { Module } from "@/lib/types"
 
@@ -34,9 +35,11 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
   const { lang, toggle: toggleLang } = useLangStore()
   const t     = useT()
   const brand = useClientBrand()
-  const [activeDays, setActiveDays] = useState(30)
 
-  // ── Step 10: Read ?client= from URL on mount and sync to store ──────────────
+  // "custom" means the DateRangePicker was last used — no preset is active
+  const [activeDays, setActiveDays] = useState<number | "custom">(30)
+
+  // ── Read ?client= from URL on mount and sync to store ──────────────────────
   useEffect(() => {
     if (typeof window === "undefined") return
     const params   = new URLSearchParams(window.location.search)
@@ -49,6 +52,11 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
     const to   = new Date()
     const from = new Date()
     from.setDate(from.getDate() - days)
+    setDateRange({ from, to })
+  }
+
+  function applyCustomRange(from: Date, to: Date) {
+    setActiveDays("custom")
     setDateRange({ from, to })
   }
 
@@ -79,9 +87,10 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
               {lang === "en" ? "ES" : "EN"}
             </button>
 
-            {/* Date presets */}
+            {/* Date presets + custom range */}
             <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
               <Calendar className="w-3.5 h-3.5 text-muted-foreground ml-1" />
+
               {DATE_PRESETS.map(({ label, days }) => (
                 <button
                   key={days}
@@ -99,11 +108,14 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
                   {label}
                 </button>
               ))}
+
+              {/* Custom date range picker */}
+              <DateRangePicker onApply={applyCustomRange} />
             </div>
           </div>
         </div>
 
-        {/* Solution filter — single-select, drives KPI updates */}
+        {/* Solution filter — single-select */}
         {showModuleFilter && (
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
