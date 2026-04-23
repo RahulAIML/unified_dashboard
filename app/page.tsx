@@ -35,10 +35,10 @@ const kpiIcons = [
 ]
 
 // ── Skeleton shimmer ──────────────────────────────────────────────────────────
-function KpiSkeleton() {
+function KpiSkeleton({ color }: { color: string }) {
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
-      <div className="h-[3px]" style={{ background: brand.primaryColor }} />
+      <div className="h-[3px]" style={{ background: color }} />
       <div className="p-5 space-y-3 animate-pulse">
         <div className="h-3 w-24 rounded bg-muted" />
         <div className="h-8 w-20 rounded bg-muted" />
@@ -272,7 +272,7 @@ export default function OverviewPage() {
         {/* KPI cards */}
         <div className="grid grid-cols-2 md:grid-cols-2 xl:grid-cols-4 gap-4">
           {isLoading
-            ? Array.from({ length: 4 }).map((_, i) => <KpiSkeleton key={i} />)
+            ? Array.from({ length: 4 }).map((_, i) => <KpiSkeleton key={i} color={brand.primaryColor} />)
             : kpiCards.length > 0
               ? kpiCards.map((kpi, i) => (
                   <SummaryCard
