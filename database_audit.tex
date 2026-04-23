@@ -1,0 +1,830 @@
+\documentclass[12pt,a4paper]{article}
+
+% ── Packages ─────────────────────────────────────────────────────────────────
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{lmodern}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{tabularx}
+\usepackage{ltxtable}         % longtable + tabularx combined
+\usepackage{xcolor}
+\usepackage{colortbl}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{mdframed}
+\usepackage{float}
+\usepackage{amsmath}
+\usepackage{microtype}
+\usepackage{pdflscape}        % landscape pages for wide tables
+\usepackage{url}              % \path{} — breaks at underscores in tt text
+\usepackage{makecell}         % \thead, \makecell for multi-line headers
+\usepackage{ragged2e}         % \RaggedRight in table cells
+
+% ── Global table spacing (reduce from default 6pt to 4pt) ────────────────────
+\setlength{\tabcolsep}{4pt}
+
+% ── Brand colours ─────────────────────────────────────────────────────────────
+\definecolor{rolred}{RGB}{220,38,38}
+\definecolor{rolblack}{RGB}{17,17,17}
+\definecolor{lightgray}{RGB}{245,245,245}
+\definecolor{medgray}{RGB}{229,229,229}
+\definecolor{darkgray}{RGB}{82,82,82}
+\definecolor{green}{RGB}{21,128,61}
+\definecolor{amber}{RGB}{180,83,9}
+\definecolor{rose}{RGB}{190,18,60}
+\definecolor{blue}{RGB}{29,78,216}
+\definecolor{warnbg}{RGB}{255,242,242}
+
+% ── Status macros ─────────────────────────────────────────────────────────────
+\newcommand{\yes}{\textcolor{green}{\textbf{YES}}}
+\newcommand{\partialok}{\textcolor{amber}{\textbf{PARTIAL}}}
+\newcommand{\no}{\textcolor{rose}{\textbf{NO}}}
+\newcommand{\warn}[1]{\textcolor{amber}{\textbf{#1}}}
+\newcommand{\good}[1]{\textcolor{green}{\textbf{#1}}}
+\newcommand{\bad}[1]{\textcolor{rose}{\textbf{#1}}}
+\newcommand{\info}[1]{\textcolor{blue}{\textbf{#1}}}
+
+% ── Field-key helper: typewriter font that breaks at underscores ──────────────
+% Usage: \fk{overall_score}   (no escaping needed)
+\newcommand{\fk}[1]{{\small\path{#1}}}
+
+% ── Section styling ───────────────────────────────────────────────────────────
+\titleformat{\section}
+  {\color{rolred}\large\bfseries}
+  {\thesection}{1em}{}[\color{rolred}\titlerule]
+
+\titleformat{\subsection}
+  {\color{rolblack}\normalsize\bfseries}
+  {\thesubsection}{1em}{}
+
+% ── Header / Footer ───────────────────────────────────────────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textcolor{rolred}{\textbf{Rolplay}} \textcolor{darkgray}{Analytics --- Database Audit}}
+\fancyhead[R]{\textcolor{darkgray}{April 2026}}
+\fancyfoot[C]{\textcolor{darkgray}{\thepage}}
+\renewcommand{\headrulewidth}{1.5pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{rolred}\leaders\hrule height \headrulewidth\hfill}}
+
+% ── Hyperref setup ────────────────────────────────────────────────────────────
+\hypersetup{
+  colorlinks=true,
+  linkcolor=rolred,
+  urlcolor=blue,
+  pdftitle={Rolplay Analytics - Database Audit Report},
+  pdfauthor={Rolplay Engineering}
+}
+
+% ── Column types ─────────────────────────────────────────────────────────────
+% L/C/R = ragged/centred/right paragraph columns of fixed width
+\newcolumntype{L}[1]{>{\RaggedRight\arraybackslash}p{#1}}
+\newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
+\newcolumntype{R}[1]{>{\RaggedLeft\arraybackslash}p{#1}}
+% W = tabularx expanding column (left-aligned)
+\newcolumntype{W}{>{\RaggedRight\arraybackslash}X}
+
+% ── Info / Warn boxes ─────────────────────────────────────────────────────────
+\newmdenv[
+  backgroundcolor=lightgray,
+  linecolor=rolred,
+  linewidth=2pt,
+  leftline=true, rightline=false, topline=false, bottomline=false,
+  innerleftmargin=10pt, innerrightmargin=10pt,
+  innertopmargin=8pt,   innerbottommargin=8pt
+]{infobox}
+
+\newmdenv[
+  backgroundcolor=warnbg,
+  linecolor=rose,
+  linewidth=2pt,
+  leftline=true, rightline=false, topline=false, bottomline=false,
+  innerleftmargin=10pt, innerrightmargin=10pt,
+  innertopmargin=8pt,   innerbottommargin=8pt
+]{warnbox}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\begin{document}
+
+% ── Title Page ────────────────────────────────────────────────────────────────
+\begin{titlepage}
+  \centering
+  \vspace*{2cm}
+
+  {\color{rolred}\rule{\linewidth}{3pt}}
+  \vspace{1cm}
+
+  {\Huge\bfseries\color{rolblack} Database Audit Report}\\[0.6cm]
+  {\Large\color{darkgray} \texttt{rolplay\_pro\_analytics}}\\[0.4cm]
+  {\large\color{rolred} Based on Live Production Data}
+
+  \vspace{1cm}
+  {\color{rolred}\rule{\linewidth}{1.5pt}}
+
+  \vspace{1.5cm}
+
+  \begin{tabular}{ll}
+    \textbf{Database:}    & \texttt{rolplay\_pro\_analytics} \\[4pt]
+    \textbf{Server:}      & \texttt{rolplay.pro} (MariaDB 5.5.68) \\[4pt]
+    \textbf{Access via:}  & PHP Bridge (\texttt{/src/rolplay-bridge.php}) \\[4pt]
+    \textbf{Audit date:}  & 16 April 2026 \\[4pt]
+    \textbf{Data period:} & 07 April 2026 -- 15 April 2026 \\[4pt]
+    \textbf{Prepared by:} & Rolplay Engineering \\
+  \end{tabular}
+
+  \vspace{2cm}
+
+  \begin{infobox}
+    \textbf{Audit scope:} Full schema inspection, field-level analysis, KPI
+    feasibility assessment, and API design recommendations based exclusively on
+    live production data queried through the bridge API.  No assumptions or
+    estimates are made beyond what the database contains.
+  \end{infobox}
+
+  \vfill
+  {\color{rolred}\rule{\linewidth}{3pt}}
+\end{titlepage}
+
+% ── Table of Contents ─────────────────────────────────────────────────────────
+\tableofcontents
+\newpage
+
+% =============================================================================
+\section{Executive Summary}
+% =============================================================================
+
+\begin{infobox}
+\textbf{Key finding:} The database is operational and queryable.  All data
+originates from a single 9-day window (Apr 7--15, 2026) across 19 unique use
+cases.  Two tables store all analytics in an Entity-Attribute-Value (EAV)
+structure.  The system is \textbf{live but young} --- session volumes are low
+and several structural inconsistencies (mixed score scales, absent pass/fail
+fields) must be resolved before global KPI aggregation is valid.
+\end{infobox}
+
+\vspace{0.5cm}
+
+\begin{table}[H]
+\centering\small
+\begin{tabular}{L{6cm} R{2.5cm} L{5.5cm}}
+\toprule
+\textbf{Metric} & \textbf{Value} & \textbf{Note} \\
+\midrule
+Total tables                   & 2       & \texttt{report\_field\_current}, \texttt{report\_payload\_current} \\
+Total rows (field table)        & 1{,}944 & Across all use cases \\
+Total rows (payload table)      & 78      & One row per session payload \\
+Unique sessions (reports)       & 77      & Total; 60 have \texttt{overall\_score} field \\
+Unique use cases active         & 19      & Not all mapped to a solution module \\
+Unique field keys               & 279     & High variance; usecase-specific schemas \\
+Data date range                 & 9 days  & Apr 7 -- Apr 15, 2026 \\
+\bottomrule
+\end{tabular}
+\caption{Database at a glance}
+\end{table}
+
+% =============================================================================
+\section{Database Schema}
+% =============================================================================
+
+\subsection{Table 1: \texttt{report\_field\_current}}
+
+This is the primary analytics table.  Every evaluation metric from every
+session is stored as a separate row (EAV pattern).
+
+\begin{table}[H]
+\centering\small
+\begin{tabular}{L{3.8cm} L{3cm} C{1.6cm} L{5.8cm}}
+\toprule
+\textbf{Column} & \textbf{Type} & \textbf{Null?} & \textbf{Description} \\
+\midrule
+\texttt{id}                 & INT(11) AUTO\_INC  & NO  & Primary key \\
+\texttt{saved\_report\_id}  & INT(11)            & NO  & Session ID; joins to payload table \\
+\texttt{usecase\_id}        & INT(11)            & YES & Which use case generated this row \\
+\texttt{report\_created\_at}& DATETIME           & NO  & Session timestamp (indexed) \\
+\texttt{field\_key}         & VARCHAR(150)       & NO  & Metric name, e.g.\ \texttt{overall\_score} \\
+\texttt{field\_label}       & VARCHAR(255)       & YES & Human-readable Spanish label \\
+\texttt{value\_num}         & DECIMAL(12,4)      & YES & Numeric value (scores, ratings) \\
+\texttt{value\_text}        & VARCHAR(255)       & YES & Short categorical value \\
+\texttt{value\_longtext}    & LONGTEXT           & YES & AI-generated narrative text \\
+\texttt{created\_at}        & DATETIME           & NO  & Row insert timestamp \\
+\midrule
+\multicolumn{4}{L{14.2cm}}{\textit{Indexes: PRIMARY (id); KEY on saved\_report\_id,
+  usecase\_id, report\_created\_at, field\_key, field\_label}} \\
+\bottomrule
+\end{tabular}
+\caption{\texttt{report\_field\_current} --- column definitions}
+\end{table}
+
+\subsection{Table 2: \texttt{report\_payload\_current}}
+
+One row per session.  Stores the raw closing JSON payload from the Rolplay AI
+engine alongside a session timestamp.
+
+\begin{table}[H]
+\centering\small
+\begin{tabular}{L{3.8cm} L{3.2cm} C{1.6cm} L{5.6cm}}
+\toprule
+\textbf{Column} & \textbf{Type} & \textbf{Null?} & \textbf{Description} \\
+\midrule
+\texttt{id}                  & INT(11) AUTO\_INC  & NO  & Primary key \\
+\texttt{saved\_report\_id}   & INT(11) UNIQUE     & NO  & Session ID (unique per session) \\
+\texttt{report\_created\_at} & DATETIME           & NO  & Session timestamp (indexed) \\
+\texttt{closing\_json}       & LONGTEXT           & YES & Full AI report as JSON (1.4--4.4 KB) \\
+\texttt{created\_at}         & DATETIME           & NO  & Row insert timestamp \\
+\bottomrule
+\end{tabular}
+\caption{\texttt{report\_payload\_current} --- column definitions}
+\end{table}
+
+\subsection{Entity-Attribute-Value Design}
+
+\begin{infobox}
+\textbf{Design pattern:} Every session (\texttt{saved\_report\_id}) generates
+N rows in \texttt{report\_field\_current} --- one row per metric.  Different
+use cases produce different sets of \texttt{field\_key} values.  There is
+\textbf{no fixed schema per session}; the fields present depend entirely on
+the use case that generated the report.
+\end{infobox}
+
+\textbf{Row counts per session by use case (sample):}
+Use case 401 produces the most rows per session ($\approx$35 rows/session),
+while use cases 369, 400, and 402 produce only 7--12 rows/session.
+
+% =============================================================================
+\section{Data Coverage by Use Case}
+% =============================================================================
+
+% Wide 7-column table — use landscape orientation
+\begin{landscape}
+\begin{table}[H]
+\centering\small
+\begin{tabular}{C{2cm} L{4.5cm} R{2.2cm} R{2.5cm} R{2.5cm} C{3cm} C{3cm}}
+\toprule
+\textbf{UC ID} & \textbf{Module} & \textbf{Sessions} & \textbf{Total rows} &
+\textbf{Unique fields} & \textbf{Score scale} & \textbf{Pass/fail} \\
+\midrule
+\rowcolor{lightgray}
+401 & Coach (unmapped) & 15 & 525 & 44 & 0--10 & \no \\
+385 & Coach            & 13 & 189 & 35 & 0--10 & \no \\
+\rowcolor{lightgray}
+394 & Certification    & 11 & 506 & 46 & 0--100 & \yes \\
+390 & Simulator        & 10 & 120 & 12 & 0--10  & \no \\
+\rowcolor{lightgray}
+396 & Second Brain     &  6 &  72 & 12 & 0--10  & \no \\
+389 & Simulator        &  5 &  79 & 28 & 0--10  & \no \\
+\rowcolor{lightgray}
+391 & Simulator        &  3 &  57 & 19 & 0--10  & \no \\
+381 & Coach            &  2 &  92 & 46 & 0--100 & \yes \\
+\rowcolor{lightgray}
+323 & LMS              &  2 &  52 & 26 & 0 only & \no \\
+363 & LMS              &  1 &  46 & 46 & 0--100 & \yes\ (1 row) \\
+\rowcolor{lightgray}
+387 & Unknown          &  1 &  55 & 55 & n/a    & \no \\
+354 & Unknown          &  1 &  71 & 71 & n/a    & \no \\
+\rowcolor{lightgray}
+392 & Certification    &  1 &  19 & 19 & 0--10  & \no \\
+351 & LMS              &  1 &  19 & 19 & 0--10  & \no \\
+\rowcolor{lightgray}
+397 & Second Brain     &  1 &  12 & 12 & 0--10  & \no \\
+369 & Coach            &  1 &   7 &  7 & 0 only & \no \\
+\rowcolor{lightgray}
+400 & Unknown          &  1 &   7 &  7 & 0--10  & \no \\
+402 & Unknown          &  1 &  12 & 12 & 0--10  & \no \\
+205 & Unknown          &  1 &   4 &  4 & n/a    & \no \\
+\midrule
+\textbf{Total} & & \textbf{77*} & \textbf{1{,}944} & \textbf{279} & & \\
+\bottomrule
+\end{tabular}
+\caption{Session and data coverage by use case.\quad
+  *77 = all sessions including those without \texttt{overall\_score};
+  60 sessions have a scoreable \texttt{overall\_score} field.}
+\end{table}
+\end{landscape}
+
+\begin{warnbox}
+\textbf{Critical finding:} Use case \textbf{401} has the highest session
+count (15) and is the richest data source (44 unique fields including full
+coaching methodology scores), yet it was \textbf{not mapped} to any solution
+module in the original \texttt{SOLUTION\_USECASE\_MAP}.
+This has now been fixed --- UC 401 is mapped to the Coach module.
+\end{warnbox}
+
+% =============================================================================
+\section{Field Key Catalogue}
+% =============================================================================
+
+All 279 distinct \texttt{field\_key} values group into six functional
+categories.  Only fields with 5+ rows across all sessions are listed as
+``stable''; fields with 1--4 rows are considered transient.
+
+\subsection{Category A --- Global Numeric Scores}
+
+\begin{table}[H]
+\centering\small
+\begin{tabular}{L{5cm} C{1.5cm} R{1.5cm} L{3cm} C{2.5cm}}
+\toprule
+\textbf{field\_key} & \textbf{Rows} & \textbf{Avg} & \textbf{Range} & \textbf{Scale} \\
+\midrule
+\fk{overall_score}                         & 60 & 17.9* & 0 -- 77    & \warn{MIXED} \\
+\fk{score_bar}                             & 26 & 62.5  & 0 -- 100   & 0--100 \\
+\fk{question_quality_score}                & 25 & 5.52  & 0 -- 9     & 0--10 \\
+\fk{calificacion_global}                   & 14 & 5.21  & 3.5 -- 7.2 & 0--10 \\
+\fk{belief_final_score}                    & 11 & 2.55  & 2 -- 3     & 1--3 \\
+\fk{apertura_colaborador_nivel_inicial}    & 14 & 2.00  & 2 -- 2     & 1--5 \\
+\fk{apertura_colaborador_nivel_final}      & 14 & 3.43  & 3 -- 5     & 1--5 \\
+\fk{apertura_colaborador_movimiento}       &  5 & 1.80  & 1 -- 3     & delta \\
+\fk{nivel_lider}                           &  2 & 6.00  & 6 -- 6     & unknown \\
+\bottomrule
+\end{tabular}
+\caption{Global numeric fields.\quad *\texttt{overall\_score} average is
+  misleading due to mixed scales (see Section~\ref{sec:gaps}).}
+\end{table}
+
+\subsection{Category B --- Competency Sub-scores (Use Case 394 --- Certification)}
+
+These 9 competency fields are present in UC 394 only (11 sessions each).
+All are on a \textbf{0--9 scale}.
+
+\begin{table}[H]
+\centering\small
+\begin{tabular}{L{7.5cm} C{1.5cm} R{2cm} L{3cm}}
+\toprule
+\textbf{field\_key} & \textbf{Rows} & \textbf{Avg / 9} & \textbf{Competency} \\
+\midrule
+\fk{c6_conocimiento_producto_score}       & 11 & 7.64 & Product knowledge \\
+\fk{c1_apertura_score}                    & 11 & 7.09 & Opening \\
+\fk{c5_address_why_objeciones_score}      & 11 & 6.91 & Objection handling \\
+\fk{c9_actitud_consultiva_score}          & 11 & 6.64 & Consultative attitude \\
+\fk{c2_identify_why_needs_score}          & 11 & 6.45 & Needs identification \\
+\fk{c4_address_why_valor_score}           & 11 & 6.18 & Value proposition \\
+\fk{c3_identify_why_consequences_score}   & 11 & 4.91 & Consequences identification \\
+\fk{c7_create_action_confirmacion_score}  & 11 & 3.09 & Action / Confirmation \\
+\fk{c8_create_action_cierre_score}        & 11 & 1.82 & Closing \\
+\bottomrule
+\end{tabular}
+\caption{Competency radar fields (UC 394), sorted by average score descending.
+  \texttt{c8\_create\_action\_cierre\_score} is the lowest-performing competency.}
+\end{table}
+
+\subsection{Category C --- Coaching Methodology Scores (Use Case 401)}
+
+These methodology fields belong exclusively to UC 401 (15 sessions, all on
+\textbf{0--9 scale}).
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\linewidth}{W R{1.8cm} R{2cm}}
+\toprule
+\textbf{field\_key} & \textbf{Rows} & \textbf{Avg / 9} \\
+\midrule
+\fk{evaluacion_metodologia_areas_oportunidad_calificacion} & 14 & 7.79 \\
+\fk{evaluacion_metodologia_apertura_calificacion}          & 14 & 7.07 \\
+\fk{evaluacion_metodologia_compromisos_calificacion}       & 14 & 5.29 \\
+\fk{evaluacion_metodologia_objetivo_calificacion}          & 14 & 4.64 \\
+\fk{evaluacion_metodologia_resolucion_calificacion}        & 14 & 4.50 \\
+\fk{evaluacion_metodologia_seguimiento_calificacion}       & 14 & 0.00 \\
+\fk{evaluacion_metodologia_fortalezas_calificacion}        & 14 & 0.00 \\
+\bottomrule
+\end{tabularx}
+\caption{Coaching methodology scores (UC 401).  Two fields consistently return
+  0 --- \texttt{seguimiento} and \texttt{fortalezas} may not be evaluated in
+  this scenario.}
+\end{table}
+
+\subsection{Category D --- Categorical / Enum Text Fields}
+
+These fields use a fixed vocabulary of text values and can be counted and
+grouped for distribution charts.
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\linewidth}{L{4cm} C{1.5cm} W}
+\toprule
+\textbf{field\_key} & \textbf{Rows} & \textbf{Distinct values observed} \\
+\midrule
+\fk{overall_result}           & 14 & Básico (8), Bueno (4), Deficiente (2) \\
+\fk{knowledge_level}          & 27 & Intermedio (14), Básico (11), Avanzado (1), Bueno (1) \\
+\fk{question_quality_rating}  & 32 & Bueno (16), Regular (9), Deficiente (6), Excelente (1) \\
+\fk{belief_result}            & 13 & 6 distinct narrative outcomes \\
+\bottomrule
+\end{tabularx}
+\caption{Categorical fields with enum-style values.  \texttt{overall\_result}
+  defines pass/fail: anything except ``Deficiente'' is treated as a pass.}
+\end{table}
+
+\subsection{Category E --- AI-Generated Text Insights}
+
+These fields contain long-form narrative generated by the Rolplay AI.  They
+cannot be aggregated numerically but can be displayed per-session in a
+detail/drilldown view.
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\linewidth}{W C{1.5cm} L{2.5cm}}
+\toprule
+\textbf{field\_key} & \textbf{Rows} & \textbf{Type} \\
+\midrule
+\fk{overall_assessment}          & 62 & LONGTEXT \\
+\fk{strengths}                   & 40 & TEXT \\
+\fk{question_quality_analysis}   & 32 & LONGTEXT \\
+\fk{weaknesses}                  & 26 & LONGTEXT \\
+\fk{session_summary}             & 25 & LONGTEXT \\
+\fk{coaching_recommendations}    & 25 & LONGTEXT \\
+\fk{improvement_areas}           & 25 & LONGTEXT \\
+\fk{general_strengths}           & 21 & LONGTEXT \\
+\fk{general_improvement_areas}   & 21 & LONGTEXT \\
+\fk{areas_for_improvement}       & 15 & LONGTEXT \\
+\fk{resumen_ejecutivo}           & 14 & LONGTEXT \\
+\fk{final_recommendations}       & 14 & LONGTEXT \\
+\fk{belief_analysis}             & 13 & LONGTEXT \\
+\fk{c1_apertura_justification}   & 14 & TEXT \\
+\fk{c*_*_recommendation}         & 13+ each & LONGTEXT \\
+\fk{apertura_colaborador_explicacion} & 14 & LONGTEXT \\
+\fk{resumen_global}              &  1 & LONGTEXT \\
+\fk{regional_recommendations}    &  1 & LONGTEXT \\
+\bottomrule
+\end{tabularx}
+\caption{AI text insight fields.  The \texttt{closing\_json} in
+  \texttt{report\_payload\_current} is the source; fields are extracted into
+  \texttt{report\_field\_current} rows.}
+\end{table}
+
+\subsection{Category F --- Transient / Single-session Fields}
+
+Approximately 150 of the 279 unique \texttt{field\_key} values appear in only
+1--2 sessions.  These are highly use-case-specific and not suitable for
+cross-session aggregation.  Examples include \texttt{q1\_question} through
+\texttt{q10\_question} (interview Q\&A logs), \texttt{fortalezas\_1} through
+\texttt{fortalezas\_3}, and \texttt{recomendacion\_1} through
+\texttt{recomendacion\_3}.
+
+% =============================================================================
+\section{KPI Feasibility Matrix}
+% =============================================================================
+
+% column widths: 3.2 + 4.8 + 1.5 + 1.8 + 3.0 = 14.3cm  (fits in 14.31cm available)
+\begin{longtable}{L{3.2cm} L{4.8cm} C{1.5cm} C{1.8cm} L{3.0cm}}
+\toprule
+\textbf{KPI} & \textbf{Source field} & \textbf{Agg.} & \textbf{Feasibility} & \textbf{Condition} \\
+\midrule
+\endfirsthead
+\multicolumn{5}{l}{\small\textit{--- continued from previous page}} \\[2pt]
+\toprule
+\textbf{KPI} & \textbf{Source field} & \textbf{Agg.} & \textbf{Feasibility} & \textbf{Condition} \\
+\midrule
+\endhead
+\midrule
+\multicolumn{5}{r}{\small\textit{Continued on next page\ldots}}
+\endfoot
+\bottomrule
+\endlastfoot
+
+% ── Global ────────────────────────────────────────────────────────────────────
+\rowcolor{medgray}
+\multicolumn{5}{l}{\textbf{Global Metrics}} \\
+\midrule
+Total sessions      & \fk{saved_report_id} COUNT DISTINCT & COUNT & \yes & Always valid \\
+Sessions by day     & \fk{report_created_at}              & COUNT & \yes & Always valid \\
+Sessions by use case& \fk{usecase_id}                     & COUNT & \yes & Always valid \\
+Pass rate           & \fk{overall_result}                 & COUNT/CASE & \partialok & Only 14/77 sessions \\
+Global avg score    & \fk{overall_score}                  & AVG   & \no  & Mixed scales 0--10 vs 0--100 \\
+\midrule
+
+% ── Module ───────────────────────────────────────────────────────────────────
+\rowcolor{medgray}
+\multicolumn{5}{l}{\textbf{Module-wise Metrics}} \\
+\midrule
+Knowledge level dist.  & \fk{knowledge_level}           & COUNT & \yes & UC 385,389, 390,396,397 \\
+Question quality dist. & \fk{question_quality_rating}   & COUNT & \yes & UC 385,390,394 \\
+Avg question score     & \fk{question_quality_score}    & AVG   & \yes & UC 385,394 \\
+Belief outcome dist.   & \fk{belief_result}             & COUNT & \yes & UC 381,394 \\
+Belief movement score  & \fk{belief_final_score}        & AVG   & \yes & UC 394 only \\
+Belief nivel inicial   & \fk{apertura_colaborador_nivel_inicial} & AVG & \yes & UC 401 only \\
+Belief nivel final     & \fk{apertura_colaborador_nivel_final}   & AVG & \yes & UC 401 only \\
+Coach global score     & \fk{calificacion_global}       & AVG   & \yes & UC 401 (5.21/10) \\
+Pass/fail distribution & \fk{overall_result}            & COUNT & \yes & UC 381, 394, 363 \\
+Certification pass rate& \fk{overall_result} (UC 394)   & AVG   & \yes & 90.9\% pass rate \\
+Avg score by UC        & \fk{overall_score}             & AVG per UC & \partialok & Per-usecase only \\
+\midrule
+
+% ── Competency Radar ─────────────────────────────────────────────────────────
+\rowcolor{medgray}
+\multicolumn{5}{l}{\textbf{Competency Radar (UC 394 --- Certification only)}} \\
+\midrule
+Apertura score       & \fk{c1_apertura_score}                    & AVG & \yes & 7.09/9 \\
+Needs identification & \fk{c2_identify_why_needs_score}          & AVG & \yes & 6.45/9 \\
+Consequences         & \fk{c3_identify_why_consequences_score}   & AVG & \yes & 4.91/9 \\
+Value proposition    & \fk{c4_address_why_valor_score}           & AVG & \yes & 6.18/9 \\
+Objections handling  & \fk{c5_address_why_objeciones_score}      & AVG & \yes & 6.91/9 \\
+Product knowledge    & \fk{c6_conocimiento_producto_score}       & AVG & \yes & 7.64/9 \\
+Action/Confirmation  & \fk{c7_create_action_confirmacion_score}  & AVG & \yes & 3.09/9 \\
+Closing              & \fk{c8_create_action_cierre_score}        & AVG & \yes & 1.82/9 \\
+Consultative attitude& \fk{c9_actitud_consultiva_score}          & AVG & \yes & 6.64/9 \\
+\midrule
+
+% ── Coaching Methodology ─────────────────────────────────────────────────────
+\rowcolor{medgray}
+\multicolumn{5}{l}{\textbf{Coaching Methodology (UC 401 --- now mapped to Coach)}} \\
+\midrule
+Apertura calificacion    & \fk{evaluacion_metodologia_apertura_calificacion}          & AVG & \yes & 7.07/9 \\
+Objetivo calificacion    & \fk{evaluacion_metodologia_objetivo_calificacion}          & AVG & \yes & 4.64/9 \\
+Resolucion calificacion  & \fk{evaluacion_metodologia_resolucion_calificacion}        & AVG & \yes & 4.50/9 \\
+Compromisos calificacion & \fk{evaluacion_metodologia_compromisos_calificacion}       & AVG & \yes & 5.29/9 \\
+Areas oportunidad        & \fk{evaluacion_metodologia_areas_oportunidad_calificacion} & AVG & \yes & 7.79/9 \\
+Seguimiento              & \fk{evaluacion_metodologia_seguimiento_calificacion}       & AVG & \warn{ZERO} & Always 0 \\
+\midrule
+
+% ── Time-based ───────────────────────────────────────────────────────────────
+\rowcolor{medgray}
+\multicolumn{5}{l}{\textbf{Time-based Metrics}} \\
+\midrule
+Daily session trend   & \fk{report_created_at} + COUNT & GROUP BY DATE & \yes       & 6 distinct dates \\
+Weekly session trend  & \fk{report_created_at} + COUNT & GROUP BY WEEK & \partialok & Only 2 weeks \\
+Daily avg score trend & \fk{overall_score} + DATE      & AVG per day   & \partialok & Single-scale UCs only \\
+Daily pass/fail trend & \fk{overall_result} + DATE     & COUNT/CASE    & \partialok & Only 14 sessions \\
+\midrule
+
+% ── Text Insights ─────────────────────────────────────────────────────────────
+\rowcolor{medgray}
+\multicolumn{5}{l}{\textbf{Text / Qualitative Insights (display only)}} \\
+\midrule
+Session summary          & \fk{session_summary}          & DISPLAY & \yes & Per-session view \\
+Strengths panel          & \fk{strengths}, \fk{general_strengths} & DISPLAY & \yes & Per-session view \\
+Improvement areas        & \fk{improvement_areas}, \fk{weaknesses} & DISPLAY & \yes & Per-session view \\
+Coaching recommendations & \fk{coaching_recommendations}  & DISPLAY & \yes & Per-session view \\
+Question analysis        & \fk{question_quality_analysis} & DISPLAY & \yes & Per-session view \\
+Belief analysis          & \fk{belief_analysis}           & DISPLAY & \yes & UC 394 / 381 \\
+Full report JSON         & \fk{closing_json}              & DISPLAY & \yes & From payload table \\
+\end{longtable}
+
+% =============================================================================
+\section{Critical Gaps and Blockers}
+\label{sec:gaps}
+% =============================================================================
+
+\begin{warnbox}
+\textbf{These gaps must be resolved before building a production dashboard
+with aggregated global KPIs.}
+\end{warnbox}
+
+\subsection{Gap 1 --- Mixed Score Scales (Blocker for Global Avg Score)}
+
+\begin{table}[H]
+\centering\small
+\begin{tabular}{C{2cm} L{3.2cm} R{2cm} R{2.2cm} R{2.2cm} L{2.5cm}}
+\toprule
+\textbf{UC} & \textbf{Module} & \textbf{Sessions} & \textbf{Avg score} & \textbf{Max score} & \textbf{Scale} \\
+\midrule
+381 & Coach            &  2 & 72.0 & 77 & \info{0--100} \\
+394 & Certification    & 11 & 61.8 & 71 & \info{0--100} \\
+363 & LMS              &  1 & 34.0 & 34 & \info{0--100} \\
+\midrule
+385 & Coach            & 13 & 5.69 &  7 & \warn{0--10} \\
+389 & Simulator        &  5 & 5.80 &  8 & \warn{0--10} \\
+390 & Simulator        & 10 & 4.10 &  8 & \warn{0--10} \\
+391 & Simulator        &  3 & 7.00 &  8 & \warn{0--10} \\
+396 & Second Brain     &  6 & 3.30 &  8 & \warn{0--10} \\
+397 & Second Brain     &  1 & 7.00 &  7 & \warn{0--10} \\
+401 & Coach (was unmapped) & 15 & n/a & n/a & \warn{0--10} \\
+\midrule
+323 & LMS              &  2 & 0.00 &  0 & \bad{All zeros} \\
+369 & Coach            &  1 & 0.00 &  0 & \bad{All zeros} \\
+\bottomrule
+\end{tabular}
+\caption{Score scale inconsistency.  The blended global average (17.9) is a
+  mathematical artefact of mixing 0--10 and 0--100 values.}
+\end{table}
+
+\textbf{Resolution required:} Either (a) normalise all scores to 0--100 in the
+API layer, or (b) always show scores per-usecase and never aggregate across
+different use cases.
+
+\subsection{Gap 2 --- Pass/Fail Only Present for 3 Use Cases}
+
+\texttt{overall\_result} exists in only 14 of 77 total sessions (use cases 363, 381,
+394).  The remaining 63 sessions have \textbf{no pass/fail outcome}.
+Consequently:
+
+\begin{itemize}[leftmargin=*]
+  \item A global pass rate metric cannot be computed honestly.
+  \item Pass rate is valid only for \textbf{Certification (UC 394)}: 7 Básico + 3 Bueno + 1 Deficiente out of 11 sessions = \textbf{90.9\%} pass.
+  \item Coach UC 381: 1 Bueno, 1 Básico (2 sessions only --- statistically insignificant).
+\end{itemize}
+
+\subsection{Gap 3 --- No User Identifier}
+
+Neither table contains a user ID, user name, or email column.  It is
+\textbf{impossible} to build per-user KPIs, leaderboards, or progress tracking
+from the current schema.  This is a fundamental limitation for any
+``individual performance'' dashboard feature.
+
+\subsection{Gap 4 --- Use Case 401 Not Mapped to a Module (Now Fixed)}
+
+UC 401 is the \textbf{single richest data source} (15 sessions, 44 fields,
+525 rows, full coaching methodology scoring).  It has now been added to the
+\texttt{coach} entry in \texttt{SOLUTION\_USECASE\_MAP}.  UC 387 (55 unique
+fields, 1 session) and UC 354 (71 unique fields, 1 session) still fall outside
+the map.
+
+\subsection{Gap 5 --- Very Short Data History (9 Days)}
+
+All data spans April 7--15, 2026.  There are only \textbf{6 distinct dates}
+with sessions.  Any trend chart will show at most 6 data points regardless of
+the date range selected (7d, 30d, 90d all return identical data).  Meaningful
+trend analysis requires at least 30 days of continuous session data.
+
+\subsection{Gap 6 --- Zero-score Records}
+
+Several sessions record \texttt{overall\_score = 0} (use cases 323, 369).
+These may represent incomplete or failed evaluations.  Without a status field
+it is impossible to distinguish ``genuinely scored 0'' from ``evaluation did
+not complete.''
+
+\subsection{Gap 7 --- Field Key Inconsistency Across Use Cases}
+
+The same concept is expressed with different keys depending on the use case:
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\linewidth}{W W L{3cm}}
+\toprule
+\textbf{field\_key variant A} & \textbf{field\_key variant B} & \textbf{Concept} \\
+\midrule
+\fk{strengths}          & \fk{general_strengths}             & Strong points \\
+\fk{improvement_areas}  & \fk{general_improvement_areas}     & Weak points \\
+\fk{overall_assessment} & \fk{overall_assessment} (diff.\ label) & Summary \\
+\fk{c8_create_action_cierre_recommendation} & \fk{c8_create_action_recommendation} & C8 advice \\
+\bottomrule
+\end{tabularx}
+\caption{Examples of field key fragmentation across use cases.}
+\end{table}
+
+% =============================================================================
+\section{Recommended API Endpoints}
+% =============================================================================
+
+Based only on what the current data supports:
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\linewidth}{W L{4cm} C{1.8cm}}
+\toprule
+\textbf{Endpoint} & \textbf{Returns} & \textbf{Status} \\
+\midrule
+\path{GET /api/dashboard/overview}          & totalSessions, passRate (cert only), sessionsByUsecase & \yes \\
+\path{GET /api/dashboard/trends}            & dailySessionCount (6 pts), passFailTrend & \yes \\
+\path{GET /api/dashboard/usecase-breakdown} & sessions, avgScore per UC & \yes \\
+\path{GET /api/dashboard/results}           & Per-session: score, result, date, UC & \yes \\
+\path{GET /api/dashboard/competencies?uc=394} & c1--c9 radar scores & \yes \\
+\path{GET /api/dashboard/knowledge-dist}    & Básico/Intermedio/Avanzado counts & \yes \\
+\path{GET /api/dashboard/question-quality}  & Bueno/Regular/Deficiente distribution & \yes \\
+\path{GET /api/dashboard/insights?reportId=N} & strengths, improvements, summary & \yes \\
+\path{GET /api/dashboard/coaching?uc=401}   & Methodology scores (apertura, objetivo\ldots) & \yes \\
+\path{GET /api/dashboard/belief-movement}   & nivel\_inicial $\to$ nivel\_final dist. & \yes \\
+\midrule
+\path{GET /api/dashboard/users}             & Per-user KPIs, leaderboard & \no \\
+\path{GET /api/dashboard/score-trend}       & Cross-UC score over time & \no \\
+\bottomrule
+\end{tabularx}
+\caption{Recommended endpoints based on current data.\quad
+  \no\ = blocked by schema gaps.}
+\end{table}
+
+% =============================================================================
+\section{Field-to-API-to-UI Mapping}
+% =============================================================================
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\linewidth}{W W W}
+\toprule
+\textbf{DB field} & \textbf{API field} & \textbf{UI component} \\
+\midrule
+\fk{saved_report_id} COUNT DISTINCT & \texttt{totalSessions}    & KPI card --- Total Sessions \\
+\fk{overall_result} (not Deficiente) & \texttt{passRate}        & KPI card --- Pass Rate (UC 394) \\
+\fk{overall_score} AVG (per UC)      & \texttt{avgScore}        & KPI card (per-module only) \\
+\fk{report_created_at} + COUNT       & \texttt{evalCountTrend[]}& Activity line chart \\
+\fk{overall_result} by date          & \texttt{passFailTrend[]} & Stacked bar chart \\
+\fk{usecase_id} + COUNT              & \texttt{data[].totalEvaluations} & Donut + bar chart \\
+\fk{knowledge_level} COUNT           & \texttt{knowledgeDist[]} & Donut chart \\
+\fk{question_quality_rating} COUNT   & \texttt{qualityDist[]}   & Bar chart \\
+\fk{c1_} -- \fk{c9_*_score} AVG     & \texttt{competencies[]}  & Radar chart (UC 394) \\
+\fk{calificacion_global} AVG         & \texttt{globalScore}     & KPI card (Coach) \\
+\fk{apertura_nivel_inicial/final}    & \texttt{beliefMovement}  & Before/after indicator \\
+\fk{strengths}, \fk{weaknesses}      & \texttt{insights.strengths}, \texttt{.improvements} & Text insight panel \\
+\fk{session_summary}                 & \texttt{insights.summary}& Session detail card \\
+\fk{coaching_recommendations}        & \texttt{insights.recommendations} & Recommendations list \\
+\fk{closing_json}                    & \texttt{payload}         & Full report drilldown \\
+\bottomrule
+\end{tabularx}
+\caption{Complete field $\to$ API $\to$ UI mapping for all feasible KPIs.}
+\end{table}
+
+% =============================================================================
+\section{Immediate Action Items}
+% =============================================================================
+
+\begin{enumerate}[leftmargin=*, label=\textbf{\arabic*.}]
+
+  \item \textbf{Add UC 401 to the solution map.} \good{Done.}
+    UC 401 (15 sessions, richest schema) has been added to the \texttt{coach}
+    entry in \texttt{SOLUTION\_USECASE\_MAP} and all-session query logic has
+    been fixed so sessions without \texttt{overall\_score} are still counted.
+
+  \item \textbf{Normalise score display.}
+    In the API layer, detect whether \texttt{MAX(value\_num)} for a use case
+    is $> 10$ (0--100 scale) or $\leq 10$ (0--10 scale).  Do not aggregate
+    across scales.
+
+  \item \textbf{Filter out zero scores.}
+    Add \texttt{AND value\_num > 0} to average calculations to exclude
+    incomplete evaluations that record a zero score.
+
+  \item \textbf{Remove global pass rate KPI from overview.}
+    Replace it with per-module pass rates.  Show pass rate only for modules
+    where \texttt{overall\_result} is present (Certification, Coach UC 381/363).
+
+  \item \textbf{Identify unmapped use cases (387, 354, 205).}
+    Retrieve a sample report payload for each to determine their module type.
+
+  \item \textbf{Request user\_id field from Rolplay AI.}
+    Per-user analytics require a \texttt{user\_id} to be written into
+    \texttt{report\_field\_current} at session creation time.  This is a
+    data-model change on the AI platform side.
+
+  \item \textbf{Build session volume before comparing periods.}
+    The 7d/30d/90d filter is currently meaningless --- all data falls within
+    the same 9-day window.  Trend charts will only become useful after
+    30+ days of production data has accumulated.
+
+\end{enumerate}
+
+% =============================================================================
+\appendix
+\section{Raw Data Samples}
+% =============================================================================
+
+\subsection{Session Volume by Date}
+
+\begin{table}[H]
+\centering\small
+\begin{tabular}{C{3.5cm} R{3.5cm}}
+\toprule
+\textbf{Date} & \textbf{Sessions} \\
+\midrule
+2026-04-07 &  1 \\
+2026-04-08 &  2 \\
+2026-04-09 & 16 \\
+2026-04-13 & 27 \\
+2026-04-14 & 12 \\
+2026-04-15 &  2 \\
+\midrule
+\textbf{Total} & \textbf{60} \\
+\bottomrule
+\end{tabular}
+\caption{Daily session counts (all use cases, \texttt{field\_key = overall\_score}).}
+\end{table}
+
+\subsection{Pass/Fail Distribution (UC 394 --- Certification)}
+
+\begin{table}[H]
+\centering\small
+\begin{tabular}{L{5cm} R{2cm} R{3cm}}
+\toprule
+\textbf{overall\_result value} & \textbf{Count} & \textbf{Percentage} \\
+\midrule
+Básico (passing)   & 7 & 63.6\% \\
+Bueno (passing)    & 3 & 27.3\% \\
+Deficiente (fail)  & 1 &  9.1\% \\
+\midrule
+\textbf{Pass total} & \textbf{10} & \textbf{90.9\%} \\
+\textbf{Fail total} & \textbf{1}  & \textbf{9.1\%} \\
+\bottomrule
+\end{tabular}
+\caption{UC 394 (Certification) pass/fail breakdown --- 11 sessions total.}
+\end{table}
+
+\subsection{Knowledge Level Distribution}
+
+\begin{table}[H]
+\centering\small
+\begin{tabular}{L{2.8cm} C{1.8cm} C{1.8cm} C{1.8cm} C{1.8cm} C{1.8cm} R{2cm}}
+\toprule
+\textbf{Level} & \textbf{UC 385} & \textbf{UC 389} & \textbf{UC 390} & \textbf{UC 396} & \textbf{UC 397} & \textbf{Total} \\
+\midrule
+Intermedio & 4 & 2 & 6 & 1 & 1 & 14 \\
+Básico     & 3 & 0 & 4 & 4 & 0 & 11 \\
+Avanzado   & 0 & 0 & 0 & 1 & 0 &  1 \\
+Bueno      & 0 & 0 & 0 & 0 & 0 &  0 \\
+\bottomrule
+\end{tabular}
+\caption{\texttt{knowledge\_level} distribution by use case.}
+\end{table}
+
+\end{document}
