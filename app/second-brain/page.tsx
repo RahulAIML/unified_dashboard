@@ -1,6 +1,6 @@
 "use client"
 
-import { Database, FileType, Layers, BarChart2, AlertTriangle, Users, BookOpen, Activity, CheckCircle } from "lucide-react"
+import { MessageSquare, Users, Play, BookOpen, BarChart2, AlertTriangle, Database, FileType, Layers } from "lucide-react"
 import { DashboardHeader } from "@/components/DashboardHeader"
 import { ChartCard } from "@/components/ChartCard"
 import { useDashboardStore } from "@/lib/store"
@@ -21,52 +21,83 @@ import { useMemo } from "react"
 import { calcDeltaPct, estimatePassedSessions } from "@/lib/kpi-builder"
 import { csvFilename } from "@/lib/csv-export"
 
-// ── Types for the Second Brain external API ───────────────────────────────────
+// ── Real API types (from second-brain-shz8.onrender.com) ─────────────────────
 
-interface SBCourse {
-  id: string | number
-  name?: string
-  title?: string
-  enrolled_users?: number
-  completion_rate?: number
-  total_lessons?: number
-  status?: string
+interface SBStats {
+  total_members:           number   // 18
+  active_members:          number   // 18
+  total_documents:         number   // 0
+  knowledgebase_docs:      number
+  datastore_docs:          number
+  total_roles:             number
+  total_groups:            number
+  total_coaching_scenarios: number  // 2
+  total_coaching_sessions: number   // 13
+  total_message_logs:      number   // 36  ← "Total Interactions"
+  total_whatsapp_messages: number   // 63
+  total_broadcasts:        number
 }
 
-interface SBUser {
-  id: string | number
-  name?: string
-  email?: string
-  role?: string
-  status?: string
-  last_active?: string
+interface SBMember {
+  profile_id:       string
+  user_id:          string
+  email:            string
+  username:         string
+  full_name:        string
+  job_title?:       string
+  whatsapp_number?: string
+  role_name?:       string
+  is_active:        boolean
+  created_at:       string
 }
 
-interface SBOrganization {
-  id?: string | number
-  name?: string
-  total_users?: number
-  active_users?: number
-  total_courses?: number
+interface SBScenario {
+  id:           string
+  name:         string
+  description?: string
+  is_active:    boolean
+  session_count: number
+  created_at:   string
+  reference_files?: { id: string; file_name: string }[]
 }
 
-interface SBProfileData {
-  organization?: SBOrganization
-  courses?: SBCourse[]
-  users?: SBUser[]
-  [key: string]: unknown
+interface SBSession {
+  id:            string
+  phone_number:  string
+  scenario_name: string
+  started_at:    string
+  ended_at:      string | null
+  report_text:   string | null
+  created_at:    string
+}
+
+interface SBMessageLog {
+  total:         number
+  recent_30_days: number
+  rag_queries:   number
+  errors:        number
+  by_type:       Record<string, number>
+}
+
+interface SBProfile {
+  organization?:       { id: string; name: string; owner_email: string; created_at: string }
+  stats?:              SBStats
+  members?:            SBMember[]
+  coaching_scenarios?: SBScenario[]
+  coaching_sessions?:  SBSession[]
+  message_logs?:       SBMessageLog
 }
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
 
-const icons = [
-  <Users     key="u" className="w-4 h-4" />,
-  <BookOpen  key="b" className="w-4 h-4" />,
-  <Activity  key="a" className="w-4 h-4" />,
-  <CheckCircle key="c" className="w-4 h-4" />,
+const sbIcons = [
+  <MessageSquare key="m" className="w-4 h-4" />,
+  <Users         key="u" className="w-4 h-4" />,
+  <Play          key="p" className="w-4 h-4" />,
+  <BookOpen      key="b" className="w-4 h-4" />,
 ]
 
-const oldIcons = [
+const dbIcons = [
   <Database  key="d" className="w-4 h-4" />,
   <FileType  key="f" className="w-4 h-4" />,
   <Layers    key="l" className="w-4 h-4" />,
@@ -95,61 +126,64 @@ function ErrorBanner({ message }: { message: string }) {
 
 export default function SecondBrainPage() {
   const { dateRange, clientId, refreshKey } = useDashboardStore()
-  const t     = useT()
+  const t   = useT()
   const days = Math.round((dateRange.to.getTime() - dateRange.from.getTime()) / 86_400_000)
 
-  // ── Legacy RolPlay DB data (kept for eval trend / breakdown) ─────────────
+  // ── Legacy RolPlay DB data ────────────────────────────────────────────────
   const overviewUrl = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to, { solution: "second-brain", clientId, rk: refreshKey })
   const trendsUrl   = buildApiUrl("/api/dashboard/trends",   dateRange.from, dateRange.to, { solution: "second-brain", clientId, rk: refreshKey })
   const ucUrl       = buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to, { solution: "second-brain", clientId, rk: refreshKey })
 
-  const { data: overview, loading: overviewLoading, error: overviewError } = useApi<OverviewApiResponse>(overviewUrl)
-  const { data: trends,   loading: trendsLoading,   error: trendsError }   = useApi<TrendsApiResponse>(trendsUrl)
-  const { data: ucBreakdown, loading: ucLoading,    error: ucError }       = useApi<UsecaseBreakdownApiResponse>(ucUrl)
+  const { data: overview,    loading: overviewLoading, error: overviewError } = useApi<OverviewApiResponse>(overviewUrl)
+  const { data: trends,      loading: trendsLoading,   error: trendsError }   = useApi<TrendsApiResponse>(trendsUrl)
+  const { data: ucBreakdown, loading: ucLoading,       error: ucError }       = useApi<UsecaseBreakdownApiResponse>(ucUrl)
 
-  // ── Second Brain hosted API data ─────────────────────────────────────────
-  const { data: sbProfile, loading: sbLoading, error: sbError } = useApi<SBProfileData>("/api/second-brain/profile")
+  // ── Second Brain hosted API ───────────────────────────────────────────────
+  const { data: sbProfile, loading: sbLoading, error: sbError } = useApi<SBProfile>("/api/second-brain/profile")
 
-  // ── KPI cards from Second Brain API (preferred) or fallback to DB ─────────
+  // ── KPIs: prefer live Second Brain API, fallback to DB ───────────────────
   const sbKpis = useMemo(() => {
-    if (!sbProfile) return null
+    const s = sbProfile?.stats
+    if (!s) return null
 
-    const org     = sbProfile.organization ?? {}
-    const courses  = sbProfile.courses ?? []
-    const users    = sbProfile.users ?? []
-
-    const totalUsers   = org.total_users  ?? users.length
-    const activeUsers  = org.active_users ?? users.filter((u: SBUser) => u.status === "active").length
-    const totalCourses = org.total_courses ?? courses.length
-    const avgCompletion = courses.length > 0
-      ? Math.round(courses.reduce((s: number, c: SBCourse) => s + (c.completion_rate ?? 0), 0) / courses.length)
-      : null
-
+    // Map to same KPI structure as DB view:
+    //   Total Interactions  → total_message_logs  (WhatsApp messages to the AI)
+    //   Active Members      → active_members
+    //   Coaching Sessions   → total_coaching_sessions
+    //   Scenarios           → total_coaching_scenarios
     return [
       {
-        label: "Total Users",   labelKey: "practiceSessions" as const,
-        value: totalUsers,      delta: 0, tier: "A" as const,
+        label: "Total Interactions", labelKey: "practiceSessions" as const,
+        value: s.total_message_logs,
+        delta: 0,
+        tier: "A" as const,
       },
       {
-        label: "Active Users",  labelKey: "totalSessions" as const,
-        value: activeUsers,     delta: totalUsers > 0 ? Math.round((activeUsers / totalUsers) * 100) : 0,
-        unit: totalUsers > 0 ? "%" : undefined,
+        label: "Active Members", labelKey: "totalSessions" as const,
+        value: s.active_members,
+        delta: s.total_members > 0
+          ? Math.round((s.active_members / s.total_members) * 100)
+          : 0,
+        unit: "%",
         tier: "B" as const,
       },
       {
-        label: "Total Courses", labelKey: "passRate" as const,
-        value: totalCourses,    delta: 0, tier: "A" as const,
+        label: "Coaching Sessions", labelKey: "passRate" as const,
+        value: s.total_coaching_sessions,
+        delta: 0,
+        tier: "A" as const,
       },
       {
-        label: "Avg Completion", labelKey: "avgScore" as const,
-        value: avgCompletion ?? 0, unit: "%", delta: 0, tier: "B" as const,
+        label: "Scenarios", labelKey: "avgScore" as const,
+        value: s.total_coaching_scenarios,
+        delta: 0,
+        tier: "B" as const,
       },
     ]
   }, [sbProfile])
 
-  // ── Fallback KPIs from legacy DB ──────────────────────────────────────────
+  // ── Fallback: DB KPIs if Second Brain API is down ────────────────────────
   const hasData = overview && overview.totalEvaluations > 0
-
   const dbKpis = useMemo(() => {
     if (!hasData) return []
     return [
@@ -183,44 +217,51 @@ export default function SecondBrainPage() {
     ]
   }, [overview, hasData])
 
-  // Prefer Second Brain API KPIs; fall back to DB KPIs
-  const kpis      = sbKpis ?? dbKpis
-  const kpiIcons  = sbKpis ? icons : oldIcons
-  const kpiSource = sbKpis ? "second-brain-api" : "rolplay-db"
+  const kpis     = sbKpis ?? dbKpis
+  const kpiIcons = sbKpis ? sbIcons : dbIcons
+  const isLive   = Boolean(sbKpis)
 
-  const activityData = useMemo(
-    () => trends?.evalCountTrend ?? [],
-    [trends]
-  )
+  const activityData = useMemo(() => trends?.evalCountTrend ?? [], [trends])
 
-  // ── Course table columns ──────────────────────────────────────────────────
-  const courseColumns: Column<SBCourse>[] = useMemo(() => [
-    { key: "name",            header: "Course",      render: r => <span className="font-medium">{r.name ?? r.title ?? `Course ${r.id}`}</span> },
-    { key: "total_lessons",   header: "Lessons",     render: r => <span className="tabular-nums">{r.total_lessons ?? "—"}</span> },
-    { key: "enrolled_users",  header: "Enrolled",    render: r => <span className="tabular-nums">{r.enrolled_users ?? "—"}</span> },
-    {
-      key: "completion_rate", header: "Completion",
-      render: r => r.completion_rate != null ? (
+  // ── Members table columns ─────────────────────────────────────────────────
+  const memberColumns: Column<SBMember>[] = useMemo(() => [
+    { key: "full_name",       header: "Name",      render: r => <span className="font-medium">{r.full_name}</span> },
+    { key: "job_title",       header: "Job Title",  render: r => <span className="text-muted-foreground">{r.job_title ?? "—"}</span> },
+    { key: "role_name",       header: "Role",       render: r => (
+        <span className={cn(
+          "inline-flex px-2 py-0.5 rounded-full text-xs font-medium capitalize",
+          r.role_name === "Admin" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+        )}>{r.role_name ?? "—"}</span>
+      ),
+    },
+    { key: "whatsapp_number", header: "WhatsApp",   render: r => <span className="tabular-nums text-xs">{r.whatsapp_number ?? "—"}</span> },
+    { key: "is_active",       header: "Status",     render: r => (
         <span className={cn(
           "inline-flex px-2 py-0.5 rounded-full text-xs font-medium",
-          r.completion_rate >= 70 ? "bg-primary/10 text-primary"
-            : r.completion_rate >= 40 ? "bg-secondary text-secondary-foreground"
-            : "bg-destructive/10 text-destructive"
-        )}>
-          {r.completion_rate}%
-        </span>
-      ) : <span className="text-muted-foreground">—</span>,
-    },
-    {
-      key: "status", header: "Status",
-      render: r => <span className={cn(
-        "inline-flex px-2 py-0.5 rounded-full text-xs font-medium capitalize",
-        r.status === "active" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
-      )}>{r.status ?? "—"}</span>,
+          r.is_active ? "bg-primary/10 text-primary" : "bg-destructive/10 text-destructive"
+        )}>{r.is_active ? "Active" : "Inactive"}</span>
+      ),
     },
   ], [])
 
-  // ── Use-case table columns (legacy DB) ────────────────────────────────────
+  // ── Scenario table columns ────────────────────────────────────────────────
+  const scenarioColumns: Column<SBScenario>[] = useMemo(() => [
+    { key: "name",          header: "Scenario",  render: r => <span className="font-medium">{r.name}</span> },
+    { key: "session_count", header: "Sessions",  render: r => <span className="tabular-nums">{r.session_count}</span> },
+    { key: "is_active",     header: "Status",    render: r => (
+        <span className={cn(
+          "inline-flex px-2 py-0.5 rounded-full text-xs font-medium",
+          r.is_active ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+        )}>{r.is_active ? "Active" : "Inactive"}</span>
+      ),
+    },
+    { key: "reference_files", header: "KB Files", render: r => (
+        <span className="tabular-nums">{r.reference_files?.length ?? 0}</span>
+      ),
+    },
+  ], [])
+
+  // ── Use-case breakdown columns (DB) ──────────────────────────────────────
   const ucColumns: Column<UsecaseApiRow>[] = useMemo(() => [
     { key: "usecaseId",        header: t.colUseCase,  render: r => <span className="font-medium">UC-{r.usecaseId}</span> },
     { key: "totalEvaluations", header: t.colSessions, render: r => <span className="tabular-nums">{r.totalEvaluations}</span> },
@@ -241,34 +282,33 @@ export default function SecondBrainPage() {
     { key: "passed", header: t.colPassed, render: r => <span className="tabular-nums">{r.passed}</span> },
   ], [t])
 
-  const courses = sbProfile?.courses ?? []
+  const members   = sbProfile?.members   ?? []
+  const scenarios = sbProfile?.coaching_scenarios ?? []
 
   return (
     <div className="min-h-screen">
       <DashboardHeader title={t.sbTitle} subtitle={t.sbSub} />
       <div className="p-6 space-y-6">
 
-        {/* Second Brain API status banner */}
+        {/* Error banners */}
         {sbError && (
           <div className="flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
             <AlertTriangle className="w-4 h-4 shrink-0" />
-            <span>Second Brain live data unavailable — showing evaluation data. ({sbError})</span>
+            <span>Second Brain live data unavailable — showing evaluation DB data. ({sbError})</span>
           </div>
         )}
-
-        {/* Error banners */}
-        {overviewError && !sbKpis && <ErrorBanner message={`${t.errorLoading}: ${overviewError}`} />}
+        {overviewError && !isLive && <ErrorBanner message={`${t.errorLoading}: ${overviewError}`} />}
 
         {/* Source badge */}
         {!sbLoading && (
           <div className="flex items-center gap-2">
             <span className={cn(
               "text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded",
-              kpiSource === "second-brain-api"
+              isLive
                 ? "bg-primary/10 text-primary"
                 : "bg-muted text-muted-foreground"
             )}>
-              {kpiSource === "second-brain-api" ? "🔗 Live from Second Brain API" : "📊 Evaluation DB data"}
+              {isLive ? "🔗 Live · Second Brain API" : "📊 Evaluation DB fallback"}
             </span>
           </div>
         )}
@@ -296,39 +336,77 @@ export default function SecondBrainPage() {
           }
         </div>
 
-        {/* Course table — from Second Brain API */}
-        {(sbKpis || sbLoading) && (
+        {/* Members table — from Second Brain API */}
+        {(isLive || sbLoading) && (
           <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
             <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
               <div>
                 <h3 className="text-sm font-semibold flex items-center gap-2">
-                  <BookOpen className="w-4 h-4 text-primary" />
-                  Courses
+                  <Users className="w-4 h-4 text-primary" />
+                  Members
                 </h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {sbLoading ? t.loading : `${courses.length} courses available`}
+                  {sbLoading ? t.loading : `${members.length} enrolled members`}
                   <span className="ml-2 text-[10px] font-medium bg-primary/10 text-primary px-1.5 py-0.5 rounded">
                     Second Brain API
                   </span>
                 </p>
               </div>
               <ExportButton
-                data={courses}
-                filename={csvFilename("second-brain-courses")}
+                data={members}
+                filename={csvFilename("second-brain-members")}
                 columns={[
-                  { header: "Course",      value: r => r.name ?? r.title ?? r.id },
-                  { header: "Lessons",     value: r => r.total_lessons },
-                  { header: "Enrolled",    value: r => r.enrolled_users },
-                  { header: "Completion%", value: r => r.completion_rate },
-                  { header: "Status",      value: r => r.status },
+                  { header: "Name",        value: r => r.full_name },
+                  { header: "Job Title",   value: r => r.job_title },
+                  { header: "Role",        value: r => r.role_name },
+                  { header: "WhatsApp",    value: r => r.whatsapp_number },
+                  { header: "Active",      value: r => r.is_active ? "Yes" : "No" },
+                  { header: "Created",     value: r => r.created_at?.slice(0, 10) },
                 ]}
               />
             </div>
             {sbLoading
               ? <div className="py-10 text-center text-sm text-muted-foreground">{t.loading}</div>
-              : courses.length > 0
-                ? <DataTable data={courses} columns={courseColumns} pageSize={10} />
-                : <div className="py-10 text-center text-sm text-muted-foreground">No courses found</div>
+              : members.length > 0
+                ? <DataTable data={members} columns={memberColumns} pageSize={10} />
+                : <div className="py-10 text-center text-sm text-muted-foreground">No members found</div>
+            }
+          </div>
+        )}
+
+        {/* Scenarios table — from Second Brain API */}
+        {(isLive || sbLoading) && (
+          <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+            <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
+              <div>
+                <h3 className="text-sm font-semibold flex items-center gap-2">
+                  <Play className="w-4 h-4 text-primary" />
+                  Coaching Scenarios
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {sbLoading ? t.loading : `${scenarios.length} scenarios`}
+                  <span className="ml-2 text-[10px] font-medium bg-primary/10 text-primary px-1.5 py-0.5 rounded">
+                    Second Brain API
+                  </span>
+                </p>
+              </div>
+              <ExportButton
+                data={scenarios}
+                filename={csvFilename("second-brain-scenarios")}
+                columns={[
+                  { header: "Scenario",  value: r => r.name },
+                  { header: "Sessions",  value: r => r.session_count },
+                  { header: "Active",    value: r => r.is_active ? "Yes" : "No" },
+                  { header: "KB Files",  value: r => r.reference_files?.length ?? 0 },
+                  { header: "Created",   value: r => r.created_at?.slice(0, 10) },
+                ]}
+              />
+            </div>
+            {sbLoading
+              ? <div className="py-10 text-center text-sm text-muted-foreground">{t.loading}</div>
+              : scenarios.length > 0
+                ? <DataTable data={scenarios} columns={scenarioColumns} pageSize={10} />
+                : <div className="py-10 text-center text-sm text-muted-foreground">No scenarios found</div>
             }
           </div>
         )}
@@ -376,6 +454,7 @@ export default function SecondBrainPage() {
               : <div className="py-10 text-center text-sm text-muted-foreground">No data available</div>
           }
         </div>
+
       </div>
     </div>
   )
