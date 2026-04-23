@@ -2,20 +2,23 @@
  * /api/second-brain/profile
  *
  * Server-side proxy for the Second Brain hosted API.
- * Credentials (URL + admin email) live ONLY in .env.local — never sent to
- * the browser, never committed to git.
+ * All credentials live ONLY in env vars — never sent to the browser,
+ * never committed to git.
  *
- * Response shape from upstream:
- *   { organization: { ... }, courses: [...], users: [...], ... }
+ * Required env vars (set in Render → Environment):
+ *   SECOND_BRAIN_API_URL        https://second-brain-shz8.onrender.com/admin/api
+ *   SECOND_BRAIN_ADMIN_EMAIL    admin1@coppel.com
+ *   SECOND_BRAIN_API_TOKEN      <your token — add in Render dashboard>
  *
- * We re-wrap in the standard { success, data, meta } envelope so the
- * client-side useApi() hook works out-of-the-box with no changes.
+ * Response shape from upstream is re-wrapped in the standard
+ * { success, data, meta } envelope so useApi() auto-unwraps it.
  */
 
 import { NextResponse } from "next/server"
 
-const SECOND_BRAIN_API_URL   = process.env.SECOND_BRAIN_API_URL
+const SECOND_BRAIN_API_URL     = process.env.SECOND_BRAIN_API_URL
 const SECOND_BRAIN_ADMIN_EMAIL = process.env.SECOND_BRAIN_ADMIN_EMAIL
+const SECOND_BRAIN_API_TOKEN   = process.env.SECOND_BRAIN_API_TOKEN   // optional — omitted if blank
 
 export const dynamic = "force-dynamic"
 
@@ -31,10 +34,18 @@ export async function GET() {
     const url = new URL(`${SECOND_BRAIN_API_URL}/organizations/full-profile`)
     url.searchParams.set("admin_email", SECOND_BRAIN_ADMIN_EMAIL)
 
+    // Build headers — include Bearer token when the env var is set
+    const headers: HeadersInit = {
+      "Content-Type": "application/json",
+      ...(SECOND_BRAIN_API_TOKEN
+        ? { Authorization: `Bearer ${SECOND_BRAIN_API_TOKEN}` }
+        : {}),
+    }
+
     const upstream = await fetch(url.toString(), {
       method: "GET",
-      headers: { "Content-Type": "application/json" },
-      // Render free tier can be slow to cold-start — give it 20 s
+      headers,
+      // Render free tier can be slow to cold-start — allow 20 s
       signal: AbortSignal.timeout(20_000),
     })
 
