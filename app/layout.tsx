@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Coppel Analytics",
-  description: "Unified analytics dashboard — Coppel",
+  title: "Analytics Dashboard",
+  description: "Unified analytics dashboard",
 };
 
 export default function RootLayout({

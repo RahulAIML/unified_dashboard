@@ -6,8 +6,11 @@ import { useClientBrand } from "@/lib/hooks/useClientBrand"
 import { cn } from "@/lib/utils"
 
 interface Props {
-  onApply: (from: Date, to: Date) => void
-  className?: string
+  onApply:      (from: Date, to: Date) => void
+  /** Seed the picker with the currently-active range so it stays in sync with presets */
+  initialFrom?: Date
+  initialTo?:   Date
+  className?:   string
 }
 
 /**
@@ -17,17 +20,21 @@ interface Props {
  * Calls onApply(from, to) when the user clicks "Apply".
  * Validates that from ≤ to before calling onApply.
  */
-export function DateRangePicker({ onApply, className }: Props) {
+export function DateRangePicker({ onApply, initialFrom, initialTo, className }: Props) {
   const brand = useClientBrand()
   const [open,  setOpen]  = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Default range: last 30 days
-  const today   = new Date().toISOString().slice(0, 10)
-  const last30  = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10)
+  // Initialise from the currently-active range (falls back to last 30d → today)
+  const today  = new Date().toISOString().slice(0, 10)
+  const last30 = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10)
 
-  const [fromStr, setFromStr] = useState(last30)
-  const [toStr,   setToStr]   = useState(today)
+  const [fromStr, setFromStr] = useState(
+    initialFrom ? initialFrom.toISOString().slice(0, 10) : last30
+  )
+  const [toStr,   setToStr]   = useState(
+    initialTo ? initialTo.toISOString().slice(0, 10) : today
+  )
 
   function handleApply() {
     setError(null)

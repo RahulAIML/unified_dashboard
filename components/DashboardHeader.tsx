@@ -31,7 +31,7 @@ interface Props {
 }
 
 export function DashboardHeader({ title, subtitle, showModuleFilter = false }: Props) {
-  const { selectedSolution, setSolution, setDateRange, setClientId } = useDashboardStore()
+  const { dateRange, selectedSolution, setSolution, setDateRange, setClientId } = useDashboardStore()
   const { lang, toggle: toggleLang } = useLangStore()
   const t     = useT()
   const brand = useClientBrand()
@@ -46,6 +46,13 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
     const clientId = params.get("client")
     if (clientId) setClientId(clientId)
   }, [setClientId])
+
+  // ── Update browser tab title when brand changes ───────────────────────────
+  // Use a small delay so Next.js metadata doesn't override us on initial hydration
+  useEffect(() => {
+    const tid = setTimeout(() => { document.title = brand.name }, 300)
+    return () => clearTimeout(tid)
+  }, [brand.name])
 
   function applyPreset(days: number) {
     setActiveDays(days)
@@ -109,8 +116,14 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
                 </button>
               ))}
 
-              {/* Custom date range picker */}
-              <DateRangePicker onApply={applyCustomRange} />
+              {/* Custom date range picker — key remounts it when preset changes,
+                  so useState initializers pick up the new active range */}
+              <DateRangePicker
+                key={`${dateRange.from.getTime()}-${dateRange.to.getTime()}`}
+                onApply={applyCustomRange}
+                initialFrom={dateRange.from}
+                initialTo={dateRange.to}
+              />
             </div>
           </div>
         </div>
