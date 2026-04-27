@@ -1,10 +1,11 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { ArrowLeft, BarChart2, BadgeCheck, XCircle, Hash, CalendarDays, Layers } from "lucide-react"
+import { ArrowLeft, BarChart2, BadgeCheck, XCircle, Hash, CalendarDays, Layers, Globe } from "lucide-react"
 import { useClientBrand }                      from "@/lib/hooks/useClientBrand"
 import { useApi }                              from "@/lib/hooks/useApi"
+import { useTranslation }                      from "@/lib/hooks/useTranslation"
 import { normalizeResult, normalizeScore }       from "@/lib/kpi-builder"
 import { CORE_FIELD_KEYS, EXTRA_FIELD_KEYS, SCORE_FIELD_KEYS, RESULT_FIELD_KEYS } from "@/lib/field-map"
 import { cn }                                   from "@/lib/utils"
@@ -104,6 +105,10 @@ export default function DrilldownPage() {
   const refreshKey = useDashboardStore((s) => s.refreshKey)
   const id     = params?.id as string | undefined
 
+  // Translation
+  const { language, toggleLanguage, translateTexts, translating } = useTranslation()
+  const [translatedLabels, setTranslatedLabels] = useState<Record<string, string>>({})
+
   // Validate: ID must be a positive integer string
   const idNum = id ? parseInt(id, 10) : NaN
   const idValid = Number.isFinite(idNum) && idNum > 0 && String(idNum) === id
@@ -151,6 +156,52 @@ export default function DrilldownPage() {
 
   const totalPages   = Math.ceil(filteredFields.length / PAGE_SIZE)
   const visibleFields = filteredFields.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+
+  // Translate visible field labels when language changes
+  useEffect(() => {
+    const translateFields = async () => {
+      if (!visibleFields.length) {
+        setTranslatedLabels({})
+        return
+      }
+
+      // Get unique labels to translate (English only for input)
+      const uniqueLabels = [...new Set(
+        visibleFields
+          .map(f => f.fieldLabel)
+          .filter((label): label is string => label != null && label.length > 0)
+      )]
+
+      if (uniqueLabels.length === 0) {
+        setTranslatedLabels({})
+        return
+      }
+
+      // Only translate if language is not English
+      if (language === 'en') {
+        // For English, just map to original labels
+        const labelMap: Record<string, string> = {}
+        uniqueLabels.forEach((label) => {
+          labelMap[label] = label
+        })
+        setTranslatedLabels(labelMap)
+        return
+      }
+
+      // Translate to target language
+      const translated = await translateTexts(uniqueLabels, language)
+
+      // Build map: original -> translated
+      const labelMap: Record<string, string> = {}
+      uniqueLabels.forEach((label, idx) => {
+        labelMap[label] = translated[idx]
+      })
+
+      setTranslatedLabels(labelMap)
+    }
+
+    translateFields()
+  }, [language, visibleFields, translateTexts])
 
   const drilldownExportRows = useMemo(() => {
     if (!data) return []
@@ -213,7 +264,20 @@ export default function DrilldownPage() {
           <h1 className="text-sm font-semibold text-primary">
             Session Detail — Report #{id}
           </h1>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-3">
+            {/* Language toggle */}
+            <button
+              onClick={toggleLanguage}
+              disabled={translating}
+              title={`Switch to ${language === 'en' ? 'Spanish' : 'English'}`}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-muted hover:bg-muted/70 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-medium transition-colors"
+            >
+              <Globe className="w-4 h-4" />
+              <span>{language.toUpperCase()}</span>
+            </button>
+            {translating && (
+              <span className="text-xs text-muted-foreground animate-pulse">Translating...</span>
+            )}
             <ExportButton
               data={drilldownExportRows}
               filename={csvFilename(`drilldown-${id ?? "unknown"}`)}
@@ -391,7 +455,7 @@ export default function DrilldownPage() {
 
                             {/* Label */}
                             <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                              {field.fieldLabel ?? "—"}
+                              {field.fieldLabel ? translatedLabels[field.fieldLabel] ?? field.fieldLabel : "—"}
                             </td>
 
                             {/* Value */}
