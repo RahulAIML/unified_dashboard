@@ -155,54 +155,45 @@ export default function DrilldownPage() {
     )
   }, [data, search])
 
-  const totalPages   = Math.ceil(filteredFields.length / PAGE_SIZE)
-  const visibleFields = filteredFields.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+  const totalPages = Math.ceil(filteredFields.length / PAGE_SIZE)
+  const visibleFields = useMemo(
+    () => filteredFields.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE),
+    [filteredFields, page]
+  )
 
-  // Translate visible field labels when language changes
+  // Memoize unique labels to prevent re-translation on every render
+  const uniqueLabels = useMemo(() => {
+    if (!visibleFields.length) return []
+    return [...new Set(
+      visibleFields
+        .map(f => f.fieldLabel)
+        .filter((label): label is string => label != null && label.length > 0)
+    )]
+  }, [visibleFields])
+
+  // Translate visible field labels when language or labels change
   useEffect(() => {
     const translateFields = async () => {
-      if (!visibleFields.length) {
+      if (language === 'en' || uniqueLabels.length === 0) {
         setTranslatedLabels({})
         return
       }
 
-      // Get unique labels to translate (English only for input)
-      const uniqueLabels = [...new Set(
-        visibleFields
-          .map(f => f.fieldLabel)
-          .filter((label): label is string => label != null && label.length > 0)
-      )]
-
-      if (uniqueLabels.length === 0) {
-        setTranslatedLabels({})
-        return
-      }
-
-      // Only translate if language is not English
-      if (language === 'en') {
-        // For English, just map to original labels
+      try {
+        const translated = await translateTexts(uniqueLabels, language)
         const labelMap: Record<string, string> = {}
-        uniqueLabels.forEach((label) => {
-          labelMap[label] = label
+        uniqueLabels.forEach((label, idx) => {
+          labelMap[label] = translated[idx] || label
         })
         setTranslatedLabels(labelMap)
-        return
+      } catch (err) {
+        console.warn('Translation failed:', err)
+        setTranslatedLabels({})
       }
-
-      // Translate to target language
-      const translated = await translateTexts(uniqueLabels, language)
-
-      // Build map: original -> translated
-      const labelMap: Record<string, string> = {}
-      uniqueLabels.forEach((label, idx) => {
-        labelMap[label] = translated[idx]
-      })
-
-      setTranslatedLabels(labelMap)
     }
 
     translateFields()
-  }, [language, visibleFields, translateTexts])
+  }, [language, uniqueLabels, translateTexts])
 
   const drilldownExportRows = useMemo(() => {
     if (!data) return []
