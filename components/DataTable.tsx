@@ -77,9 +77,9 @@ export function DataTable<T extends object>({
         />
       </div>
 
-      {/* Table */}
-      <div className="rounded-lg border border-border overflow-hidden">
-        <table className="w-full text-sm">
+      {/* Table — responsive with horizontal scroll on mobile */}
+      <div className="rounded-lg border border-border overflow-x-auto">
+        <table className="w-full text-sm whitespace-nowrap sm:whitespace-normal">
           <thead className="bg-muted/50">
             <tr>
               {columns.map(col => (

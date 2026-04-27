@@ -126,7 +126,7 @@ export default function LmsPage() {
         {overviewError && <ErrorBanner message={`${t.errorLoading}: ${overviewError}`} />}
 
         {/* KPI cards */}
-        <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {overviewLoading
             ? Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
