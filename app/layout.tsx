@@ -38,7 +38,7 @@ export default function RootLayout({
           <ClientBrandProvider />
           <div className="flex h-full min-h-screen">
             <Sidebar />
-            <main className="flex-1 overflow-auto bg-muted/30">
+            <main className="flex-1 overflow-auto bg-muted/30 md:pt-0 pt-16">
               {children}
             </main>
           </div>

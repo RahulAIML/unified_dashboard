@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { motion } from "framer-motion"
@@ -45,6 +45,7 @@ export function Sidebar() {
   const { theme, toggle } = useTheme()
   const t     = useT()
   const brand = useClientBrand()
+  const [mobileOpen, setMobileOpen] = useState(false)
 
   const nav = [
     { href: "/",              label: t.navOverview,      icon: LayoutDashboard },
@@ -56,9 +57,13 @@ export function Sidebar() {
     { href: "/settings",      label: t.navSettings,      icon: Settings        },
   ]
 
-  return (
-    <aside className="w-64 shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col">
+  // Close sidebar on route change (mobile)
+  useEffect(() => {
+    setMobileOpen(false)
+  }, [pathname])
 
+  const sidebarContent = (
+    <>
       {/* Brand header */}
       <div className="relative h-20 flex items-center gap-3 px-5 border-b border-sidebar-border overflow-hidden">
         {/* Brand top gradient stripe — matches drilldown/header stripe */}
@@ -114,6 +119,48 @@ export function Sidebar() {
         </button>
         <p className="text-xs text-sidebar-foreground/30 mt-2 px-3">{t.phaseLabel}</p>
       </div>
-    </aside>
+    </>
+  )
+
+  return (
+    <>
+      {/* Desktop sidebar - hidden on mobile, shown on md+ */}
+      <aside className="hidden md:flex w-64 shrink-0 bg-sidebar border-r border-sidebar-border flex-col">
+        {sidebarContent}
+      </aside>
+
+      {/* Mobile drawer overlay */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
+      {/* Mobile drawer */}
+      <motion.aside
+        initial={false}
+        animate={{ x: mobileOpen ? 0 : -256 }}
+        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+        className="fixed left-0 top-0 bottom-0 w-64 bg-sidebar border-r border-sidebar-border flex flex-col z-50 md:hidden"
+      >
+        {sidebarContent}
+      </motion.aside>
+
+      {/* Mobile header with hamburger - shown only on mobile */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-30 bg-sidebar border-b border-sidebar-border flex items-center justify-between px-4 h-16">
+        <button
+          onClick={() => setMobileOpen(!mobileOpen)}
+          className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors"
+          aria-label="Toggle menu"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        <div className="text-sm font-semibold text-sidebar-foreground">{brand.name}</div>
+        <div className="w-5" /> {/* Spacer for alignment */}
+      </div>
+    </>
   )
 }

@@ -8,6 +8,7 @@ import { useApi }                              from "@/lib/hooks/useApi"
 import { useTranslation }                      from "@/lib/hooks/useTranslation"
 import { normalizeResult, normalizeScore }       from "@/lib/kpi-builder"
 import { CORE_FIELD_KEYS, EXTRA_FIELD_KEYS, SCORE_FIELD_KEYS, RESULT_FIELD_KEYS } from "@/lib/field-map"
+import { formatFieldLabel }                     from "@/lib/field-labels"
 import { cn }                                   from "@/lib/utils"
 import { useDashboardStore } from "@/lib/store"
 import { ExportButton } from "@/components/ExportButton"
@@ -455,7 +456,10 @@ export default function DrilldownPage() {
 
                             {/* Label */}
                             <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                              {field.fieldLabel ? translatedLabels[field.fieldLabel] ?? field.fieldLabel : "—"}
+                              {field.fieldLabel
+                                ? translatedLabels[field.fieldLabel] ?? formatFieldLabel(field.fieldLabel)
+                                : "—"
+                              }
                             </td>
 
                             {/* Value */}

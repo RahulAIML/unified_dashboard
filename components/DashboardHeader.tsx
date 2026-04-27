@@ -135,7 +135,7 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
       />
 
       <div className="px-6 py-4">
-        <div className="flex items-start justify-between mb-4">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4">
           <div>
             <h1 className="text-xl font-bold tracking-tight text-primary">
               {title}
@@ -143,17 +143,7 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
             {subtitle && <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>}
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* Refresh button */}
-            <button
-              onClick={() => useDashboardStore.getState().triggerRefresh()}
-              className="px-2.5 py-1 rounded-lg text-xs font-semibold border border-border bg-muted hover:bg-muted/70 transition-colors"
-              aria-label="Refresh data"
-              title="Refresh all data"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-            </button>
-
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full md:w-auto">
             {/* EN / ES toggle */}
             <button
               onClick={toggleLang}
@@ -163,6 +153,7 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
               {lang === "en" ? "ES" : "EN"}
             </button>
 
+            {/* Refresh button (single) */}
             <button
               onClick={handleRefresh}
               disabled={refreshing}
@@ -179,15 +170,15 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
             </button>
 
             {/* Date presets + custom range */}
-            <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-              <Calendar className="w-3.5 h-3.5 text-muted-foreground ml-1" />
+            <div className="flex flex-wrap items-center gap-1 bg-muted rounded-lg p-1 w-full sm:w-auto">
+              <Calendar className="w-3.5 h-3.5 text-muted-foreground ml-1 hidden sm:block" />
 
               {DATE_PRESETS.map(({ label, days }) => (
                 <button
                   key={days}
                   onClick={() => applyPreset(days)}
                   className={cn(
-                    "px-3 py-1 rounded-md text-xs font-semibold transition-all",
+                    "px-2 sm:px-3 py-1 rounded-md text-xs font-semibold transition-all",
                     activeDays === days
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:text-foreground"
@@ -212,7 +203,7 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
         {/* Solution filter — single-select */}
         {showModuleFilter && (
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+            <span className="text-xs font-medium text-muted-foreground flex items-center gap-1 w-full">
               <Filter className="w-3 h-3" /> {t.filterSolutions}
             </span>
 
@@ -221,7 +212,7 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
               onClick={() => setSolution(null)}
               whileTap={{ scale: 0.95 }}
               className={cn(
-                "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all",
+                "flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-full text-xs font-semibold border transition-all",
                 !selectedSolution
                   ? "bg-primary text-primary-foreground border-transparent"
                   : "border-border text-muted-foreground hover:border-foreground/30"
@@ -246,7 +237,7 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
                   onClick={() => setSolution(id)}
                   whileTap={{ scale: 0.95 }}
                   className={cn(
-                    "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all",
+                    "flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-full text-xs font-semibold border transition-all",
                     active
                       ? "bg-primary text-primary-foreground border-transparent"
                       : "border-border text-muted-foreground hover:border-foreground/30"
