@@ -14,6 +14,7 @@ import { ExportButton } from "@/components/ExportButton"
 import { useDashboardStore }  from "@/lib/store"
 import { useT }               from "@/lib/lang-store"
 import { useApi, buildApiUrl } from "@/lib/hooks/useApi"
+import { useCombinedExport } from "@/lib/hooks/useCombinedExport"
 import { calcDeltaPct, estimatePassedSessions } from "@/lib/kpi-builder"
 import { cn }                 from "@/lib/utils"
 import { csvFilename } from "@/lib/csv-export"
@@ -76,6 +77,7 @@ export default function OverviewPage() {
   const { dateRange, selectedSolution, clientId, refreshKey } = useDashboardStore()
   const t           = useT()
   const brand       = useClientBrand()
+  const { exportAllSolutions, loading: exportLoading } = useCombinedExport()
 
   // Shimmer for 400 ms on solution/date change
   const [shimmer, dispatchShimmer] = useReducer((_: boolean, next: boolean) => next, false)
@@ -308,10 +310,20 @@ export default function OverviewPage() {
         {resultsError  && <ErrorBanner message={`${t.errorLoading} (results): ${resultsError}`} />}
 
         {/* KPI cards */}
-        <div className="flex items-center justify-end">
+        <div className="flex items-center justify-end gap-3 flex-wrap">
+          <button
+            onClick={() => exportAllSolutions()}
+            disabled={exportLoading}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-transparent text-white transition-all"
+            style={{ background: brand.primaryColor, opacity: exportLoading ? 0.7 : 1, cursor: exportLoading ? "not-allowed" : "pointer" }}
+            title="Export KPI data from all solutions into one CSV"
+          >
+            {exportLoading ? "Exporting…" : "📊 Export All Solutions"}
+          </button>
           <ExportButton
             data={kpiExportRows}
             filename={csvFilename(`kpi-summary-${selectedSolution ?? "all"}`)}
+            label="Export Current"
             columns={[
               { header: "Client", value: (r) => r.clientId || "" },
               { header: "Solution", value: (r) => r.solution },
