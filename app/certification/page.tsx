@@ -12,6 +12,7 @@ import { ExportButton } from "@/components/ExportButton"
 import { useDashboardStore } from "@/lib/store"
 import { useT } from "@/lib/lang-store"
 import { useApi, buildApiUrl } from "@/lib/hooks/useApi"
+import { useClientBrand } from "@/lib/hooks/useClientBrand"
 import { calcDeltaPct, estimatePassedSessions } from "@/lib/kpi-builder"
 import { csvFilename } from "@/lib/csv-export"
 import { cn } from "@/lib/utils"
@@ -50,6 +51,7 @@ function ErrorBanner({ message }: { message: string }) {
 export default function CertificationPage() {
   const { dateRange, clientId, refreshKey } = useDashboardStore()
   const t     = useT()
+  const brand = useClientBrand()
   const days = Math.round(
     (dateRange.to.getTime() - dateRange.from.getTime()) / 86_400_000
   )
@@ -196,7 +198,7 @@ export default function CertificationPage() {
           {trendsLoading
             ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
             : passFailData.length > 0
-              ? <StackedBarChart data={passFailData} />
+              ? <StackedBarChart data={passFailData} passColor={brand.chartColors[0]} failColor={brand.chartColors[1]} />
               : <EmptyState />
           }
         </ChartCard>

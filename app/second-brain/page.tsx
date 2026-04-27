@@ -6,6 +6,7 @@ import { ChartCard } from "@/components/ChartCard"
 import { useDashboardStore } from "@/lib/store"
 import { useT } from "@/lib/lang-store"
 import { useApi, buildApiUrl } from "@/lib/hooks/useApi"
+import { useClientBrand } from "@/lib/hooks/useClientBrand"
 import type {
   OverviewApiResponse,
   TrendsApiResponse,
@@ -126,7 +127,8 @@ function ErrorBanner({ message }: { message: string }) {
 
 export default function SecondBrainPage() {
   const { dateRange, clientId, refreshKey } = useDashboardStore()
-  const t   = useT()
+  const t     = useT()
+  const brand = useClientBrand()
   const days = Math.round((dateRange.to.getTime() - dateRange.from.getTime()) / 86_400_000)
 
   // ── Legacy RolPlay DB data ────────────────────────────────────────────────
@@ -417,7 +419,7 @@ export default function SecondBrainPage() {
           {trendsLoading
             ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
             : activityData.length > 0
-              ? <ActivityLineChart data={activityData} label="Interactions" />
+              ? <ActivityLineChart data={activityData} label="Interactions" color={brand.chartColors[0]} />
               : <EmptyState />
           }
         </ChartCard>

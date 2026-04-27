@@ -17,6 +17,7 @@ import { useApi, buildApiUrl } from "@/lib/hooks/useApi"
 import { calcDeltaPct, estimatePassedSessions } from "@/lib/kpi-builder"
 import { cn }                 from "@/lib/utils"
 import { csvFilename } from "@/lib/csv-export"
+import { useClientBrand } from "@/lib/hooks/useClientBrand"
 import Link from "next/link"
 import type {
   OverviewApiResponse,
@@ -74,6 +75,7 @@ function ErrorBanner({ message }: { message: string }) {
 export default function OverviewPage() {
   const { dateRange, selectedSolution, clientId, refreshKey } = useDashboardStore()
   const t           = useT()
+  const brand       = useClientBrand()
 
   // Shimmer for 400 ms on solution/date change
   const [shimmer, dispatchShimmer] = useReducer((_: boolean, next: boolean) => next, false)
@@ -365,7 +367,7 @@ export default function OverviewPage() {
             {shimmer || trendsLoading
               ? <div className="h-48 animate-pulse rounded-lg bg-muted" />
               : activityData.length > 0
-                ? <ActivityLineChart data={activityData} label="Evaluations" />
+                ? <ActivityLineChart data={activityData} label="Evaluations" color={brand.chartColors[0]} />
                 : <EmptyState />
             }
           </ChartCard>
@@ -389,7 +391,7 @@ export default function OverviewPage() {
           {shimmer || ucLoading
             ? <div className="h-48 animate-pulse rounded-lg bg-muted" />
             : moduleBreakdownData.length > 0
-              ? <ModuleBarChart data={moduleBreakdownData} />
+              ? <ModuleBarChart data={moduleBreakdownData} sessionsColor={brand.chartColors[0]} passedColor={brand.chartColors[1]} />
               : <EmptyState />
           }
         </ChartCard>

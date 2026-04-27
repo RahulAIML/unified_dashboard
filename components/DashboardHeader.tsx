@@ -144,6 +144,16 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Refresh button */}
+            <button
+              onClick={() => useDashboardStore.getState().triggerRefresh()}
+              className="px-2.5 py-1 rounded-lg text-xs font-semibold border border-border bg-muted hover:bg-muted/70 transition-colors"
+              aria-label="Refresh data"
+              title="Refresh all data"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+
             {/* EN / ES toggle */}
             <button
               onClick={toggleLang}

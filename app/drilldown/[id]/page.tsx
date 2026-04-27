@@ -354,9 +354,6 @@ export default function DrilldownPage() {
                         <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                           Value
                         </th>
-                        <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide w-24">
-                          Type
-                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -366,11 +363,6 @@ export default function DrilldownPage() {
                         const isCore    = CORE_FIELD_KEYS.has(field.fieldKey)
                         const isExtra   = EXTRA_FIELD_KEYS.has(field.fieldKey)
                         const display   = resolveDisplay(field)
-                        const valueType =
-                          field.valueNum      !== null ? "numeric"
-                          : field.valueText   !== null ? "text"
-                          : field.valueLongtext !== null ? "longtext"
-                          : "—"
 
                         return (
                           <tr
@@ -433,13 +425,6 @@ export default function DrilldownPage() {
                                   {display}
                                 </span>
                               )}
-                            </td>
-
-                            {/* Type badge */}
-                            <td className="px-4 py-2.5">
-                              <span className="text-[10px] font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                                {valueType}
-                              </span>
                             </td>
                           </tr>
                         )

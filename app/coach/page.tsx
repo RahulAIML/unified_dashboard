@@ -11,6 +11,7 @@ import { ExportButton } from "@/components/ExportButton"
 import { useDashboardStore } from "@/lib/store"
 import { useT } from "@/lib/lang-store"
 import { useApi, buildApiUrl } from "@/lib/hooks/useApi"
+import { useClientBrand } from "@/lib/hooks/useClientBrand"
 import { calcDeltaPct, estimatePassedSessions } from "@/lib/kpi-builder"
 import { csvFilename } from "@/lib/csv-export"
 import type {
@@ -49,6 +50,7 @@ function ErrorBanner({ message }: { message: string }) {
 export default function CoachPage() {
   const { dateRange, clientId, refreshKey } = useDashboardStore()
   const t     = useT()
+  const brand = useClientBrand()
   const days = Math.round((dateRange.to.getTime() - dateRange.from.getTime()) / 86_400_000)
 
   const overviewUrl = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to, { solution: "coach", clientId, rk: refreshKey })
@@ -157,7 +159,7 @@ export default function CoachPage() {
           {trendsLoading
             ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
             : activityData.length > 0
-              ? <ActivityLineChart data={activityData} label="Sessions" />
+              ? <ActivityLineChart data={activityData} label="Sessions" color={brand.chartColors[0]} />
               : <EmptyState />
           }
         </ChartCard>
