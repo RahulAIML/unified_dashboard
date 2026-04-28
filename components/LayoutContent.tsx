@@ -9,7 +9,8 @@ const AUTH_ROUTES = ['/auth/login', '/auth/register']
 export function LayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const isAuthRoute = AUTH_ROUTES.some(route => pathname.startsWith(route))
-  const showSidebar = !isAuthRoute
+  const isHomePage = pathname === '/'
+  const showSidebar = !isAuthRoute && !isHomePage
 
   return (
     <div className="flex h-full min-h-screen">
