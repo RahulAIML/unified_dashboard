@@ -5,14 +5,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyAccessToken, extractTokenFromHeader } from './lib/auth'
 
-const PUBLIC_ROUTES = ['/auth/login', '/auth/register', '/api/auth/login', '/api/auth/register', '/api/health', '/']
-const PROTECTED_ROUTES = ['/settings', '/certification', '/coach', '/lms', '/simulator', '/second-brain']
+// Public routes that don't require authentication
+const PUBLIC_ROUTES = ['/auth/login', '/auth/register', '/api/auth/login', '/api/auth/register', '/api/health']
+// Protected dashboard routes that require authentication
+const PROTECTED_ROUTES = ['/settings', '/certification', '/coach', '/lms', '/simulator', '/second-brain', '/drilldown']
+
+function isPublicRoute(pathname: string): boolean {
+  // Home page (/) is public but handled separately
+  if (pathname === '/') return true
+  // Check if pathname starts with any public API route
+  return PUBLIC_ROUTES.some((route) => pathname.startsWith(route))
+}
+
+function isProtectedRoute(pathname: string): boolean {
+  // Check if pathname starts with any protected route
+  return PROTECTED_ROUTES.some((route) => pathname.startsWith(route))
+}
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Allow public routes
-  if (PUBLIC_ROUTES.some((route) => pathname.startsWith(route))) {
+  // Allow public routes (home, auth pages, public APIs)
+  if (isPublicRoute(pathname)) {
     // Redirect authenticated users away from auth pages
     if (pathname.startsWith('/auth/')) {
       const token = request.cookies.get('accessToken')?.value
@@ -23,10 +37,8 @@ export function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // Check for protected routes
-  const isProtectedRoute = PROTECTED_ROUTES.some((route) => pathname === route)
-
-  if (isProtectedRoute) {
+  // Check for protected routes (dashboard routes)
+  if (isProtectedRoute(pathname)) {
     // Get token from cookie or header
     let token: string | null = request.cookies.get('accessToken')?.value ?? null
     if (!token) {
@@ -52,7 +64,7 @@ export function middleware(request: NextRequest) {
     return response
   }
 
-  // For API routes, verify token if not public
+  // For all other routes, check if they're protected API routes
   if (pathname.startsWith('/api/')) {
     let token: string | null = request.cookies.get('accessToken')?.value ?? null
     if (!token) {
@@ -71,7 +83,7 @@ export function middleware(request: NextRequest) {
     }
 
     // For protected API routes, return 401
-    if (!PUBLIC_ROUTES.includes(pathname)) {
+    if (!isPublicRoute(pathname)) {
       return NextResponse.json({ success: false, data: { message: 'Unauthorized' }, meta: {} }, { status: 401 })
     }
   }
