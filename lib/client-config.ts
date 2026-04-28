@@ -22,6 +22,12 @@ export interface ClientBrand {
   primaryHslDark:  string
   /** HSL triple for brand accent: "H S% L%" (use sparingly) */
   accentHsl:       string
+  /** HSL triple for tertiary (blue): "H S% L%" */
+  tertiaryHslLight?: string
+  tertiaryHslDark?: string
+  /** HSL triple for chart colors */
+  chart1Hsl?: string
+  chart2Hsl?: string
 }
 
 export const CLIENTS: Record<string, ClientBrand> = {
@@ -29,10 +35,16 @@ export const CLIENTS: Record<string, ClientBrand> = {
     name:         "Rolplay Analytics",
     logo:         "/logo.jpg",
     logoAlt:      "Rolplay",
-    primaryHslLight: "0 72% 51%",
-    primaryHslDark:  "0 75% 58%",
-    // Secondary brand: black (use for accents only, not backgrounds)
-    accentHsl:       "0 0% 0%",
+    primaryHslLight: "0 72% 51%",    // #DC2626 red (dominant)
+    primaryHslDark:  "0 75% 58%",    // Slightly brighter for dark mode
+    // Tertiary: blue (supporting color)
+    tertiaryHslLight: "217 91% 60%",  // #3B82F6 blue
+    tertiaryHslDark:  "217 91% 64%",  // Slightly brighter for dark mode
+    // Accent: teal (softer than amber)
+    accentHsl:       "168 76% 52%",   // #14B8A6 teal
+    // Chart colors
+    chart1Hsl:       "217 91% 60%",   // #3B82F6 blue
+    chart2Hsl:       "188 94% 56%",   // #06B6D4 cyan
   },
 
   coppel: {

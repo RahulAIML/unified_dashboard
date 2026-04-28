@@ -198,6 +198,89 @@ export function estimatePassedSessions(
   return Math.round((total * pr) / 100)
 }
 
+// ── 5. Module-specific KPI labels ─────────────────────────────────────────────
+
+export interface ModuleKpiConfig {
+  module: string
+  labels: {
+    metric1: string
+    metric2: string
+    metric3: string
+    metric4?: string
+  }
+}
+
+/**
+ * Per-module KPI label configuration
+ * Ensures each module shows correct labels (not generic "Certified Users" everywhere)
+ */
+export const MODULE_KPI_CONFIG: Record<string, ModuleKpiConfig> = {
+  'overview': {
+    module: 'overview',
+    labels: {
+      metric1: 'Practice Sessions',
+      metric2: 'Avg Session Score',
+      metric3: 'Overall Pass Rate',
+      metric4: 'Certified Users',
+    },
+  },
+  'coach': {
+    module: 'coach',
+    labels: {
+      metric1: 'Practice Sessions',
+      metric2: 'Successful Sessions',  // Changed from "Certified Users"
+      metric3: 'Avg Session Score',
+      metric4: 'Session Count',
+    },
+  },
+  'simulator': {
+    module: 'simulator',
+    labels: {
+      metric1: 'Total Scenarios',
+      metric2: 'Completed Scenarios',  // Changed from "Certified Users"
+      metric3: 'Avg Scenario Score',
+      metric4: 'Scenario Count',
+    },
+  },
+  'certification': {
+    module: 'certification',
+    labels: {
+      metric1: 'Candidates Evaluated',
+      metric2: 'Certified Users',  // Keep as-is
+      metric3: 'Avg Certification Score',
+      metric4: 'Certification Rate',
+    },
+  },
+  'lms': {
+    module: 'lms',
+    labels: {
+      metric1: 'Active Learners',     // Fixed from double-count
+      metric2: 'Course Completion %',
+      metric3: 'Avg Quiz Score',
+      metric4: 'Modules Completed',
+    },
+  },
+  'second-brain': {
+    module: 'second-brain',
+    labels: {
+      metric1: 'Total Interactions',
+      metric2: 'Active Knowledge Seekers',
+      metric3: 'Avg Relevance Score',
+      metric4: 'Documents Indexed',
+    },
+  },
+}
+
+/**
+ * Get KPI labels for a specific module
+ * Falls back to overview labels if module not found
+ */
+export function getModuleKpiLabels(module: string | null | undefined): ModuleKpiConfig['labels'] {
+  if (!module) return MODULE_KPI_CONFIG['overview'].labels
+  const config = MODULE_KPI_CONFIG[module]
+  return config ? config.labels : MODULE_KPI_CONFIG['overview'].labels
+}
+
 export interface BuildKpiCardInput<TLabelKey extends string = string> {
   label: string
   labelKey: TLabelKey

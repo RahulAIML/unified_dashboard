@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import type { CSSProperties } from "react"
 import "./globals.css";
-import { Sidebar } from "@/components/Sidebar";
 import { ThemeProvider } from "@/components/ThemeProvider";
-import { AIAssistant } from "@/components/ai-assistant";
 import { ClientBrandProvider } from "@/components/ClientBrandProvider";
+import { AuthProvider } from "@/components/AuthProvider";
+import { LayoutContent } from "@/components/LayoutContent";
 
 const FONT_SANS =
   'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, "Noto Sans", "Liberation Sans", sans-serif'
@@ -35,14 +35,10 @@ export default function RootLayout({
     >
       <body className="h-full antialiased">
         <ThemeProvider>
-          <ClientBrandProvider />
-          <div className="flex h-full min-h-screen">
-            <Sidebar />
-            <main className="flex-1 overflow-auto bg-muted/30 md:pt-0 pt-16">
-              {children}
-            </main>
-          </div>
-          <AIAssistant />
+          <AuthProvider>
+            <ClientBrandProvider />
+            <LayoutContent>{children}</LayoutContent>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

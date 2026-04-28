@@ -33,6 +33,8 @@
   --color-muted: var(--muted);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-secondary: var(--secondary);
+  --color-tertiary-foreground: var(--tertiary-foreground);
+  --color-tertiary: hsl(var(--tertiary));
   --color-primary-foreground: var(--primary-foreground);
   --color-primary: hsl(var(--primary));
   --color-popover-foreground: var(--popover-foreground);
@@ -57,7 +59,9 @@
   --popover-foreground: oklch(0.145 0 0);
   --primary: 0 72% 51%;
   --primary-foreground: oklch(0.985 0 0);
-  --brand-accent: hsl(0 0% 0%);
+  --tertiary: 217 91% 60%;
+  --tertiary-foreground: oklch(0.985 0 0);
+  --brand-accent: hsl(168 76% 52%);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
@@ -68,12 +72,12 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: hsl(var(--primary));
-  /* Chart palette derived from brand tokens */
-  --chart-1: hsl(var(--primary));
-  --chart-2: color-mix(in oklch, hsl(var(--primary)) 75%, black);
-  --chart-3: color-mix(in oklch, hsl(var(--primary)) 70%, white);
-  --chart-4: color-mix(in oklch, hsl(var(--primary)) 55%, black);
-  --chart-5: color-mix(in oklch, var(--brand-accent) 60%, hsl(var(--primary)));
+  /* Chart palette: red + blue + cyan balance */
+  --chart-1: hsl(217 91% 60%);
+  --chart-2: hsl(188 94% 56%);
+  --chart-3: hsl(var(--primary));
+  --chart-4: hsl(var(--tertiary));
+  --chart-5: var(--brand-accent);
   --radius: 0.75rem;
   /* Sidebar: always dark (black) */
   --sidebar: oklch(0.10 0 0);
@@ -96,7 +100,9 @@
   /* Rolplay red slightly brighter for dark mode */
   --primary: 0 75% 58%;
   --primary-foreground: oklch(0.985 0 0);
-  --brand-accent: hsl(0 0% 0%);
+  --tertiary: 217 91% 64%;
+  --tertiary-foreground: oklch(0.985 0 0);
+  --brand-accent: hsl(168 76% 58%);
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
@@ -108,11 +114,11 @@
   --input: oklch(1 0 0 / 15%);
   --ring: hsl(var(--primary));
   /* Chart palette dark â€” slightly brighter for contrast */
-  --chart-1: hsl(var(--primary));
-  --chart-2: color-mix(in oklch, hsl(var(--primary)) 70%, black);
-  --chart-3: color-mix(in oklch, hsl(var(--primary)) 65%, white);
-  --chart-4: color-mix(in oklch, hsl(var(--primary)) 50%, black);
-  --chart-5: color-mix(in oklch, var(--brand-accent) 60%, hsl(var(--primary)));
+  --chart-1: hsl(217 91% 64%);
+  --chart-2: hsl(188 94% 60%);
+  --chart-3: hsl(var(--primary));
+  --chart-4: hsl(var(--tertiary));
+  --chart-5: var(--brand-accent);
   /* Sidebar stays dark */
   --sidebar: oklch(0.10 0 0);
   --sidebar-foreground: oklch(0.92 0 0);
