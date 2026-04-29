@@ -59,11 +59,21 @@ export function allowedUsecaseIdsForClient(clientId: string | null | undefined):
 
   const rule = rules[id]
   if (!rule) {
+    // No rule configured for this client_id.
+    // SAFE FALLBACK: show all data instead of blocking the dashboard.
+    //
+    // Rationale: the analytics MySQL DB has no company_id column yet.
+    // Every authenticated user should see the shared dataset until
+    // proper per-tenant DB-level isolation is implemented.
+    // Once tenant rules are added (via TENANT_USECASE_MAP_JSON or code),
+    // this fallback is bypassed automatically.
     if (id !== DEFAULT_CLIENT_ID) {
-      console.warn(`⚠️  No tenant rule configured for clientId="${id}" — returning empty dataset`)
-      return []
+      console.warn(
+        `[tenant] No rule for clientId="${id}" — showing all data (safe fallback). ` +
+        `Add an entry to TENANT_USECASE_MAP_JSON to restrict this client.`
+      )
     }
-    return undefined
+    return undefined  // undefined = no filter = all data visible
   }
 
   if (rule === "all") return undefined

@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
       httpOnly: true,
       secure:   isProd,
       sameSite: 'lax',
-      maxAge:   15 * 60,           // 15 min
+      maxAge:   8 * 60 * 60,       // 8 hours
       path:     '/',
     })
     response.cookies.set('refreshToken', refreshToken, {

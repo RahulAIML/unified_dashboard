@@ -7,7 +7,9 @@ import * as bcrypt from 'bcryptjs'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-prod'
 const REFRESH_SECRET = process.env.REFRESH_SECRET || 'dev-refresh-secret-change-in-prod'
-const ACCESS_TOKEN_EXPIRY = '15m'
+// 8 hours — long enough for a full work day without forced re-login.
+// Refresh token (7 days) silently renews the access token when it expires.
+const ACCESS_TOKEN_EXPIRY = '8h'
 const REFRESH_TOKEN_EXPIRY = '7d'
 
 export interface User {

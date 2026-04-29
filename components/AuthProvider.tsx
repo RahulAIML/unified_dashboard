@@ -33,17 +33,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isAuthenticated: false,
   })
 
-  // Check auth on mount (page refresh / direct URL visit)
+  // Check auth on mount (page refresh / direct URL visit).
+  // If access token is expired, automatically attempts a silent refresh
+  // using the refresh token cookie before giving up.
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const response = await fetch('/api/auth/me', { credentials: 'include' })
-        if (response.ok) {
-          const data = await response.json()
+        // ── 1. Try with current access token ────────────────────────
+        const meRes = await fetch('/api/auth/me', { credentials: 'include' })
+
+        if (meRes.ok) {
+          const data = await meRes.json()
           setState({ user: data.data.user, isLoading: false, isAuthenticated: true })
-        } else {
-          setState({ user: null, isLoading: false, isAuthenticated: false })
+          return
         }
+
+        // ── 2. Access token expired/missing — try silent refresh ─────
+        if (meRes.status === 401) {
+          const refreshRes = await fetch('/api/auth/refresh', {
+            method: 'POST',
+            credentials: 'include',
+          })
+
+          if (refreshRes.ok) {
+            // New access token is now in cookie — retry /me
+            const meRes2 = await fetch('/api/auth/me', { credentials: 'include' })
+            if (meRes2.ok) {
+              const data2 = await meRes2.json()
+              setState({ user: data2.data.user, isLoading: false, isAuthenticated: true })
+              return
+            }
+          }
+        }
+
+        // ── 3. Both attempts failed — not authenticated ──────────────
+        setState({ user: null, isLoading: false, isAuthenticated: false })
+
       } catch {
         setState({ user: null, isLoading: false, isAuthenticated: false })
       }
