@@ -89,6 +89,22 @@ interface SBProfile {
   message_logs?:       SBMessageLog
 }
 
+// ── Privacy helpers ───────────────────────────────────────────────────────────
+
+/**
+ * Mask a phone / WhatsApp number so only the last 2 digits are visible.
+ * Input:  "+52 664 123 4567"  →  Output: "•••••••••••••67"
+ * Digits only (stripped of spaces/+/-) are counted.
+ */
+function maskPhone(phone: string | null | undefined): string {
+  if (!phone) return "—"
+  const digits = phone.replace(/\D/g, "")
+  if (digits.length < 2) return "••••••"
+  const visible = digits.slice(-2)
+  const masked  = "•".repeat(Math.max(digits.length - 2, 4))
+  return masked + visible
+}
+
 // ── Small helpers ─────────────────────────────────────────────────────────────
 
 const sbIcons = [
@@ -236,7 +252,7 @@ export default function SecondBrainPage() {
         )}>{r.role_name ?? "—"}</span>
       ),
     },
-    { key: "whatsapp_number", header: "WhatsApp",   render: r => <span className="tabular-nums text-xs">{r.whatsapp_number ?? "—"}</span> },
+    { key: "whatsapp_number", header: "WhatsApp",   render: r => <span className="tabular-nums text-xs tracking-widest">{maskPhone(r.whatsapp_number)}</span> },
     { key: "is_active",       header: "Status",     render: r => (
         <span className={cn(
           "inline-flex px-2 py-0.5 rounded-full text-xs font-medium",
@@ -361,7 +377,7 @@ export default function SecondBrainPage() {
                   { header: "Name",        value: r => r.full_name },
                   { header: "Job Title",   value: r => r.job_title },
                   { header: "Role",        value: r => r.role_name },
-                  { header: "WhatsApp",    value: r => r.whatsapp_number },
+                  { header: "WhatsApp",    value: r => maskPhone(r.whatsapp_number) },
                   { header: "Active",      value: r => r.is_active ? "Yes" : "No" },
                   { header: "Created",     value: r => r.created_at?.slice(0, 10) },
                 ]}

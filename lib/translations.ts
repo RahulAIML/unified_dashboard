@@ -18,6 +18,7 @@ export const translations = {
     navSettings:     'Settings',
     lightMode:       'Light mode',
     darkMode:        'Dark mode',
+    logout:          'Sign out',
     phaseLabel:      'v1.0 · Analytics Platform',
 
     // ── Global filter bar ────────────────────────────────────
@@ -212,6 +213,7 @@ export const translations = {
     navSettings:     'Ajustes',
     lightMode:       'Modo claro',
     darkMode:        'Modo oscuro',
+    logout:          'Cerrar sesión',
     phaseLabel:      'v1.0 · Plataforma Analytics',
 
     // ── Global filter bar ────────────────────────────────────

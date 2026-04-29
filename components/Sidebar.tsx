@@ -1,17 +1,18 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import {
   LayoutDashboard, BookOpen, BrainCircuit, Gamepad2,
-  BadgeCheck, Database, Sun, Moon, Settings
+  BadgeCheck, Database, Sun, Moon, Settings, LogOut
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useTheme } from "./ThemeProvider"
 import { useT } from "@/lib/lang-store"
 import { useClientBrand } from "@/lib/hooks/useClientBrand"
+import { useAuthContext } from "./AuthProvider"
 
 function LogoImage() {
   const brand = useClientBrand()
@@ -42,10 +43,26 @@ function LogoImage() {
 
 export function Sidebar() {
   const pathname = usePathname()
+  const router   = useRouter()
   const { theme, toggle } = useTheme()
   const t     = useT()
   const brand = useClientBrand()
+  const { clearAuth } = useAuthContext()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [loggingOut, setLoggingOut] = useState(false)
+
+  const handleLogout = useCallback(async () => {
+    if (loggingOut) return
+    setLoggingOut(true)
+    try {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
+    } catch {
+      // ignore network errors — clear client state regardless
+    } finally {
+      clearAuth()
+      router.push('/auth/login')
+    }
+  }, [loggingOut, clearAuth, router])
 
   const nav = [
     { href: "/",              label: t.navOverview,      icon: LayoutDashboard },
@@ -109,7 +126,7 @@ export function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="px-4 py-4 border-t border-sidebar-border">
+      <div className="px-4 py-4 border-t border-sidebar-border space-y-1">
         <button
           onClick={toggle}
           className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
@@ -117,7 +134,15 @@ export function Sidebar() {
           {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           {theme === "dark" ? t.lightMode : t.darkMode}
         </button>
-        <p className="text-xs text-sidebar-foreground/30 mt-2 px-3">{t.phaseLabel}</p>
+        <button
+          onClick={handleLogout}
+          disabled={loggingOut}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-destructive/80 hover:bg-destructive/10 hover:text-destructive transition-colors disabled:opacity-50"
+        >
+          <LogOut className="w-4 h-4 shrink-0" />
+          {loggingOut ? '…' : t.logout}
+        </button>
+        <p className="text-xs text-sidebar-foreground/30 mt-1 px-3">{t.phaseLabel}</p>
       </div>
     </>
   )
