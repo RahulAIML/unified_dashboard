@@ -1,9 +1,8 @@
 'use client'
 
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react'
-import { useRouter, usePathname } from 'next/navigation'
+import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react'
 
-interface AuthUser {
+export interface AuthUser {
   id: number
   email: string
   full_name: string
@@ -15,54 +14,56 @@ interface AuthContextType {
   user: AuthUser | null
   isLoading: boolean
   isAuthenticated: boolean
+  /** Call this immediately after a successful login/register response */
+  setAuthenticated: (user: AuthUser) => void
+  /** Call this on logout */
+  clearAuth: () => void
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const router = useRouter()
-  const pathname = usePathname()
-  const [state, setState] = useState<AuthContextType>({
+  const [state, setState] = useState<{
+    user: AuthUser | null
+    isLoading: boolean
+    isAuthenticated: boolean
+  }>({
     user: null,
     isLoading: true,
     isAuthenticated: false,
   })
 
-  // Check auth on mount
+  // Check auth on mount (page refresh / direct URL visit)
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const response = await fetch('/api/auth/me', {
-          credentials: 'include',
-        })
+        const response = await fetch('/api/auth/me', { credentials: 'include' })
         if (response.ok) {
           const data = await response.json()
-          setState({
-            user: data.data.user,
-            isLoading: false,
-            isAuthenticated: true,
-          })
+          setState({ user: data.data.user, isLoading: false, isAuthenticated: true })
         } else {
-          setState({
-            user: null,
-            isLoading: false,
-            isAuthenticated: false,
-          })
+          setState({ user: null, isLoading: false, isAuthenticated: false })
         }
-      } catch (error) {
-        setState({
-          user: null,
-          isLoading: false,
-          isAuthenticated: false,
-        })
+      } catch {
+        setState({ user: null, isLoading: false, isAuthenticated: false })
       }
     }
-
     checkAuth()
   }, [])
 
+  // Called by login/register pages after a successful API response
+  // Updates context immediately — no page reload needed
+  const setAuthenticated = useCallback((user: AuthUser) => {
+    setState({ user, isLoading: false, isAuthenticated: true })
+  }, [])
+
+  // Called by logout
+  const clearAuth = useCallback(() => {
+    setState({ user: null, isLoading: false, isAuthenticated: false })
+  }, [])
+
   return (
-    <AuthContext.Provider value={state}>
+    <AuthContext.Provider value={{ ...state, setAuthenticated, clearAuth }}>
       {children}
     </AuthContext.Provider>
   )

@@ -6,9 +6,11 @@ import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Eye, EyeOff, AlertCircle } from 'lucide-react'
 import { detectCompanyFromEmail, getCompanyDisplayName } from '@/lib/company-mapping'
+import { useAuthContext } from '@/components/AuthProvider'
 
 export default function LoginPage() {
   const router = useRouter()
+  const { setAuthenticated } = useAuthContext()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -67,7 +69,11 @@ export default function LoginPage() {
         return
       }
 
-      // Success - redirect to dashboard
+      // Update auth context immediately — no page reload needed
+      if (data.data?.user) {
+        setAuthenticated(data.data.user)
+      }
+      // Redirect to dashboard
       router.push('/')
     } catch (err) {
       setError('An error occurred. Please try again.')

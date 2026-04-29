@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Eye, EyeOff, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { detectCompanyFromEmail, getCompanyDisplayName } from '@/lib/company-mapping'
+import { useAuthContext } from '@/components/AuthProvider'
 
 function PasswordStrength({ password }: { password: string }) {
   const getStrength = () => {
@@ -48,6 +49,7 @@ function PasswordStrength({ password }: { password: string }) {
 
 export default function RegisterPage() {
   const router = useRouter()
+  const { setAuthenticated } = useAuthContext()
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -148,7 +150,11 @@ export default function RegisterPage() {
         return
       }
 
-      // Success - redirect to dashboard
+      // Update auth context immediately — no page reload needed
+      if (data.data?.user) {
+        setAuthenticated(data.data.user)
+      }
+      // Redirect to dashboard
       router.push('/')
     } catch (err) {
       setError('An error occurred. Please try again.')
