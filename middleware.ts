@@ -12,7 +12,7 @@ import { verifyAccessToken, extractTokenFromHeader } from './lib/auth'
 import { sanitizeCompanyId, logSecurityEvent } from './lib/multi-tenant'
 
 // Public routes that don't require authentication
-const PUBLIC_ROUTES = ['/auth/login', '/auth/register', '/api/auth/login', '/api/auth/register', '/api/health']
+const PUBLIC_ROUTES = ['/auth/login', '/auth/register', '/api/auth/login', '/api/auth/register', '/api/auth/setup', '/api/auth/refresh', '/api/health']
 // Protected dashboard routes that require authentication
 const PROTECTED_ROUTES = ['/settings', '/certification', '/coach', '/lms', '/simulator', '/second-brain', '/drilldown']
 
