@@ -18,7 +18,7 @@ export const translations = {
     navSettings:     'Settings',
     lightMode:       'Light mode',
     darkMode:        'Dark mode',
-    phaseLabel:      'v1.0 · Phase 1 Launch',
+    phaseLabel:      'v1.0 · Analytics Platform',
 
     // ── Global filter bar ────────────────────────────────────
     filterSolutions: 'Solutions',
@@ -162,6 +162,16 @@ export const translations = {
     lmsNoDataSub:     'LMS modules, completions, and quiz scores are stored in the rolplay.pro database — a separate schema from coach_app. A dedicated schema audit and backend endpoint are required before this view can show real data.',
     lmsAuditNeeded:   'Schema audit required',
 
+    // ── Second Brain KPI labels ──────────────────────────────
+    sbTotalInteractions:   'Total Interactions',
+    sbActiveMembers:       'Active Members',
+    sbCoachingSessions:    'Coaching Sessions',
+    sbScenarios:           'Scenarios',
+    sbTotalMembers:        'Total Members',
+    sbDocumentsIndexed:    'Documents Indexed',
+    sbWhatsAppMessages:    'WhatsApp Messages',
+    sbKnowledgeDocs:       'Knowledge Base Docs',
+
     // ── Source badges ────────────────────────────────────────
     sourceUsers:      'Source: coach_users + saved_reports',
     sourceCoach:      'Source: coach_usecases + coach_usecase_user',
@@ -202,7 +212,7 @@ export const translations = {
     navSettings:     'Ajustes',
     lightMode:       'Modo claro',
     darkMode:        'Modo oscuro',
-    phaseLabel:      'v1.0 · Fase 1 Lanzamiento',
+    phaseLabel:      'v1.0 · Plataforma Analytics',
 
     // ── Global filter bar ────────────────────────────────────
     filterSolutions: 'Soluciones',
@@ -345,6 +355,16 @@ export const translations = {
     lmsNoData:        'Datos de LMS no disponibles',
     lmsNoDataSub:     'Los módulos LMS, completaciones y puntuaciones de cuestionarios están almacenados en la base de datos de rolplay.pro — un esquema separado de coach_app. Se requiere una auditoría de esquema dedicada antes de que esta vista pueda mostrar datos reales.',
     lmsAuditNeeded:   'Auditoría de esquema requerida',
+
+    // ── Second Brain KPI labels ──────────────────────────────
+    sbTotalInteractions:   'Interacciones Totales',
+    sbActiveMembers:       'Miembros Activos',
+    sbCoachingSessions:    'Sesiones de Coaching',
+    sbScenarios:           'Escenarios',
+    sbTotalMembers:        'Miembros Totales',
+    sbDocumentsIndexed:    'Documentos Indexados',
+    sbWhatsAppMessages:    'Mensajes WhatsApp',
+    sbKnowledgeDocs:       'Docs Base de Conocimiento',
 
     // ── Source badges ────────────────────────────────────────
     sourceUsers:      'Fuente: coach_users + saved_reports',

@@ -1,100 +1,122 @@
 /**
- * /api/auth/login — User login endpoint
+ * /api/auth/login — User login
+ *
+ * Returns specific, actionable error messages for every failure mode.
  */
 
-import { NextRequest, NextResponse } from 'next/server'
-import { getUserPasswordHash, findUserByEmail, createSession, updateUserLastLogin } from '@/lib/db-users'
+import { NextRequest } from 'next/server'
+import {
+  getUserPasswordHash,
+  findUserByEmail,
+  createSession,
+  updateUserLastLogin,
+  DbError,
+} from '@/lib/db-users'
 import { verifyPassword, generateAccessToken, generateRefreshToken } from '@/lib/auth'
 import { buildSuccess, buildApiError } from '@/lib/api-utils'
 
 export const runtime = 'nodejs'
 
-interface LoginRequest {
-  email: string
-  password: string
-}
-
-interface LoginResponse {
-  user: {
-    id: number
-    email: string
-    full_name: string
-    company_id: string
-  }
-  access_token: string
-  refresh_token: string
-}
-
 export async function POST(request: NextRequest) {
   try {
-    const body: LoginRequest = await request.json()
+    // ── 1. Parse body ────────────────────────────────────────────────
+    let body: { email?: string; password?: string }
+    try {
+      body = await request.json()
+    } catch {
+      return buildApiError('Invalid JSON in request body', 400)
+    }
+
     const { email, password } = body
 
-    // Validation
-    if (!email || !password) {
+    if (!email?.trim() || !password) {
       return buildApiError('Email and password are required', 400)
     }
 
-    // Find user
-    const user = await findUserByEmail(email)
-    if (!user) {
-      return buildApiError('Invalid email or password', 401)
+    // ── 2. Look up user ──────────────────────────────────────────────
+    let user
+    let passwordHash
+    try {
+      user = await findUserByEmail(email.toLowerCase().trim())
+      if (!user) {
+        return buildApiError('No account found with this email address.', 401)
+      }
+      passwordHash = await getUserPasswordHash(email.toLowerCase().trim())
+    } catch (err) {
+      if (err instanceof DbError) {
+        switch (err.code) {
+          case 'NOT_CONFIGURED':
+            return buildApiError(
+              'Auth database not configured. Add AUTH_DATABASE_URL to .env.local.',
+              503
+            )
+          case 'TABLE_MISSING':
+            return buildApiError(
+              'Auth database not initialised. Visit /api/auth/setup?secret=REDACTED_SETUP_SECRET first.',
+              503
+            )
+          case 'CONNECTION_FAILED':
+            return buildApiError('Cannot connect to the auth database. Please try again.', 503)
+          default:
+            return buildApiError(err.message, 500)
+        }
+      }
+      throw err
     }
 
-    // Verify password
-    const passwordHash = await getUserPasswordHash(email)
     if (!passwordHash) {
-      return buildApiError('Invalid email or password', 401)
+      return buildApiError('Account data is incomplete. Please contact support.', 500)
     }
 
+    // ── 3. Verify password ───────────────────────────────────────────
     const passwordValid = await verifyPassword(password, passwordHash)
     if (!passwordValid) {
-      return buildApiError('Invalid email or password', 401)
+      return buildApiError('Incorrect password. Please try again.', 401)
     }
 
-    // Generate tokens
-    const accessToken = generateAccessToken(user)
+    // ── 4. Generate JWT tokens ───────────────────────────────────────
+    const accessToken  = generateAccessToken(user)
     const refreshToken = generateRefreshToken(user)
 
-    // Create session record
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+    // ── 5. Record session (non-blocking) ─────────────────────────────
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
     await createSession(user.id, `refresh-${user.id}-${Date.now()}`, expiresAt)
-
-    // Update last login
     await updateUserLastLogin(user.id)
 
-    // Response with tokens in httpOnly cookies
-    const response = buildSuccess<LoginResponse>({
+    // ── 6. Return success with cookies ───────────────────────────────
+    const response = buildSuccess({
       user: {
-        id: user.id,
-        email: user.email,
-        full_name: user.full_name,
+        id:         user.id,
+        email:      user.email,
+        full_name:  user.full_name,
         company_id: user.company_id,
       },
-      access_token: accessToken,
+      access_token:  accessToken,
       refresh_token: refreshToken,
     })
 
-    // Set httpOnly cookies
+    const isProd = process.env.NODE_ENV === 'production'
+
     response.cookies.set('accessToken', accessToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure:   isProd,
       sameSite: 'lax',
-      maxAge: 15 * 60, // 15 minutes
-      path: '/',
+      maxAge:   15 * 60,
+      path:     '/',
     })
-
     response.cookies.set('refreshToken', refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure:   isProd,
       sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60, // 7 days
-      path: '/',
+      maxAge:   7 * 24 * 60 * 60,
+      path:     '/',
     })
 
     return response
+
   } catch (error) {
-    console.error('Login error:', error)
-    return buildApiError('Internal server error', 500)
+    console.error('[/api/auth/login] Unhandled error:', error)
+    const msg = error instanceof Error ? error.message : 'Unexpected error'
+    return buildApiError(`Login failed: ${msg}`, 500)
   }
 }

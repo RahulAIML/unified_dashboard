@@ -2,17 +2,34 @@
  * company-mapping.ts — Email domain to company mapping
  */
 
+/**
+ * EMAIL DOMAIN → CLIENT ID MAPPING
+ *
+ * To onboard a new client:
+ *   1. Add their email domain here: 'newclient.com': 'newclient'
+ *   2. Add their display name below: 'newclient': 'New Client'
+ *   3. That's it — registration, login, and data filtering all pick it up automatically.
+ *
+ * Users whose domain is NOT in this map get client_id = first part of their domain
+ * (e.g. john@acme.org → client_id = "acme"). They can still register and log in,
+ * but their analytics data scope will be "acme".
+ */
 const COMPANY_DOMAIN_MAP: Record<string, string> = {
-  'coppel.com': 'coppel',
+  // Coppel
+  'coppel.com':    'coppel',
   'coppel.com.mx': 'coppel',
-  'coppel.mx': 'coppel',
-  'rolplay.pro': 'rolplay',
-  'rolplay.com': 'rolplay',
+  'coppel.mx':     'coppel',
+
+  // RolPlay internal
+  'rolplay.pro':   'rolplay',
+  'rolplay.com':   'rolplay',
+  'rolplay.ai':    'rolplay',
+  'rolplay.io':    'rolplay',
 }
 
 const COMPANY_DISPLAY_NAMES: Record<string, string> = {
-  'coppel': 'Coppel',
-  'rolplay': 'Rolplay',
+  'coppel':  'Coppel',
+  'rolplay': 'RolPlay',
 }
 
 /**

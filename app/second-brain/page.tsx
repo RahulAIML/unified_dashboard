@@ -155,13 +155,13 @@ export default function SecondBrainPage() {
     //   Scenarios           → total_coaching_scenarios
     return [
       {
-        label: "Total Interactions", labelKey: "practiceSessions" as const,
+        label: "Total Interactions", labelKey: "sbTotalInteractions" as const,
         value: s.total_message_logs,
         delta: 0,
         tier: "A" as const,
       },
       {
-        label: "Active Members", labelKey: "totalSessions" as const,
+        label: "Active Members", labelKey: "sbActiveMembers" as const,
         value: s.active_members,
         delta: s.total_members > 0
           ? Math.round((s.active_members / s.total_members) * 100)
@@ -170,13 +170,13 @@ export default function SecondBrainPage() {
         tier: "B" as const,
       },
       {
-        label: "Coaching Sessions", labelKey: "passRate" as const,
+        label: "Coaching Sessions", labelKey: "sbCoachingSessions" as const,
         value: s.total_coaching_sessions,
         delta: 0,
         tier: "A" as const,
       },
       {
-        label: "Scenarios", labelKey: "avgScore" as const,
+        label: "Scenarios", labelKey: "sbScenarios" as const,
         value: s.total_coaching_scenarios,
         delta: 0,
         tier: "B" as const,
