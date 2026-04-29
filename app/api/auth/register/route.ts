@@ -56,11 +56,12 @@ export async function POST(request: NextRequest) {
     try {
       const exists = await emailExists(email)
       if (exists) {
-        return buildApiError('This email address is already registered. Please sign in instead.', 409)
+        return buildApiError('An account with this email already exists. Please sign in instead.', 409)
       }
     } catch (err) {
       if (err instanceof DbError) {
-        return buildApiError(friendlyDbError(err), dbStatusCode(err))
+        console.error('[/api/auth/register] DB error on emailExists:', err.code, err.message)
+        return buildApiError(userFacingError(err), dbStatusCode(err))
       }
       throw err
     }
@@ -84,7 +85,8 @@ export async function POST(request: NextRequest) {
       )
     } catch (err) {
       if (err instanceof DbError) {
-        return buildApiError(friendlyDbError(err), dbStatusCode(err))
+        console.error('[/api/auth/register] DB error on createUser:', err.code, err.message)
+        return buildApiError(userFacingError(err), dbStatusCode(err))
       }
       throw err
     }
@@ -126,34 +128,35 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('[/api/auth/register] Unhandled error:', error)
-    const msg = error instanceof Error ? error.message : 'Unexpected error'
-    return buildApiError(`Registration failed: ${msg}`, 500)
+    return buildApiError('Something went wrong. Please try again.', 500)
   }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function friendlyDbError(err: DbError): string {
+/**
+ * What the USER sees — never expose internal details, URLs, or config names.
+ * Technical detail is logged to the server console above.
+ */
+function userFacingError(err: DbError): string {
   switch (err.code) {
-    case 'NOT_CONFIGURED':
-      return 'The auth database is not configured. Add AUTH_DATABASE_URL to .env.local (see instructions in .env.local).'
-    case 'TABLE_MISSING':
-      return 'The auth database has not been initialised yet. Visit /api/auth/setup?secret=REDACTED_SETUP_SECRET to create the required tables, then try again.'
     case 'DUPLICATE_EMAIL':
-      return 'This email address is already registered. Please sign in instead.'
+      return 'An account with this email already exists. Please sign in instead.'
+    case 'NOT_CONFIGURED':
+    case 'TABLE_MISSING':
     case 'CONNECTION_FAILED':
-      return 'Cannot connect to the auth database. Check your AUTH_DATABASE_URL and try again.'
+      return 'We\'re unable to create your account right now. Please try again in a few minutes.'
     default:
-      return err.message
+      return 'Something went wrong. Please try again.'
   }
 }
 
 function dbStatusCode(err: DbError): number {
   switch (err.code) {
-    case 'DUPLICATE_EMAIL':  return 409
-    case 'NOT_CONFIGURED':   return 503
-    case 'TABLE_MISSING':    return 503
+    case 'DUPLICATE_EMAIL':   return 409
+    case 'NOT_CONFIGURED':    return 503
+    case 'TABLE_MISSING':     return 503
     case 'CONNECTION_FAILED': return 503
-    default:                 return 500
+    default:                  return 500
   }
 }

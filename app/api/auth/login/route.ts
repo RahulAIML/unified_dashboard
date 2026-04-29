@@ -44,21 +44,14 @@ export async function POST(request: NextRequest) {
       passwordHash = await getUserPasswordHash(email.toLowerCase().trim())
     } catch (err) {
       if (err instanceof DbError) {
+        console.error('[/api/auth/login] DB error:', err.code, err.message)
         switch (err.code) {
           case 'NOT_CONFIGURED':
-            return buildApiError(
-              'Auth database not configured. Add AUTH_DATABASE_URL to .env.local.',
-              503
-            )
           case 'TABLE_MISSING':
-            return buildApiError(
-              'Auth database not initialised. Visit /api/auth/setup?secret=REDACTED_SETUP_SECRET first.',
-              503
-            )
           case 'CONNECTION_FAILED':
-            return buildApiError('Cannot connect to the auth database. Please try again.', 503)
+            return buildApiError('We\'re unable to sign you in right now. Please try again in a few minutes.', 503)
           default:
-            return buildApiError(err.message, 500)
+            return buildApiError('Something went wrong. Please try again.', 500)
         }
       }
       throw err
@@ -116,7 +109,6 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('[/api/auth/login] Unhandled error:', error)
-    const msg = error instanceof Error ? error.message : 'Unexpected error'
-    return buildApiError(`Login failed: ${msg}`, 500)
+    return buildApiError('Something went wrong. Please try again.', 500)
   }
 }
