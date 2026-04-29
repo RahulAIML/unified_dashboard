@@ -1,25 +1,22 @@
 <?php
 /**
- * rolplay-bridge-new.php
+ * rolplay-bridge-new.php — Full read/write PHP bridge
  *
- * INSTRUCTIONS — DO THIS BEFORE UPLOADING:
+ * Supports: SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP
+ * Auth:     X-Bridge-Key header
+ * DB:       rolplay_pro_analytics @ localhost
  *
- * STEP 1: Open your current /src/rolplay-bridge.php in cPanel
- * STEP 2: Find the DB_HOST, DB_USER, DB_PASSWORD values and copy them
- * STEP 3: Paste those values below where marked with ← FILL IN
- * STEP 4: Save this file
- * STEP 5: Upload to /src/rolplay-bridge.php (overwrite the current one)
- * STEP 6: Tell Claude — he will verify it worked
+ * UPLOAD THIS FILE to /src/rolplay-bridge.php (overwrite the current one)
  */
 
 // ════════════════════════════════════════════════════════════════════
-// FILL IN THESE 3 VALUES FROM YOUR CURRENT BRIDGE FILE
+// CONFIGURATION — all values pre-filled from project env
 // ════════════════════════════════════════════════════════════════════
-define('DB_HOST',     'localhost');           // ← FILL IN (probably localhost)
-define('DB_USER',     'PASTE_FROM_OLD_FILE'); // ← FILL IN from current bridge
-define('DB_PASS',     'PASTE_FROM_OLD_FILE'); // ← FILL IN from current bridge
-define('DB_NAME',     'rolplay_pro_analytics'); // ← CONFIRMED CORRECT
-define('BRIDGE_KEY',  'REDACTED_BRIDGE_SECRET'); // ← ALREADY CORRECT
+define('DB_HOST',     'localhost');                   // server-local connection
+define('DB_USER',     'rpsim');                       // from .env.local
+define('DB_PASS',     'skeleton-scribe-selective');   // from .env.local
+define('DB_NAME',     'rolplay_pro_analytics');       // confirmed from bridge test
+define('BRIDGE_KEY',  'REDACTED_BRIDGE_SECRET');  // from .env.local
 // ════════════════════════════════════════════════════════════════════
 
 header('Content-Type: application/json');
