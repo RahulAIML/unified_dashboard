@@ -1,9 +1,15 @@
 /**
- * middleware.ts — Route protection and JWT verification (simplified for edge runtime)
+ * middleware.ts — Route protection, JWT verification, and company_id validation
+ *
+ * CRITICAL SECURITY: Every request to protected routes validates:
+ * 1. JWT token is valid and not expired
+ * 2. company_id is present in token
+ * 3. company_id is passed to downstream handlers via headers
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyAccessToken, extractTokenFromHeader } from './lib/auth'
+import { sanitizeCompanyId, logSecurityEvent } from './lib/multi-tenant'
 
 // Public routes that don't require authentication
 const PUBLIC_ROUTES = ['/auth/login', '/auth/register', '/api/auth/login', '/api/auth/register', '/api/health']
@@ -48,19 +54,39 @@ export function middleware(request: NextRequest) {
 
     // No token, redirect to login
     if (!token) {
+      logSecurityEvent('access_denied', {
+        reason: 'missing_token',
+        pathname,
+      })
       return NextResponse.redirect(new URL('/auth/login', request.url))
     }
 
-    // Verify token
+    // Verify token and validate company_id
     const payload = verifyAccessToken(token)
     if (!payload) {
+      logSecurityEvent('access_denied', {
+        reason: 'invalid_token',
+        pathname,
+      })
       return NextResponse.redirect(new URL('/auth/login', request.url))
     }
 
-    // Token is valid, allow request
+    // CRITICAL: Validate company_id is present and valid
+    const sanitized = sanitizeCompanyId(payload.company_id)
+    if (!sanitized) {
+      logSecurityEvent('access_denied', {
+        reason: 'invalid_company_id_format',
+        pathname,
+        company_id: payload.company_id,
+      })
+      return NextResponse.redirect(new URL('/auth/login', request.url))
+    }
+
+    // Token is valid with valid company_id, allow request
     const response = NextResponse.next()
     response.headers.set('x-user-id', payload.user_id.toString())
     response.headers.set('x-user-company', payload.company_id)
+    response.headers.set('x-user-company-id', sanitized)
     return response
   }
 
@@ -75,9 +101,24 @@ export function middleware(request: NextRequest) {
     if (token) {
       const payload = verifyAccessToken(token)
       if (payload) {
+        // CRITICAL: Validate company_id is present and valid
+        const sanitized = sanitizeCompanyId(payload.company_id)
+        if (!sanitized) {
+          logSecurityEvent('access_denied', {
+            reason: 'invalid_company_id_in_api',
+            pathname,
+            company_id: payload.company_id,
+          })
+          return NextResponse.json(
+            { success: false, data: { message: 'Invalid company ID' }, meta: {} },
+            { status: 401 }
+          )
+        }
+
         const response = NextResponse.next()
         response.headers.set('x-user-id', payload.user_id.toString())
         response.headers.set('x-user-company', payload.company_id)
+        response.headers.set('x-user-company-id', sanitized)
         return response
       }
     }
