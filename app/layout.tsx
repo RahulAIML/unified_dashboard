@@ -36,8 +36,9 @@ export default function RootLayout({
       <body className="h-full antialiased">
         <ThemeProvider>
           <AuthProvider>
-            <ClientBrandProvider />
-            <LayoutContent>{children}</LayoutContent>
+            <ClientBrandProvider>
+              <LayoutContent>{children}</LayoutContent>
+            </ClientBrandProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>

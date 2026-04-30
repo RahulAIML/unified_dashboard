@@ -1,54 +1,49 @@
 /**
  * /api/auth/refresh — Refresh access token
+ *
+ * Reads refresh token from HTTP-only cookie, validates session jti, and
+ * issues a new access token cookie. Does NOT resolve tenant from bridge.
  */
 
-import { NextRequest, NextResponse } from 'next/server'
-import { verifyRefreshToken, generateAccessToken } from '@/lib/auth'
-import { findUserById } from '@/lib/db-users'
+import { NextRequest } from 'next/server'
+import { verifyRefreshToken, signAccessToken, ACCESS_TOKEN_MAX_AGE_SECONDS } from '@/lib/jwt'
+import { findUserById, isSessionValid } from '@/lib/db-users'
 import { buildSuccess, buildApiError } from '@/lib/api-utils'
 
 export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
   try {
-    // Get refresh token from cookie
-    const refreshToken = request.cookies.get('refreshToken')?.value
+    const refreshToken = request.cookies.get('refreshToken')?.value ?? null
+    if (!refreshToken) return buildApiError('Unauthorized: No refresh token', 401)
 
-    if (!refreshToken) {
-      return buildApiError('Unauthorized: No refresh token', 401)
-    }
+    const claims = await verifyRefreshToken(refreshToken)
+    if (!claims) return buildApiError('Unauthorized: Invalid refresh token', 401)
 
-    // Verify refresh token
-    const payload = verifyRefreshToken(refreshToken)
-    if (!payload) {
-      return buildApiError('Unauthorized: Invalid refresh token', 401)
-    }
+    const ok = await isSessionValid(claims.jti)
+    if (!ok) return buildApiError('Unauthorized: Session expired', 401)
 
-    // Get user details
-    const user = await findUserById(payload.user_id)
-    if (!user) {
-      return buildApiError('User not found', 404)
-    }
+    const user = await findUserById(claims.user_id)
+    if (!user) return buildApiError('User not found', 404)
 
-    // Generate new access token
-    const newAccessToken = generateAccessToken(user)
-
-    // Return response with new token in cookie
-    const response = buildSuccess({
-      access_token: newAccessToken,
+    const access = await signAccessToken({
+      user_id: user.id,
+      email: user.email,
+      customer_id: user.customer_id,
     })
 
-    response.cookies.set('accessToken', newAccessToken, {
+    const response = buildSuccess({ ok: true })
+    response.cookies.set('accessToken', access.token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 8 * 60 * 60, // 8 hours
+      maxAge: ACCESS_TOKEN_MAX_AGE_SECONDS,
       path: '/',
     })
-
     return response
   } catch (error) {
-    console.error('Error refreshing token:', error)
+    console.error('[/api/auth/refresh] Unhandled error:', error)
     return buildApiError('Internal server error', 500)
   }
 }
+

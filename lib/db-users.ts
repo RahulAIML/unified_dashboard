@@ -11,7 +11,7 @@
  *   - Auto-increment: SERIAL column named "id"
  */
 
-import { User } from './auth'
+import type { AuthUser } from './auth-types'
 import { authQuery, AuthDbError } from './db-auth'
 
 // Re-export so callers can import DbError from here (backward compat)
@@ -24,20 +24,19 @@ interface UserRow {
   email:          string
   full_name:      string
   company_domain: string
-  company_id:     string
+  customer_id:    number
   role:           'user' | 'admin'
   created_at:     Date | string
   is_active:      boolean
   last_login:     Date | string | null
 }
 
-function rowToUser(row: UserRow): User {
+function rowToUser(row: UserRow): AuthUser {
   return {
     id:             row.id,
     email:          row.email,
     full_name:      row.full_name,
-    company_domain: row.company_domain,
-    company_id:     row.company_id,
+    customer_id:    Number(row.customer_id),
     role:           row.role,
     created_at:     typeof row.created_at === 'string'
                       ? row.created_at
@@ -51,9 +50,9 @@ function rowToUser(row: UserRow): User {
  * Find a user by email address.
  * Returns null if not found, throws AuthDbError on DB failure.
  */
-export async function findUserByEmail(email: string): Promise<User | null> {
+export async function findUserByEmail(email: string): Promise<AuthUser | null> {
   const rows = await authQuery<UserRow>(
-    `SELECT id, email, full_name, company_domain, company_id, role, created_at, is_active, last_login
+    `SELECT id, email, full_name, company_domain, customer_id, role, created_at, is_active, last_login
        FROM users
       WHERE email = $1
       LIMIT 1`,
@@ -66,9 +65,9 @@ export async function findUserByEmail(email: string): Promise<User | null> {
  * Find a user by their primary key.
  * Returns null if not found, throws AuthDbError on DB failure.
  */
-export async function findUserById(userId: number): Promise<User | null> {
+export async function findUserById(userId: number): Promise<AuthUser | null> {
   const rows = await authQuery<UserRow>(
-    `SELECT id, email, full_name, company_domain, company_id, role, created_at, is_active, last_login
+    `SELECT id, email, full_name, company_domain, customer_id, role, created_at, is_active, last_login
        FROM users
       WHERE id = $1
       LIMIT 1`,
@@ -86,16 +85,16 @@ export async function createUser(
   passwordHash:   string,
   fullName:       string,
   companyDomain:  string,
-  companyId:      string,
+  customerId:     number,
   role:           'user' | 'admin' = 'user'
-): Promise<User> {
+): Promise<AuthUser> {
   const rows = await authQuery<UserRow>(
     `INSERT INTO users
-       (email, password_hash, full_name, company_domain, company_id, role, is_active, created_at, updated_at)
+       (email, password_hash, full_name, company_domain, customer_id, role, is_active, created_at, updated_at)
      VALUES
        ($1, $2, $3, $4, $5, $6, TRUE, NOW(), NOW())
-     RETURNING id, email, full_name, company_domain, company_id, role, created_at, is_active, last_login`,
-    [email.toLowerCase().trim(), passwordHash, fullName.trim(), companyDomain, companyId, role]
+     RETURNING id, email, full_name, company_domain, customer_id, role, created_at, is_active, last_login`,
+    [email.toLowerCase().trim(), passwordHash, fullName.trim(), companyDomain, customerId, role]
   )
 
   if (rows.length === 0) {
@@ -103,6 +102,13 @@ export async function createUser(
   }
 
   return rowToUser(rows[0])
+}
+
+export async function updateUserCustomerId(userId: number, customerId: number): Promise<void> {
+  await authQuery(
+    `UPDATE users SET customer_id = $1, updated_at = NOW() WHERE id = $2`,
+    [customerId, userId]
+  )
 }
 
 /**

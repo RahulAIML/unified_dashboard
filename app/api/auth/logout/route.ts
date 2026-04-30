@@ -1,46 +1,28 @@
 /**
- * /api/auth/logout — User logout endpoint
+ * /api/auth/logout — Logout
+ *
+ * Invalidates refresh session (when present) and clears auth cookies.
  */
 
-import { NextRequest, NextResponse } from 'next/server'
-import { verifyAccessToken, extractTokenFromHeader } from '@/lib/auth'
+import { NextRequest } from 'next/server'
+import { verifyRefreshToken } from '@/lib/jwt'
 import { invalidateSession } from '@/lib/db-users'
-import { buildSuccess, buildApiError } from '@/lib/api-utils'
+import { buildSuccess } from '@/lib/api-utils'
 
 export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
-  try {
-    // Extract token
-    const authHeader = request.headers.get('authorization')
-    let token = extractTokenFromHeader(authHeader)
-
-    if (!token) {
-      const cookieToken = request.cookies.get('accessToken')?.value
-      token = cookieToken || null
+  const refreshToken = request.cookies.get('refreshToken')?.value ?? null
+  if (refreshToken) {
+    const claims = await verifyRefreshToken(refreshToken)
+    if (claims?.jti) {
+      await invalidateSession(claims.jti).catch(() => null)
     }
-
-    if (!token) {
-      return buildApiError('Unauthorized: No token provided', 401)
-    }
-
-    // Verify token
-    const payload = verifyAccessToken(token)
-    if (!payload) {
-      return buildApiError('Unauthorized: Invalid token', 401)
-    }
-
-    // Invalidate session
-    await invalidateSession(payload.jti)
-
-    // Clear cookies
-    const response = buildSuccess({ message: 'Logged out successfully' })
-    response.cookies.delete('accessToken')
-    response.cookies.delete('refreshToken')
-
-    return response
-  } catch (error) {
-    console.error('Error during logout:', error)
-    return buildApiError('Internal server error', 500)
   }
+
+  const response = buildSuccess({ message: 'Logged out successfully' })
+  response.cookies.delete('accessToken')
+  response.cookies.delete('refreshToken')
+  return response
 }
+

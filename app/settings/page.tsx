@@ -1,19 +1,19 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useRef, useState } from 'react'
 import { Upload, RotateCcw, Check } from 'lucide-react'
 import { DashboardHeader } from '@/components/DashboardHeader'
 import { useClientBrand } from '@/lib/hooks/useClientBrand'
-import { useCustomBranding } from '@/lib/hooks/useCustomBranding'
 import { cn } from '@/lib/utils'
+import { DEFAULT_BRANDING_SETTINGS, type BrandingSettings } from '@/lib/branding'
 
 export default function SettingsPage() {
-  const defaultBrand = useClientBrand()
-  const { brand, loaded, updateBrand, resetBrand, setLogoFromFile } = useCustomBranding()
+  const brand = useClientBrand()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [copied, setCopied] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
 
-  if (!loaded) {
+  if (brand.isLoading) {
     return (
       <div className="min-h-screen">
         <DashboardHeader title="Settings" subtitle="Customize your dashboard branding" />
@@ -22,10 +22,33 @@ export default function SettingsPage() {
     )
   }
 
+  const currentSettings: BrandingSettings = {
+    logo_url: brand.logo,
+    primary_color: brand.primaryColor,
+    secondary_color: brand.secondaryColor,
+    accent_color: brand.accentColor,
+  }
+
+  const persist = async (payload: BrandingSettings) => {
+    setSaving(true)
+    try {
+      await brand.saveBranding(payload)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file && file.type.startsWith('image/')) {
-      setLogoFromFile(file)
+      const reader = new FileReader()
+      reader.onload = async (event) => {
+        const result = event.target?.result
+        if (typeof result === 'string') {
+          await persist({ ...currentSettings, logo_url: result })
+        }
+      }
+      reader.readAsDataURL(file)
     }
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
@@ -44,25 +67,24 @@ export default function SettingsPage() {
 
       <div className="p-6 max-w-2xl">
         <div className="space-y-8">
-          {/* Logo Upload */}
           <div className="rounded-xl border border-border bg-card p-6">
             <h2 className="text-lg font-bold mb-4">Logo</h2>
             <div className="flex items-center gap-6 flex-wrap">
-              {/* Preview */}
               <div className="flex-shrink-0 w-24 h-24 rounded-lg border border-border bg-muted flex items-center justify-center">
                 {brand.logo ? (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img src={brand.logo} alt="Logo" className="w-full h-full object-cover rounded" />
                 ) : (
                   <span className="text-xs text-muted-foreground text-center px-2">No logo</span>
                 )}
               </div>
 
-              {/* Upload */}
               <div className="flex-1 min-w-[200px]">
                 <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileSelect} className="hidden" />
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90"
+                  disabled={saving}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 disabled:opacity-60"
                 >
                   <Upload className="w-4 h-4" />
                   Upload Logo
@@ -72,36 +94,34 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* Color Customization */}
           <div className="rounded-xl border border-border bg-card p-6">
             <h2 className="text-lg font-bold mb-6">Colors</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               {[
-                { key: 'primaryColor', label: 'Primary', desc: 'Buttons, badges' },
-                { key: 'secondaryColor', label: 'Secondary', desc: 'Inactive states' },
-                { key: 'accentColor', label: 'Accent', desc: 'Highlights' },
-                { key: 'chartColor1', label: 'Chart 1', desc: 'Primary series' },
-                { key: 'chartColor2', label: 'Chart 2', desc: 'Secondary series' },
-              ].map(({ key, label, desc }) => {
-                const colorKey = key as keyof typeof brand
-                const value = brand[colorKey] as string
+                { field: 'primary_color', key: 'primaryColor', label: 'Primary', desc: 'Buttons, badges' },
+                { field: 'secondary_color', key: 'secondaryColor', label: 'Secondary', desc: 'Charts, supporting UI' },
+                { field: 'accent_color', key: 'accentColor', label: 'Accent', desc: 'Highlights and emphasis' },
+              ].map(({ field, key, label, desc }) => {
+                const value = brand[key as keyof typeof brand] as string
                 return (
-                  <div key={key} className="space-y-2">
+                  <div key={field} className="space-y-2">
                     <label className="text-sm font-semibold">{label}</label>
                     <p className="text-xs text-muted-foreground">{desc}</p>
                     <div className="flex items-center gap-2">
                       <input
                         type="color"
                         value={value}
-                        onChange={(e) => updateBrand({ [colorKey]: e.target.value })}
+                        disabled={saving}
+                        onChange={(e) => void persist({ ...currentSettings, [field]: e.target.value })}
                         className="w-12 h-10 rounded cursor-pointer border border-border"
                       />
                       <input
                         type="text"
                         value={value}
+                        disabled={saving}
                         onChange={(e) => {
                           if (/^#[0-9A-F]{6}$/i.test(e.target.value)) {
-                            updateBrand({ [colorKey]: e.target.value })
+                            void persist({ ...currentSettings, [field]: e.target.value.toUpperCase() })
                           }
                         }}
                         placeholder="#000000"
@@ -120,7 +140,6 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* Live Preview */}
           <div className="rounded-xl border border-border bg-card p-6">
             <h2 className="text-lg font-bold mb-4">Live Preview</h2>
             <div className="space-y-4">
@@ -140,15 +159,11 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* Reset Button */}
           <div className="flex justify-end">
             <button
-              onClick={() => {
-                if (confirm('Reset to default branding?')) {
-                  resetBrand()
-                }
-              }}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border bg-muted hover:bg-muted/70 text-sm font-semibold"
+              onClick={() => void persist(DEFAULT_BRANDING_SETTINGS)}
+              disabled={saving}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border bg-muted hover:bg-muted/70 text-sm font-semibold disabled:opacity-60"
             >
               <RotateCcw className="w-4 h-4" />
               Reset

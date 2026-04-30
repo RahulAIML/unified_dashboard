@@ -102,7 +102,6 @@ export default function DrilldownPage() {
   const params = useParams()
   const router = useRouter()
   const brand  = useClientBrand()
-  const clientId = useDashboardStore((s) => s.clientId)
   const refreshKey = useDashboardStore((s) => s.refreshKey)
   const id     = params?.id as string | undefined
 
@@ -117,11 +116,10 @@ export default function DrilldownPage() {
   const drilldownUrl = useMemo(() => {
     if (!idValid) return null
     const qs = new URLSearchParams()
-    if (clientId) qs.set("clientId", clientId)
     qs.set("rk", String(refreshKey))
     const suffix = qs.toString()
     return suffix ? `/api/dashboard/drilldown/${id}?${suffix}` : `/api/dashboard/drilldown/${id}`
-  }, [id, idValid, clientId, refreshKey])
+  }, [id, idValid, refreshKey])
 
   const { data, loading, error } = useApi<DrilldownData>(drilldownUrl)
   const [page,    setPage]    = useState(0)

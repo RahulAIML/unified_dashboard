@@ -3,7 +3,7 @@
  */
 
 import { useCallback, useState } from "react"
-import { useApi, buildApiUrl } from "./useApi"
+import { buildApiUrl } from "./useApi"
 import { useDashboardStore } from "@/lib/store"
 import { createCombinedExport, type CombinedExportRow } from "@/lib/combined-export"
 import { calcDeltaPct, estimatePassedSessions } from "@/lib/kpi-builder"
@@ -17,7 +17,7 @@ interface CombinedExportState {
 }
 
 export function useCombinedExport() {
-  const { dateRange, clientId, refreshKey } = useDashboardStore()
+  const { dateRange, refreshKey } = useDashboardStore()
   const [state, setState] = useState<CombinedExportState>({ loading: false, error: null })
 
   const exportAllSolutions = useCallback(async () => {
@@ -30,7 +30,6 @@ export function useCombinedExport() {
       for (const solution of SOLUTIONS) {
         const url = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to, {
           solution: solution === "overview" ? undefined : solution,
-          clientId,
           rk: refreshKey,
         })
 
@@ -88,7 +87,7 @@ export function useCombinedExport() {
         error: err instanceof Error ? err.message : "Failed to export combined data",
       })
     }
-  }, [dateRange, clientId, refreshKey])
+  }, [dateRange, refreshKey])
 
   return { ...state, exportAllSolutions }
 }

@@ -6,7 +6,7 @@ export interface AuthUser {
   id: number
   email: string
   full_name: string
-  company_id: string
+  customer_id: number
   role: 'user' | 'admin'
 }
 

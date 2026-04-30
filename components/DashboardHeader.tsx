@@ -11,37 +11,35 @@ import { cn } from "@/lib/utils"
 import type { Module } from "@/lib/types"
 
 const MODULES: { id: Module; label: string }[] = [
-  { id: "lms",           label: "LMS"          },
-  { id: "coach",         label: "Coach"        },
-  { id: "simulator",     label: "Simulator"    },
-  { id: "certification", label: "Certification"},
-  { id: "second-brain",  label: "Second Brain" },
+  { id: "lms", label: "LMS" },
+  { id: "coach", label: "Coach" },
+  { id: "simulator", label: "Simulator" },
+  { id: "certification", label: "Certification" },
+  { id: "second-brain", label: "Second Brain" },
 ]
 
 const DATE_PRESETS = [
-  { label: "7d",  days: 7  },
+  { label: "7d", days: 7 },
   { label: "30d", days: 30 },
   { label: "90d", days: 90 },
 ]
 
 interface Props {
-  title:             string
-  subtitle?:         string
+  title: string
+  subtitle?: string
   showModuleFilter?: boolean
 }
 
 export function DashboardHeader({ title, subtitle, showModuleFilter = false }: Props) {
-  const { dateRange, selectedSolution, clientId, setSolution, setSolutionDirect, setDateRange, setClientId, triggerRefresh } = useDashboardStore()
+  const { dateRange, selectedSolution, setSolution, setSolutionDirect, setDateRange, triggerRefresh } = useDashboardStore()
   const { lang, toggle: toggleLang } = useLangStore()
-  const t     = useT()
+  const t = useT()
   const brand = useClientBrand()
 
-  // "custom" means the DateRangePicker was last used — no preset is active
   const [activeDays, setActiveDays] = useState<number | "custom">(30)
   const [refreshing, setRefreshing] = useState(false)
   const syncingFromUrl = useRef(false)
 
-  // ── Read ?client= from URL on mount and sync to store ──────────────────────
   useEffect(() => {
     if (typeof window === "undefined") return
 
@@ -49,24 +47,21 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
       syncingFromUrl.current = true
       const params = new URLSearchParams(window.location.search)
 
-      const urlClient = params.get("client")
-      if (urlClient) setClientId(urlClient)
-
       const rawFrom = params.get("from")
-      const rawTo   = params.get("to")
+      const rawTo = params.get("to")
       const from = new Date(rawFrom ?? "")
-      const to   = new Date(rawTo   ?? "")
-      if (!isNaN(from.getTime()) && !isNaN(to.getTime()) && from <= to) {
+      const to = new Date(rawTo ?? "")
+      if (!Number.isNaN(from.getTime()) && !Number.isNaN(to.getTime()) && from <= to) {
         setDateRange({ from, to })
         const spanDays = Math.round((to.getTime() - from.getTime()) / 86_400_000)
-        if (DATE_PRESETS.some((p) => p.days === spanDays)) setActiveDays(spanDays)
+        if (DATE_PRESETS.some((preset) => preset.days === spanDays)) setActiveDays(spanDays)
         else setActiveDays("custom")
       }
 
       if (params.has("solution")) {
-        const s = params.get("solution")
-        const valid = MODULES.some((m) => m.id === s)
-        setSolutionDirect(valid ? (s as Module) : null)
+        const solution = params.get("solution")
+        const valid = MODULES.some((module) => module.id === solution)
+        setSolutionDirect(valid ? (solution as Module) : null)
       }
 
       syncingFromUrl.current = false
@@ -75,21 +70,17 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
     applyFromUrl()
     window.addEventListener("popstate", applyFromUrl)
     return () => window.removeEventListener("popstate", applyFromUrl)
-  }, [setClientId, setDateRange, setSolutionDirect])
+  }, [setDateRange, setSolutionDirect])
 
   const fromIso = dateRange.from.toISOString()
-  const toIso   = dateRange.to.toISOString()
+  const toIso = dateRange.to.toISOString()
 
   useEffect(() => {
-    if (typeof window === "undefined") return
-    if (syncingFromUrl.current) return
+    if (typeof window === "undefined" || syncingFromUrl.current) return
 
     const params = new URLSearchParams(window.location.search)
     params.set("from", fromIso)
-    params.set("to",   toIso)
-
-    if (clientId) params.set("client", clientId)
-    else params.delete("client")
+    params.set("to", toIso)
 
     if (selectedSolution) params.set("solution", selectedSolution)
     else params.delete("solution")
@@ -97,18 +88,18 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
     const qs = params.toString()
     const next = qs ? `${window.location.pathname}?${qs}` : window.location.pathname
     window.history.replaceState(null, "", next)
-  }, [fromIso, toIso, clientId, selectedSolution])
+  }, [fromIso, toIso, selectedSolution])
 
-  // ── Update browser tab title when brand changes ───────────────────────────
-  // Use a small delay so Next.js metadata doesn't override us on initial hydration
   useEffect(() => {
-    const tid = setTimeout(() => { document.title = brand.name }, 300)
-    return () => clearTimeout(tid)
+    const timeoutId = setTimeout(() => {
+      document.title = brand.name
+    }, 300)
+    return () => clearTimeout(timeoutId)
   }, [brand.name])
 
   function applyPreset(days: number) {
     setActiveDays(days)
-    const to   = new Date()
+    const to = new Date()
     const from = new Date()
     from.setDate(from.getDate() - days)
     setDateRange({ from, to })
@@ -128,23 +119,16 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
 
   return (
     <div className="border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-10">
-      {/* Brand gradient accent bar */}
-      <div
-        className="h-[3px] w-full"
-        style={{ background: "linear-gradient(90deg, hsl(var(--primary)), var(--brand-accent))" }}
-      />
+      <div className="h-[3px] w-full" style={{ background: "linear-gradient(90deg, hsl(var(--primary)), var(--brand-accent))" }} />
 
       <div className="px-6 py-4">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4">
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-primary">
-              {title}
-            </h1>
+            <h1 className="text-xl font-bold tracking-tight text-primary">{title}</h1>
             {subtitle && <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>}
           </div>
 
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full md:w-auto">
-            {/* EN / ES toggle */}
             <button
               onClick={toggleLang}
               className="px-2.5 py-1 rounded-lg text-xs font-semibold border border-border bg-muted hover:bg-muted/70 transition-colors tabular-nums"
@@ -153,7 +137,6 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
               {lang === "en" ? "ES" : "EN"}
             </button>
 
-            {/* Refresh button (single) */}
             <button
               onClick={handleRefresh}
               disabled={refreshing}
@@ -169,7 +152,6 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
               Refresh
             </button>
 
-            {/* Date presets + custom range */}
             <div className="flex flex-wrap items-center gap-1 bg-muted rounded-lg p-1 w-full sm:w-auto">
               <Calendar className="w-3.5 h-3.5 text-muted-foreground ml-1 hidden sm:block" />
 
@@ -179,17 +161,13 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
                   onClick={() => applyPreset(days)}
                   className={cn(
                     "px-2 sm:px-3 py-1 rounded-md text-xs font-semibold transition-all",
-                    activeDays === days
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground"
+                    activeDays === days ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
                   )}
                 >
                   {label}
                 </button>
               ))}
 
-              {/* Custom date range picker — key remounts it when preset changes,
-                  so useState initializers pick up the new active range */}
               <DateRangePicker
                 key={`${dateRange.from.getTime()}-${dateRange.to.getTime()}`}
                 onApply={applyCustomRange}
@@ -200,22 +178,18 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
           </div>
         </div>
 
-        {/* Solution filter — single-select */}
         {showModuleFilter && (
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-medium text-muted-foreground flex items-center gap-1 w-full">
               <Filter className="w-3 h-3" /> {t.filterSolutions}
             </span>
 
-            {/* "All" pill */}
             <motion.button
               onClick={() => setSolution(null)}
               whileTap={{ scale: 0.95 }}
               className={cn(
                 "flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-full text-xs font-semibold border transition-all",
-                !selectedSolution
-                  ? "bg-primary text-primary-foreground border-transparent"
-                  : "border-border text-muted-foreground hover:border-foreground/30"
+                !selectedSolution ? "bg-primary text-primary-foreground border-transparent" : "border-border text-muted-foreground hover:border-foreground/30"
               )}
             >
               <span
@@ -238,9 +212,7 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
                   whileTap={{ scale: 0.95 }}
                   className={cn(
                     "flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-full text-xs font-semibold border transition-all",
-                    active
-                      ? "bg-primary text-primary-foreground border-transparent"
-                      : "border-border text-muted-foreground hover:border-foreground/30"
+                    active ? "bg-primary text-primary-foreground border-transparent" : "border-border text-muted-foreground hover:border-foreground/30"
                   )}
                 >
                   <span

@@ -74,7 +74,7 @@ function ErrorBanner({ message }: { message: string }) {
 // ── Animated number ───────────────────────────────────────────────────────────
 // ── Page ──────────────────────────────────────────────────────────────────────
 export function DashboardContent() {
-  const { dateRange, selectedSolution, clientId, refreshKey } = useDashboardStore()
+  const { dateRange, selectedSolution, refreshKey } = useDashboardStore()
   const t           = useT()
   const brand       = useClientBrand()
   const { exportAllSolutions, loading: exportLoading } = useCombinedExport()
@@ -98,23 +98,19 @@ export function DashboardContent() {
   // ── API URLs ──────────────────────────────────────────────────────────────
   const overviewUrl = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to, {
     solution: selectedSolution,
-    clientId,
     rk: refreshKey,
   })
   const trendsUrl = buildApiUrl("/api/dashboard/trends", dateRange.from, dateRange.to, {
     solution: selectedSolution,
-    clientId,
     rk: refreshKey,
   })
   const ucUrl = buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to, {
     solution: selectedSolution,
-    clientId,
     rk: refreshKey,
   })
   const resultsUrl = buildApiUrl("/api/dashboard/results", dateRange.from, dateRange.to, {
     limit: 20,
     solution: selectedSolution,
-    clientId,
     rk: refreshKey,
   })
 
@@ -164,7 +160,6 @@ export function DashboardContent() {
     if (!overview) return []
     return [
       {
-        clientId: clientId ?? "",
         solution: selectedSolution ?? "all",
         from: dateRange.from,
         to: dateRange.to,
@@ -184,7 +179,7 @@ export function DashboardContent() {
         ),
       },
     ]
-  }, [overview, clientId, selectedSolution, dateRange.from, dateRange.to])
+  }, [overview, selectedSolution, dateRange.from, dateRange.to])
 
   // ── Activity trend ────────────────────────────────────────────────────────
   const activityData = useMemo(
@@ -325,7 +320,6 @@ export function DashboardContent() {
             filename={csvFilename(`kpi-summary-${selectedSolution ?? "all"}`)}
             label="Export Current"
             columns={[
-              { header: "Client", value: (r) => r.clientId || "" },
               { header: "Solution", value: (r) => r.solution },
               { header: "From", value: (r) => r.from },
               { header: "To", value: (r) => r.to },

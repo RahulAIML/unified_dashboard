@@ -48,14 +48,14 @@ function ErrorBanner({ message }: { message: string }) {
 }
 
 export default function SimulatorPage() {
-  const { dateRange, clientId, refreshKey } = useDashboardStore()
+  const { dateRange, refreshKey } = useDashboardStore()
   const t     = useT()
   const brand = useClientBrand()
   const days = Math.round((dateRange.to.getTime() - dateRange.from.getTime()) / 86_400_000)
 
-  const overviewUrl = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to, { solution: "simulator", clientId, rk: refreshKey })
-  const trendsUrl   = buildApiUrl("/api/dashboard/trends",   dateRange.from, dateRange.to, { solution: "simulator", clientId, rk: refreshKey })
-  const ucUrl       = buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to, { solution: "simulator", clientId, rk: refreshKey })
+  const overviewUrl = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to, { solution: "simulator", rk: refreshKey })
+  const trendsUrl   = buildApiUrl("/api/dashboard/trends",   dateRange.from, dateRange.to, { solution: "simulator", rk: refreshKey })
+  const ucUrl       = buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to, { solution: "simulator", rk: refreshKey })
 
   const { data: overview, loading: overviewLoading, error: overviewError } = useApi<OverviewApiResponse>(overviewUrl)
   const { data: trends,   loading: trendsLoading,   error: trendsError }   = useApi<TrendsApiResponse>(trendsUrl)

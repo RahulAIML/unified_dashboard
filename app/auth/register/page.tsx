@@ -1,11 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Eye, EyeOff, AlertCircle, CheckCircle2 } from 'lucide-react'
-import { detectCompanyFromEmail, getCompanyDisplayName } from '@/lib/company-mapping'
 import { useAuthContext } from '@/components/AuthProvider'
 
 function PasswordStrength({ password }: { password: string }) {
@@ -58,22 +57,6 @@ export default function RegisterPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
-  const [companyHint, setCompanyHint] = useState<string | null>(null)
-
-  // Show company hint as user types email
-  useEffect(() => {
-    if (!email) {
-      setCompanyHint(null)
-      return
-    }
-
-    const company = detectCompanyFromEmail(email)
-    if (company) {
-      setCompanyHint(getCompanyDisplayName(company))
-    } else {
-      setCompanyHint(null)
-    }
-  }, [email])
 
   const validatePassword = () => {
     if (password.length < 8) {
@@ -156,7 +139,7 @@ export default function RegisterPage() {
       }
       // Redirect to dashboard
       router.push('/')
-    } catch (err) {
+    } catch {
       setError('An error occurred. Please try again.')
       setIsLoading(false)
     }
@@ -230,11 +213,6 @@ export default function RegisterPage() {
                 placeholder="you@company.com"
                 className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-colors"
               />
-              {companyHint && (
-                <p className="mt-2 text-xs text-blue-600 font-medium">
-                  🏢 You'll be added to <strong>{companyHint}</strong>
-                </p>
-              )}
             </div>
 
             {/* Password */}

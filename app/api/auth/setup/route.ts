@@ -1,57 +1,64 @@
 /**
  * GET /api/auth/setup?secret=<SETUP_SECRET>
  *
- * Initialises the Auth PostgreSQL database by creating the users and
- * user_sessions tables (IF NOT EXISTS — safe to call multiple times).
+ * Initialises (or upgrades) the Auth PostgreSQL database schema.
  *
- * Run this ONCE after you have configured AUTH_DATABASE_URL in .env.local.
- *
- * Example:
- *   curl https://yourdomain.com/api/auth/setup?secret=REDACTED_SETUP_SECRET
+ * Tables:
+ * - users (auth) — includes customer_id (tenant)
+ * - user_sessions — refresh token jti tracking
+ * - branding_settings — per-customer branding
+ * - tenant_integrations — per-customer external integrations (Second Brain)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { authExec, AuthDbError } from '@/lib/db-auth'
+import { authExec } from '@/lib/db-auth'
 
 export const runtime = 'nodejs'
 
-const SETUP_SECRET = process.env.SETUP_SECRET ?? 'REDACTED_SETUP_SECRET'
+const SETUP_SECRET = process.env.SETUP_SECRET
 
 export async function GET(request: NextRequest) {
-  // ── Authenticate the caller ─────────────────────────────────────────────────
+  if (!SETUP_SECRET) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'SETUP_SECRET is not configured.',
+        hint: 'Set SETUP_SECRET in env and restart.',
+      },
+      { status: 503 }
+    )
+  }
+
   const secret = request.nextUrl.searchParams.get('secret')
   if (secret !== SETUP_SECRET) {
     return NextResponse.json(
       {
         success: false,
         error: 'Missing or invalid setup secret.',
-        hint: 'Add ?secret=REDACTED_SETUP_SECRET to the URL (or set SETUP_SECRET in .env)',
+        hint: 'Add ?secret=<SETUP_SECRET> to the URL (or set SETUP_SECRET in env)',
       },
       { status: 401 }
     )
   }
 
-  // ── Check AUTH_DATABASE_URL is configured ───────────────────────────────────
   if (!process.env.AUTH_DATABASE_URL) {
     return NextResponse.json(
       {
         success: false,
         error: 'AUTH_DATABASE_URL is not configured.',
         hint: [
-          '1. Create a free PostgreSQL database at https://neon.tech (or Supabase/Railway)',
-          '2. Copy the connection string (postgresql://user:pass@host/dbname)',
-          '3. Add it to .env.local as: AUTH_DATABASE_URL=postgresql://...',
-          '4. Restart the Next.js dev server',
-          '5. Call this endpoint again',
+          '1. Create a PostgreSQL database (Neon/Supabase/Railway)',
+          '2. Copy the connection string',
+          '3. Set AUTH_DATABASE_URL in env and restart',
+          '4. Call this endpoint again',
         ],
       },
       { status: 503 }
     )
   }
 
-  const results: Record<string, string> = {}
+  const steps: Record<string, string> = {}
 
-  // ── 1. Create users table ───────────────────────────────────────────────────
   try {
     await authExec(`
       CREATE TABLE IF NOT EXISTS users (
@@ -60,7 +67,7 @@ export async function GET(request: NextRequest) {
         password_hash   VARCHAR(255) NOT NULL,
         full_name       VARCHAR(255) NOT NULL DEFAULT '',
         company_domain  VARCHAR(255) NOT NULL DEFAULT '',
-        company_id      VARCHAR(100) NOT NULL DEFAULT 'custom',
+        customer_id     INTEGER      NOT NULL DEFAULT 0,
         role            VARCHAR(20)  NOT NULL DEFAULT 'user'
                           CHECK (role IN ('user', 'admin')),
         is_active       BOOLEAN      NOT NULL DEFAULT TRUE,
@@ -69,23 +76,19 @@ export async function GET(request: NextRequest) {
         updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
       )
     `)
-    results.users_table = 'created or already exists ✓'
+    steps.users_table = 'created or already exists ✓'
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    results.users_table = `FAILED: ${msg}`
+    steps.users_table = `FAILED: ${(err as Error).message}`
   }
 
-  // ── 2. Create indexes on users (idempotent) ─────────────────────────────────
   try {
-    await authExec(`CREATE INDEX IF NOT EXISTS idx_users_email      ON users (email)`)
-    await authExec(`CREATE INDEX IF NOT EXISTS idx_users_company_id ON users (company_id)`)
-    results.users_indexes = 'created or already exist ✓'
+    await authExec(`CREATE INDEX IF NOT EXISTS idx_users_email       ON users (email)`)
+    await authExec(`CREATE INDEX IF NOT EXISTS idx_users_customer_id ON users (customer_id)`)
+    steps.users_indexes = 'created or already exist ✓'
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    results.users_indexes = `FAILED: ${msg}`
+    steps.users_indexes = `FAILED: ${(err as Error).message}`
   }
 
-  // ── 3. Create user_sessions table ──────────────────────────────────────────
   try {
     await authExec(`
       CREATE TABLE IF NOT EXISTS user_sessions (
@@ -96,48 +99,75 @@ export async function GET(request: NextRequest) {
         created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
       )
     `)
-    results.user_sessions_table = 'created or already exists ✓'
+    steps.user_sessions_table = 'created or already exists ✓'
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    results.user_sessions_table = `FAILED: ${msg}`
+    steps.user_sessions_table = `FAILED: ${(err as Error).message}`
   }
 
-  // ── 4. Create indexes on sessions ──────────────────────────────────────────
   try {
     await authExec(`CREATE INDEX IF NOT EXISTS idx_sessions_expires ON user_sessions (expires_at)`)
     await authExec(`CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON user_sessions (user_id)`)
-    results.sessions_indexes = 'created or already exist ✓'
+    steps.sessions_indexes = 'created or already exist ✓'
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    results.sessions_indexes = `FAILED: ${msg}`
+    steps.sessions_indexes = `FAILED: ${(err as Error).message}`
   }
 
-  // ── 5. Verify tables exist ──────────────────────────────────────────────────
-  let verifiedTables: string[] = []
+  try {
+    await authExec(`
+      CREATE TABLE IF NOT EXISTS branding_settings (
+        id              SERIAL PRIMARY KEY,
+        customer_id     INTEGER UNIQUE NOT NULL,
+        logo_url        TEXT,
+        primary_color   TEXT NOT NULL DEFAULT '#DC2626',
+        secondary_color TEXT NOT NULL DEFAULT '#1F2937',
+        accent_color    TEXT NOT NULL DEFAULT '#14B8A6',
+        updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    await authExec(`CREATE INDEX IF NOT EXISTS idx_branding_customer_id ON branding_settings (customer_id)`)
+    steps.branding_table = 'created or already exists ✓'
+  } catch (err) {
+    steps.branding_table = `FAILED: ${(err as Error).message}`
+  }
+
+  try {
+    await authExec(`
+      CREATE TABLE IF NOT EXISTS tenant_integrations (
+        id                     SERIAL PRIMARY KEY,
+        customer_id            INTEGER UNIQUE NOT NULL,
+        second_brain_admin_email TEXT,
+        second_brain_api_token   TEXT,
+        updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    await authExec(`CREATE INDEX IF NOT EXISTS idx_integrations_customer_id ON tenant_integrations (customer_id)`)
+    steps.integrations_table = 'created or already exists ✓'
+  } catch (err) {
+    steps.integrations_table = `FAILED: ${(err as Error).message}`
+  }
+
+  let verified: string[] = []
   try {
     const qr = await authExec(`
       SELECT table_name
         FROM information_schema.tables
        WHERE table_schema = 'public'
-         AND table_name IN ('users', 'user_sessions')
+         AND table_name IN ('users', 'user_sessions', 'branding_settings', 'tenant_integrations')
        ORDER BY table_name
     `)
-    verifiedTables = qr.rows.map((r: Record<string, string>) => r.table_name)
+    verified = qr.rows.map((r: Record<string, string>) => r.table_name)
   } catch {
-    verifiedTables = ['could not verify']
+    verified = ['could not verify']
   }
 
-  const allGood = Object.values(results).every((r) => r.includes('✓'))
-
+  const ok = Object.values(steps).every((s) => s.includes('✓'))
   return NextResponse.json(
     {
-      success: allGood,
-      steps:   results,
-      tables_verified: verifiedTables,
-      next_step: allGood
-        ? 'Auth database is ready. You can now register and log in.'
-        : 'Some steps failed. Check the errors above and your AUTH_DATABASE_URL.',
+      success: ok,
+      steps,
+      tables_verified: verified,
+      next_step: ok ? 'Auth database is ready.' : 'Some steps failed. Check the errors above.',
     },
-    { status: allGood ? 200 : 500 }
+    { status: ok ? 200 : 500 }
   )
 }

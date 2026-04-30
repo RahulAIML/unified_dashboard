@@ -12,7 +12,6 @@
 
 import { NextResponse } from "next/server"
 import { solutionToUsecaseIds } from "./solution-map"
-import { DEFAULT_CLIENT_ID } from "./client-config"
 
 // ── Standard response shape ───────────────────────────────────────────────────
 
@@ -111,17 +110,4 @@ export function parseUsecaseFilter(searchParams: URLSearchParams): {
     ? idsParam.split(",").map(Number).filter((n) => !isNaN(n))
     : undefined
   return { solution: null, usecaseIds }
-}
-
-/**
- * Reads the optional ?clientId= param (for multi-tenant meta tracking).
- * Phase 1: used for logical tenant isolation via usecase_id mapping.
- */
-export function parseClientId(searchParams: URLSearchParams): string {
-  // Support both ?clientId= (API) and ?client= (UI) for compatibility.
-  return (
-    searchParams.get("clientId") ??
-    searchParams.get("client") ??
-    DEFAULT_CLIENT_ID
-  )
 }

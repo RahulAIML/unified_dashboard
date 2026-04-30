@@ -49,16 +49,16 @@ function ErrorBanner({ message }: { message: string }) {
 }
 
 export default function CertificationPage() {
-  const { dateRange, clientId, refreshKey } = useDashboardStore()
+  const { dateRange, refreshKey } = useDashboardStore()
   const t     = useT()
   const brand = useClientBrand()
   const days = Math.round(
     (dateRange.to.getTime() - dateRange.from.getTime()) / 86_400_000
   )
 
-  const overviewUrl = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to, { solution: "certification", clientId, rk: refreshKey })
-  const trendsUrl   = buildApiUrl("/api/dashboard/trends",   dateRange.from, dateRange.to, { solution: "certification", clientId, rk: refreshKey })
-  const resultsUrl  = buildApiUrl("/api/dashboard/results",  dateRange.from, dateRange.to, { limit: 100, solution: "certification", clientId, rk: refreshKey })
+  const overviewUrl = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to, { solution: "certification", rk: refreshKey })
+  const trendsUrl   = buildApiUrl("/api/dashboard/trends",   dateRange.from, dateRange.to, { solution: "certification", rk: refreshKey })
+  const resultsUrl  = buildApiUrl("/api/dashboard/results",  dateRange.from, dateRange.to, { limit: 100, solution: "certification", rk: refreshKey })
 
   const { data: overview, loading: overviewLoading, error: overviewError } = useApi<OverviewApiResponse>(overviewUrl)
   const { data: trends,   loading: trendsLoading,   error: trendsError }   = useApi<TrendsApiResponse>(trendsUrl)

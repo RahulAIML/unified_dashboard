@@ -1,29 +1,52 @@
 /**
  * /api/second-brain/profile
  *
- * Server-side proxy for the Second Brain hosted API.
- * All credentials live ONLY in env vars — never sent to the browser,
- * never committed to git.
- *
- * Required env vars (set in Render → Environment):
- *   SECOND_BRAIN_API_URL        https://second-brain-shz8.onrender.com/admin/api
- *   SECOND_BRAIN_ADMIN_EMAIL    admin1@coppel.com
- *   SECOND_BRAIN_API_TOKEN      <your token — add in Render dashboard>
- *
- * Response shape from upstream is re-wrapped in the standard
- * { success, data, meta } envelope so useApi() auto-unwraps it.
+ * Tenant-isolated server-side proxy for the Second Brain hosted API.
+ * Credentials remain server-side only and are resolved per customer.
  */
 
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
+import { getAuthContextFromRequest } from "@/lib/server-auth"
+import { getTenantIntegration } from "@/lib/db-tenant-integrations"
 
-const SECOND_BRAIN_API_URL     = process.env.SECOND_BRAIN_API_URL
+const SECOND_BRAIN_API_URL = process.env.SECOND_BRAIN_API_URL
 const SECOND_BRAIN_ADMIN_EMAIL = process.env.SECOND_BRAIN_ADMIN_EMAIL
-const SECOND_BRAIN_API_TOKEN   = process.env.SECOND_BRAIN_API_TOKEN   // optional — omitted if blank
+const SECOND_BRAIN_API_TOKEN = process.env.SECOND_BRAIN_API_TOKEN
 
 export const dynamic = "force-dynamic"
 
-export async function GET() {
-  if (!SECOND_BRAIN_API_URL || !SECOND_BRAIN_ADMIN_EMAIL) {
+function maskPhone(phone: string | null | undefined): string {
+  if (!phone) return ""
+  const digits = phone.replace(/\D/g, "")
+  if (digits.length <= 2) return digits
+  return `${"X".repeat(Math.max(digits.length - 2, 4))}${digits.slice(-2)}`
+}
+
+function maskPayload(payload: unknown): unknown {
+  if (Array.isArray(payload)) return payload.map(maskPayload)
+  if (!payload || typeof payload !== "object") return payload
+
+  const next: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(payload)) {
+    if (key === "phone_number" || key === "whatsapp_number") {
+      next[key] = maskPhone(typeof value === "string" ? value : "")
+    } else {
+      next[key] = maskPayload(value)
+    }
+  }
+  return next
+}
+
+export async function GET(request: NextRequest) {
+  const auth = await getAuthContextFromRequest(request)
+  if (!auth) {
+    return NextResponse.json(
+      { success: false, data: { message: "Unauthorized" }, meta: {} },
+      { status: 401 }
+    )
+  }
+
+  if (!SECOND_BRAIN_API_URL) {
     return NextResponse.json(
       { success: false, data: { message: "Second Brain API is not configured" }, meta: {} },
       { status: 503 }
@@ -31,22 +54,30 @@ export async function GET() {
   }
 
   try {
-    const url = new URL(`${SECOND_BRAIN_API_URL}/organizations/full-profile`)
-    url.searchParams.set("admin_email", SECOND_BRAIN_ADMIN_EMAIL)
+    const integration = await getTenantIntegration(auth.customerId)
+    const adminEmail = integration?.second_brain_admin_email || SECOND_BRAIN_ADMIN_EMAIL
+    const apiToken = integration?.second_brain_api_token || SECOND_BRAIN_API_TOKEN
 
-    // Build headers — include Bearer token when the env var is set
+    if (!adminEmail) {
+      return NextResponse.json(
+        { success: false, data: { message: "Second Brain integration is not configured for this customer" }, meta: {} },
+        { status: 404 }
+      )
+    }
+
+    const url = new URL(`${SECOND_BRAIN_API_URL}/organizations/full-profile`)
+    url.searchParams.set("admin_email", adminEmail)
+
     const headers: HeadersInit = {
       "Content-Type": "application/json",
-      ...(SECOND_BRAIN_API_TOKEN
-        ? { Authorization: `Bearer ${SECOND_BRAIN_API_TOKEN}` }
-        : {}),
+      ...(apiToken ? { Authorization: `Bearer ${apiToken}` } : {}),
     }
 
     const upstream = await fetch(url.toString(), {
       method: "GET",
       headers,
-      // Render free tier can be slow to cold-start — allow 20 s
       signal: AbortSignal.timeout(20_000),
+      cache: "no-store",
     })
 
     if (!upstream.ok) {
@@ -63,10 +94,11 @@ export async function GET() {
     }
 
     const rawData = await upstream.json()
+    const maskedData = maskPayload(rawData)
 
     return NextResponse.json({
       success: true,
-      data: rawData,
+      data: maskedData,
       meta: {
         source: "second-brain-api",
         timestamp: new Date().toISOString(),
