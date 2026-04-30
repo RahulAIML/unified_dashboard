@@ -34,7 +34,7 @@ async function fetchJsonWithTimeout(url: string, timeoutMs = DEFAULT_TIMEOUT_MS)
   const controller = new AbortController()
   const tid = setTimeout(() => controller.abort(), timeoutMs)
   try {
-    const res = await fetch(url, { signal: controller.signal })
+    const res = await fetch(url, { signal: controller.signal, credentials: 'include' })
     const json = await res.json().catch(() => null)
     return { res, json }
   } finally {
