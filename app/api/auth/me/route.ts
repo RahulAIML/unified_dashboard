@@ -1,12 +1,12 @@
 /**
  * /api/auth/me — Get current authenticated user
  *
- * Uses accessToken cookie (or Authorization header) and returns the user.
+ * Uses accessToken cookie and returns the user.
  * If auth DB is unavailable, falls back to JWT claims.
  */
 
 import { NextRequest } from 'next/server'
-import { extractTokenFromHeader, verifyAccessToken } from '@/lib/jwt'
+import { verifyAccessToken } from '@/lib/jwt'
 import { findUserById, DbError } from '@/lib/db-users'
 import { buildSuccess, buildApiError } from '@/lib/api-utils'
 
@@ -14,9 +14,7 @@ export const runtime = 'nodejs'
 
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('authorization')
-    let token = extractTokenFromHeader(authHeader)
-    if (!token) token = request.cookies.get('accessToken')?.value ?? null
+    const token = request.cookies.get('accessToken')?.value ?? null
     if (!token) return buildApiError('No authentication token found', 401)
 
     const claims = await verifyAccessToken(token)
@@ -57,4 +55,3 @@ export async function GET(request: NextRequest) {
     return buildApiError('Authentication check failed', 500)
   }
 }
-

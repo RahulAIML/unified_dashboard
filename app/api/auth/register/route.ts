@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
 
     const customerId = await resolveCustomerIdByEmail(email)
     if (!customerId) {
-      return buildApiError('Your email is not provisioned for analytics access. Please contact support.', 403)
+      return buildApiError('User not linked to any organization', 403)
     }
 
     const companyDomain = email.split('@')[1]?.toLowerCase() ?? ''
@@ -103,4 +103,3 @@ export async function POST(request: NextRequest) {
     return buildApiError('Something went wrong. Please try again.', 500)
   }
 }
-

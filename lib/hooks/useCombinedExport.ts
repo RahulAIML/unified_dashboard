@@ -34,7 +34,7 @@ export function useCombinedExport() {
         })
 
         // Use native fetch since we need to fetch multiple URLs
-        const response = await fetch(url)
+        const response = await fetch(url, { credentials: "include" })
         if (!response.ok) continue
 
         const json = await response.json()

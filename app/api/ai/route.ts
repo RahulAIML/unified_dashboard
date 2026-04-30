@@ -1,8 +1,12 @@
 import { NextRequest } from "next/server"
 import { getAIResponse } from "@/lib/ai"
 import { buildApiError, buildSuccess } from "@/lib/api-utils"
+import { getAuthContextFromRequest } from "@/lib/server-auth"
 
 export async function POST(req: NextRequest) {
+  const auth = await getAuthContextFromRequest(req)
+  if (!auth) return buildApiError("Unauthorized", 401)
+
   try {
     const body = await req.json()
     const { prompt, context } = body as {

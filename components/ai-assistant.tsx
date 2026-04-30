@@ -138,8 +138,8 @@ export function AIAssistant() {
 
     try {
       const [ovRes, trRes] = await Promise.all([
-        fetch(overviewUrl),
-        fetch(trendsUrl),
+        fetch(overviewUrl, { credentials: "include" }),
+        fetch(trendsUrl, { credentials: "include" }),
       ])
 
       if (!ovRes.ok || !trRes.ok) throw new Error("API unavailable")
@@ -194,6 +194,7 @@ export function AIAssistant() {
       const res = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ prompt: question, context }),
       })
 

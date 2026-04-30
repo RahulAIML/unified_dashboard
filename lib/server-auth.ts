@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server'
-import { extractTokenFromHeader, verifyAccessToken } from './jwt'
+import { verifyAccessToken } from './jwt'
 
 export interface ApiAuthContext {
   userId: number
@@ -8,9 +8,7 @@ export interface ApiAuthContext {
 }
 
 export async function getAuthContextFromRequest(request: NextRequest): Promise<ApiAuthContext | null> {
-  const authHeader = request.headers.get('authorization')
-  let token = extractTokenFromHeader(authHeader)
-  if (!token) token = request.cookies.get('accessToken')?.value ?? null
+  const token = request.cookies.get('accessToken')?.value ?? null
   if (!token) return null
 
   const claims = await verifyAccessToken(token)
@@ -25,4 +23,3 @@ export async function getAuthContextFromRequest(request: NextRequest): Promise<A
     customerId,
   }
 }
-

@@ -7,7 +7,7 @@
  * - Tenant isolation enforced by customer_id (from JWT) in every bridge call
  */
 
-import { computePassRate, normalizeResult, normalizeScore, safeNumber, safeString } from './kpi-builder'
+import { computePassRate, normalizeScore, safeNumber, safeString } from './kpi-builder'
 import { bridgeDrilldown, bridgeOverviewKpis, bridgeResults, bridgeTrends, bridgeUsecaseBreakdown } from './bridge-client'
 
 export interface AnalyticsFilters {
@@ -50,6 +50,7 @@ export interface EvaluationRow {
 
 export interface UsecaseRow {
   usecaseId: number
+  usecase_name: string | null
   totalEvaluations: number
   avgScore: number | null
   passRate: number | null
@@ -174,7 +175,7 @@ export async function getEvaluationResults(filters: AnalyticsFilters, limit = 50
     saved_report_id: number
     usecase_id: number | null
     score: number | null
-    result: string | null
+    passed_flag: number | null   // 0/1 from coach_app.saved_reports
     report_created_at: string
   }[]
 
@@ -184,8 +185,8 @@ export async function getEvaluationResults(filters: AnalyticsFilters, limit = 50
       savedReportId: Number(r.saved_report_id),
       usecaseId: r.usecase_id !== null ? Number(r.usecase_id) : null,
       score: normScore !== null ? Math.round(normScore) : null,
-      result: r.result,
-      passed: normalizeResult(r.result) === 'pass',
+      result: r.passed_flag === 1 ? 'pass' : r.passed_flag === 0 ? 'fail' : null,
+      passed: Number(r.passed_flag) === 1,
       date: String(r.report_created_at).slice(0, 10),
     }
   })
@@ -210,6 +211,7 @@ export async function getUsecaseBreakdown(filters: AnalyticsFilters): Promise<Us
     const totalResults = Number(r.total_results ?? 0)
     return {
       usecaseId: Number(r.usecase_id),
+      usecase_name: (r as { usecase_name?: string | null }).usecase_name ?? null,
       totalEvaluations: Number(r.total_evaluations ?? 0),
       avgScore: normalizeScore(r.avg_score),
       passRate: computePassRate(passed, totalResults),

@@ -76,6 +76,10 @@ export async function GET(request: NextRequest) {
         updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
       )
     `)
+    await authExec(`
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS customer_id INTEGER NOT NULL DEFAULT 0
+    `)
     steps.users_table = 'created or already exists ✓'
   } catch (err) {
     steps.users_table = `FAILED: ${(err as Error).message}`
@@ -171,3 +175,4 @@ export async function GET(request: NextRequest) {
     { status: ok ? 200 : 500 }
   )
 }
+

@@ -62,6 +62,7 @@ export function useTranslation() {
         const response = await fetch('/api/ai', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({
             prompt: `Translate the following text to ${targetLang === 'es' ? 'Spanish' : 'English'}. Only return the translated text, nothing else.\n\nText: "${text}"`,
           }),

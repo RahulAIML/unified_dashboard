@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     // Resolve tenant ONCE at login
     const customerId = await resolveCustomerIdByEmail(email)
     if (!customerId) {
-      return buildApiError('Your account is not provisioned for analytics access. Please contact support.', 403)
+      return buildApiError('User not linked to any organization', 403)
     }
 
     // Cache in auth DB so we don't resolve on every request
@@ -116,4 +116,3 @@ export async function POST(request: NextRequest) {
     return buildApiError('Something went wrong. Please try again.', 500)
   }
 }
-
