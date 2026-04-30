@@ -16,21 +16,15 @@
  * - Cross-schema JOINs: rolplay_pro.saved_reports, rolplay_pro.usecases, rolplay_pro.site_users
  *
  * Deploy:
- * - Upload as: https://rolplay.pro/src/rolplay-bridge.php
+ * - Upload as: https://rolplayadmin.com/coach-app/src/rolplay-bridge.php
  */
 
 declare(strict_types=1);
 
 // ── Configuration ─────────────────────────────────────────────────────────────
-$bridgeSecret = getenv('BRIDGE_SECRET');
-if ($bridgeSecret === false || trim($bridgeSecret) === '') {
-  http_response_code(500);
-  echo json_encode(
-    ['success' => false, 'data' => null, 'error' => 'BRIDGE_SECRET is not configured.'],
-    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
-  );
-  exit;
-}
+// Fallback constants used when PHP env vars are not set (e.g. shared cPanel hosting).
+// Set BRIDGE_SECRET via cPanel → PHP Configuration, or override the fallback below.
+$bridgeSecret = getenv('BRIDGE_SECRET') ?: 'REDACTED_BRIDGE_SECRET';
 define('BRIDGE_SECRET', $bridgeSecret);
 define('DB_HOST',       getenv('DB_HOST') ?: 'localhost');
 define('DB_USER',       getenv('DB_USER') ?: 'root');
