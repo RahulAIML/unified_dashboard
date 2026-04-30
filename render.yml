@@ -12,8 +12,20 @@ services:
         value: production
       - key: PORT
         value: 3000
+
+      # ── Auth (Postgres) ───────────────────────────────────────────────────
+      - key: AUTH_DATABASE_URL
+        sync: false   # set this in Render dashboard → Environment
+      - key: SETUP_SECRET
+        sync: false   # required for GET /api/auth/setup?secret=...
+      - key: JWT_SECRET
+        sync: false
+      - key: REFRESH_SECRET
+        sync: false
       # ── PHP Bridge (Mode B — no port 3306 required) ──────────────────────
       - key: BRIDGE_URL
         value: https://improveyourpitchbeta.net/rolplay-ai/rolplay-bridge.php
+      - key: SECOND_BRAIN_API_TOKEN
+        sync: false
       - key: BRIDGE_SECRET
         sync: false   # set this secret in Render dashboard → Environment
