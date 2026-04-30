@@ -47,7 +47,15 @@ export async function POST(request: NextRequest) {
       return buildApiError('An account with this email already exists. Please sign in instead.', 409)
     }
 
-    const customerId = await resolveCustomerIdByEmail(email)
+    let customerId: number | null = null
+    try {
+      customerId = await resolveCustomerIdByEmail(email)
+    } catch (bridgeErr) {
+      const msg = bridgeErr instanceof Error ? bridgeErr.message : String(bridgeErr)
+      console.error('[/api/auth/register] Bridge tenant resolution failed:', msg)
+      return buildApiError('Organization lookup is temporarily unavailable. Please try again in a few minutes.', 503)
+    }
+
     if (!customerId) {
       return buildApiError('User not linked to any organization', 403)
     }

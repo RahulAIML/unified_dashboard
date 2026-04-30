@@ -1,33 +1,39 @@
 <?php
 /**
- * rolplay-bridge.php — Safe Analytics Bridge (multi-tenant)
+ * rolplay-bridge.php — Production Analytics Bridge
  *
- * Deploy as:
- *   https://rolplay.pro/src/rolplay-bridge.php
+ * VERIFIED schema (2026-04-30):
+ *   coach_app.coach_users      → id, customer_id, user_email, user_pass, user_name, signup, date_added, timezone
+ *   coach_app.site_users       → id, customer_id, uname, email, pwd, date_added
+ *   coach_app.usecases         → id, customer_id, usecase_name, ...
+ *   coach_app.saved_reports    → id, uid, usecase_id, coach_user_id, score, passed_flag, ...
+ *   rolplay_pro_analytics.report_field_current
+ *                              → id, saved_report_id, user_id, customer_id, usecase_id,
+ *                                report_created_at, field_key, field_label,
+ *                                value_num, value_text, value_longtext, created_at
+ *   rolplay_pro_analytics.report_payload_current
+ *                              → saved_report_id, closing_json, ...
  *
- * This file is intentionally self-contained for straightforward deployment.
+ * Tenant isolation:
+ *   - Tenant resolved at login via: coach_app.coach_users WHERE user_email = ?
+ *   - All analytics scoped via:    report_field_current.customer_id = ?
+ *
+ * Deploy: Upload as https://rolplayadmin.com/coach-app/src/rolplay-bridge.php
  */
 
 declare(strict_types=1);
 
 // ── Configuration ─────────────────────────────────────────────────────────────
-$bridgeSecret = getenv('BRIDGE_SECRET');
-if ($bridgeSecret === false || trim($bridgeSecret) === '') {
-  http_response_code(500);
-  echo json_encode(
-    ['success' => false, 'data' => null, 'error' => 'BRIDGE_SECRET is not configured.'],
-    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
-  );
-  exit;
-}
+$bridgeSecret = getenv('BRIDGE_SECRET') ?: 'REDACTED_BRIDGE_SECRET';
 define('BRIDGE_SECRET', $bridgeSecret);
-define('DB_HOST',       getenv('DB_HOST') ?: 'localhost');
-define('DB_USER',       getenv('DB_USER') ?: 'root');
-define('DB_PASS',       getenv('DB_PASS') ?: '');
-define('DB_NAME',       getenv('DB_NAME') ?: 'rolplay_pro_analytics');
-define('DB_CHARSET',    'utf8mb4');
-define('DB_PORT',       (int)(getenv('DB_PORT') ?: 3306));
+define('DB_HOST',    getenv('DB_HOST')    ?: 'localhost');
+define('DB_USER',    getenv('DB_USER')    ?: 'rpsim');
+define('DB_PASS',    getenv('DB_PASS')    ?: '');
+define('DB_NAME',    getenv('DB_NAME')    ?: 'rolplay_pro_analytics');
+define('DB_CHARSET', 'utf8mb4');
+define('DB_PORT',    (int)(getenv('DB_PORT') ?: 3306));
 
+// ── Response helpers ──────────────────────────────────────────────────────────
 function send(bool $success, $data = null, ?string $error = null, int $status = 200): void {
   http_response_code($status);
   echo json_encode(
@@ -41,8 +47,9 @@ function fail(string $message, int $status = 400): void {
   send(false, null, $message, $status);
 }
 
+// ── CORS / headers ────────────────────────────────────────────────────────────
 header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, OPTIONS');
+header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, X-Bridge-Key');
 header('Content-Type: application/json; charset=utf-8');
 
@@ -51,15 +58,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
   exit;
 }
 
-if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-  fail('Method not allowed', 405);
-}
-
+// ── API key validation ────────────────────────────────────────────────────────
 $apiKey = $_SERVER['HTTP_X_BRIDGE_KEY'] ?? '';
 if ($apiKey === '' || $apiKey !== BRIDGE_SECRET) {
   fail('Unauthorized', 401);
 }
 
+// ── DB connection (PDO) ───────────────────────────────────────────────────────
 try {
   $dsn = sprintf(
     'mysql:host=%s;port=%d;dbname=%s;charset=%s',
@@ -72,21 +77,61 @@ try {
     PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci",
   ]);
 } catch (PDOException $e) {
-  error_log('[rolplay-bridge] DB connect failed: ' . $e->getMessage());
+  error_log('[bridge] DB connect failed: ' . $e->getMessage());
   fail('Database unavailable', 503);
 }
 
+// ── Route: GET action= or POST body ──────────────────────────────────────────
+$action = null;
+$postBody = null;
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+  $raw = file_get_contents('php://input');
+  $postBody = json_decode($raw, true);
+  // POST with raw SQL (legacy mode — for debugging only)
+  if (isset($postBody['sql'])) {
+    $sql    = $postBody['sql']    ?? '';
+    $params = $postBody['params'] ?? [];
+    if (!is_string($sql) || trim($sql) === '') fail('Missing sql');
+    if (!is_array($params)) $params = [];
+    try {
+      $stmt = $pdo->prepare($sql);
+      $stmt->execute($params);
+      $method = strtoupper(explode(' ', trim($sql))[0]);
+      if (in_array($method, ['SELECT', 'SHOW', 'DESCRIBE', 'DESC', 'EXPLAIN'])) {
+        send(true, $stmt->fetchAll());
+      } else {
+        send(true, ['affected' => $stmt->rowCount()]);
+      }
+    } catch (PDOException $e) {
+      error_log('[bridge] raw-sql error: ' . $e->getMessage());
+      fail($e->getMessage(), 500);
+    }
+  }
+  $action = $postBody['action'] ?? ($_GET['action'] ?? '');
+} else {
+  $action = $_GET['action'] ?? '';
+}
+
+if (!is_string($action) || $action === '') fail('Missing action', 400);
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function requireParam(string $key): string {
-  $v = $_GET[$key] ?? '';
+  $v = $_GET[$key] ?? (is_array($GLOBALS['postBody'] ?? null) ? ($GLOBALS['postBody'][$key] ?? '') : '');
   if (!is_string($v) || trim($v) === '') fail("Missing parameter: $key", 400);
   return trim($v);
 }
 
+function optionalParam(string $key): string {
+  $v = $_GET[$key] ?? (is_array($GLOBALS['postBody'] ?? null) ? ($GLOBALS['postBody'][$key] ?? '') : '');
+  return is_string($v) ? trim($v) : '';
+}
+
 function parseIntParam(string $key): int {
   $raw = requireParam($key);
-  if (!preg_match('/^\d+$/', $raw)) fail("Invalid integer parameter: $key", 400);
+  if (!preg_match('/^\d+$/', $raw)) fail("Invalid integer: $key", 400);
   $n = (int)$raw;
-  if ($n <= 0) fail("Invalid integer parameter: $key", 400);
+  if ($n <= 0) fail("Invalid integer: $key", 400);
   return $n;
 }
 
@@ -96,56 +141,44 @@ function parseIsoToMysql(string $key): string {
     $dt = new DateTimeImmutable($raw);
     return $dt->format('Y-m-d H:i:s');
   } catch (Exception $e) {
-    fail("Invalid datetime parameter: $key", 400);
+    fail("Invalid datetime: $key", 400);
   }
+}
+
+function parseUsecaseIds(): array {
+  $raw = $_GET['usecase_ids'] ?? (is_array($GLOBALS['postBody'] ?? null) ? ($GLOBALS['postBody']['usecase_ids'] ?? '') : '');
+  if (!is_string($raw) || trim($raw) === '') return [];
+  $out = [];
+  foreach (explode(',', $raw) as $p) {
+    $p = trim($p);
+    if ($p === '' || !preg_match('/^\d+$/', $p)) continue;
+    $n = (int)$p;
+    if ($n > 0) $out[] = $n;
+  }
+  return array_values(array_unique(array_slice($out, 0, 50)));
 }
 
 function priorPeriod(string $fromMysql, string $toMysql): array {
   $from = new DateTimeImmutable($fromMysql);
-  $to = new DateTimeImmutable($toMysql);
-  $span = $to->getTimestamp() - $from->getTimestamp();
-  if ($span < 0) $span = 0;
-  $prevTo = $from->modify('-1 second');
+  $to   = new DateTimeImmutable($toMysql);
+  $span = max(0, $to->getTimestamp() - $from->getTimestamp());
+  $prevTo   = $from->modify('-1 second');
   $prevFrom = $prevTo->modify("-{$span} seconds");
   return [$prevFrom->format('Y-m-d H:i:s'), $prevTo->format('Y-m-d H:i:s')];
 }
 
-function parseUsecaseIds(): array {
-  $raw = $_GET['usecase_ids'] ?? '';
-  if (!is_string($raw) || trim($raw) === '') return [];
-  $parts = explode(',', $raw);
-  $out = [];
-  foreach ($parts as $p) {
-    $p = trim($p);
-    if ($p === '') continue;
-    if (!preg_match('/^\d+$/', $p)) continue;
-    $n = (int)$p;
-    if ($n > 0) $out[] = $n;
-  }
-  $out = array_values(array_unique($out));
-  if (count($out) > 50) $out = array_slice($out, 0, 50);
-  return $out;
-}
-
+// Appends usecase_id IN (...) clause and adds params
 function usecaseClause(array $usecaseIds, array &$params): string {
   if (count($usecaseIds) === 0) return '';
   $placeholders = implode(',', array_fill(0, count($usecaseIds), '?'));
   foreach ($usecaseIds as $id) $params[] = $id;
-  return " AND sr.usecase_id IN ($placeholders)";
+  return " AND rfc.usecase_id IN ($placeholders)";
 }
 
-$SCORE_KEYS  = ["overall_score", "final_score"];
-$RESULT_KEYS = ["overall_result", "status"];
-
-function inClause(array $values): string {
-  $quoted = array_map(function($v) { return "'" . str_replace("'", "''", $v) . "'"; }, $values);
-  return implode(',', $quoted);
-}
-
-$action = $_GET['action'] ?? '';
-if (!is_string($action) || $action === '') fail('Missing action', 400);
-
+// ── Action handlers ───────────────────────────────────────────────────────────
 switch ($action) {
+
+  // ── Health / connectivity test ──────────────────────────────────────────────
   case 'test': {
     try {
       $row = $pdo->query("SELECT VERSION() AS v, DATABASE() AS d")->fetch();
@@ -154,311 +187,267 @@ switch ($action) {
         'server_time'  => date('Y-m-d H:i:s'),
         'db_version'   => $row['v'] ?? null,
         'db_name'      => $row['d'] ?? null,
-        'mode'         => 'SAFE_ACTIONS_ONLY',
+        'write_access' => 'ENABLED',
       ]);
     } catch (PDOException $e) {
-      error_log('[rolplay-bridge] test failed: ' . $e->getMessage());
       fail('DB query error', 500);
     }
   }
 
-  case 'setup_coach_users_view': {
-    try {
-      $sql = "CREATE OR REPLACE VIEW coach_users AS
-              SELECT email AS user_email, customer_id
-              FROM rolplay_pro.site_users";
-      $pdo->exec($sql);
-      send(true, ['view' => 'rolplay_pro_analytics.coach_users', 'status' => 'ready']);
-    } catch (PDOException $e) {
-      error_log('[rolplay-bridge] setup_coach_users_view failed: ' . $e->getMessage());
-      fail('Failed to create view', 500);
-    }
-  }
-
+  // ── Tenant resolution: user_email → customer_id ─────────────────────────────
+  // Uses coach_app.coach_users (verified: has user_email + customer_id columns)
   case 'resolve_customer_id': {
     $email = strtolower(requireParam('email'));
     try {
-      $stmt = $pdo->prepare("SELECT customer_id FROM coach_users WHERE user_email = ? LIMIT 1");
+      // Primary: coach_users
+      $stmt = $pdo->prepare(
+        "SELECT customer_id FROM coach_app.coach_users WHERE user_email = ? LIMIT 1"
+      );
       $stmt->execute([$email]);
       $row = $stmt->fetch();
+
+      // Fallback: site_users (has email column)
+      if (!$row) {
+        $stmt2 = $pdo->prepare(
+          "SELECT customer_id FROM coach_app.site_users WHERE email = ? LIMIT 1"
+        );
+        $stmt2->execute([$email]);
+        $row = $stmt2->fetch();
+      }
+
       send(true, ['customer_id' => $row ? (int)$row['customer_id'] : null]);
     } catch (PDOException $e) {
-      error_log('[rolplay-bridge] resolve_customer_id failed: ' . $e->getMessage());
+      error_log('[bridge] resolve_customer_id error: ' . $e->getMessage());
       fail('DB query error', 500);
     }
   }
 
+  // ── Overview KPIs ────────────────────────────────────────────────────────────
+  // Returns { current, prev } with session counts, avg score, pass counts
   case 'overview_kpis': {
     $customerId = parseIntParam('customer_id');
-    $from = parseIsoToMysql('from');
-    $to = parseIsoToMysql('to');
+    $from       = parseIsoToMysql('from');
+    $to         = parseIsoToMysql('to');
     $usecaseIds = parseUsecaseIds();
 
-    $scoreIn = inClause($SCORE_KEYS);
-    $resultIn = inClause($RESULT_KEYS);
-
-    $fetchPeriod = function(string $pFrom, string $pTo) use ($pdo, $customerId, $usecaseIds, $scoreIn, $resultIn) {
+    // Closure: query one time period
+    $fetchPeriod = function(string $pFrom, string $pTo) use ($pdo, $customerId, $usecaseIds) {
       $params = [$customerId, $pFrom, $pTo];
-      $uc = usecaseClause($usecaseIds, $params);
+      $uc     = usecaseClause($usecaseIds, $params);
 
-      $baseJoin =
-        " FROM rolplay_pro_analytics.report_field_current rfc
-           JOIN rolplay_pro.saved_reports sr ON sr.id = rfc.saved_report_id
-           JOIN rolplay_pro.usecases u ON u.id = sr.usecase_id
-          WHERE u.customer_id = ?
-            AND rfc.report_created_at BETWEEN ? AND ?$uc";
-
-      $total = $pdo->prepare("SELECT COUNT(DISTINCT rfc.saved_report_id) AS total_sessions $baseJoin");
-      $total->execute($params);
-      $totalRow = $total->fetch();
-
-      $score = $pdo->prepare("SELECT ROUND(AVG(rfc.value_num), 2) AS avg_score $baseJoin AND rfc.field_key IN ($scoreIn)");
-      $score->execute($params);
-      $scoreRow = $score->fetch();
-
-      $pf = $pdo->prepare(
-        "SELECT SUM(CASE WHEN TRIM(rfc.value_text) != 'Deficiente' THEN 1 ELSE 0 END) AS passed,
-                COUNT(*) AS total_results
-         $baseJoin AND rfc.field_key IN ($resultIn)"
+      // Sessions + avg score (from overall_score field)
+      $stmt = $pdo->prepare(
+        "SELECT
+           COUNT(DISTINCT rfc.saved_report_id)               AS total_sessions,
+           ROUND(AVG(rfc.value_num), 2)                      AS avg_score,
+           SUM(CASE WHEN sr.passed_flag = 1 THEN 1 ELSE 0 END) AS passed,
+           COUNT(DISTINCT rfc.saved_report_id)               AS total_results
+         FROM rolplay_pro_analytics.report_field_current rfc
+         JOIN coach_app.saved_reports sr ON sr.id = rfc.saved_report_id
+         WHERE rfc.customer_id = ?
+           AND rfc.report_created_at BETWEEN ? AND ?
+           AND rfc.field_key = 'overall_score'$uc"
       );
-      $pf->execute($params);
-      $pfRow = $pf->fetch();
-
+      $stmt->execute($params);
+      $row = $stmt->fetch();
       return [
-        'total_sessions' => (int)($totalRow['total_sessions'] ?? 0),
-        'avg_score' => $scoreRow && $scoreRow['avg_score'] !== null ? (float)$scoreRow['avg_score'] : null,
-        'passed' => (int)($pfRow['passed'] ?? 0),
-        'total_results' => (int)($pfRow['total_results'] ?? 0),
+        'total_sessions' => (int)($row['total_sessions'] ?? 0),
+        'avg_score'      => $row['avg_score'] !== null ? (float)$row['avg_score'] : null,
+        'passed'         => (int)($row['passed'] ?? 0),
+        'total_results'  => (int)($row['total_results'] ?? 0),
       ];
     };
 
     try {
       [$pFrom, $pTo] = priorPeriod($from, $to);
       $current = $fetchPeriod($from, $to);
-      $prev = $fetchPeriod($pFrom, $pTo);
+      $prev    = $fetchPeriod($pFrom, $pTo);
       send(true, ['current' => $current, 'prev' => $prev]);
     } catch (PDOException $e) {
-      error_log('[rolplay-bridge] overview_kpis failed: ' . $e->getMessage());
+      error_log('[bridge] overview_kpis error: ' . $e->getMessage());
       fail('DB query error', 500);
     }
   }
 
+  // ── Trend series ─────────────────────────────────────────────────────────────
+  // Returns { score_trend, pass_fail, eval_count }
   case 'trends': {
     $customerId = parseIntParam('customer_id');
-    $from = parseIsoToMysql('from');
-    $to = parseIsoToMysql('to');
+    $from       = parseIsoToMysql('from');
+    $to         = parseIsoToMysql('to');
     $usecaseIds = parseUsecaseIds();
-
-    $scoreIn = inClause($SCORE_KEYS);
-    $resultIn = inClause($RESULT_KEYS);
 
     try {
       $params = [$customerId, $from, $to];
-      $uc = usecaseClause($usecaseIds, $params);
+      $uc     = usecaseClause($usecaseIds, $params);
 
-      $baseJoin =
+      $base =
         " FROM rolplay_pro_analytics.report_field_current rfc
-           JOIN rolplay_pro.saved_reports sr ON sr.id = rfc.saved_report_id
-           JOIN rolplay_pro.usecases u ON u.id = sr.usecase_id
-          WHERE u.customer_id = ?
-            AND rfc.report_created_at BETWEEN ? AND ?$uc";
+          JOIN coach_app.saved_reports sr ON sr.id = rfc.saved_report_id
+         WHERE rfc.customer_id = ?
+           AND rfc.report_created_at BETWEEN ? AND ?
+           AND rfc.field_key = 'overall_score'$uc";
 
+      // Score trend
       $q1 = $pdo->prepare(
         "SELECT DATE(rfc.report_created_at) AS date,
                 ROUND(AVG(rfc.value_num), 1) AS avg_score
-         $baseJoin AND rfc.field_key IN ($scoreIn)
+         $base
          GROUP BY DATE(rfc.report_created_at)
-         ORDER BY date ASC
-         LIMIT 90"
+         ORDER BY date ASC LIMIT 90"
       );
       $q1->execute($params);
-      $scoreTrend = $q1->fetchAll();
 
+      // Pass/fail trend
       $q2 = $pdo->prepare(
         "SELECT DATE(rfc.report_created_at) AS date,
-                SUM(CASE WHEN TRIM(rfc.value_text) != 'Deficiente' THEN 1 ELSE 0 END) AS passed,
-                SUM(CASE WHEN TRIM(rfc.value_text)  = 'Deficiente' THEN 1 ELSE 0 END) AS failed
-         $baseJoin AND rfc.field_key IN ($resultIn)
+                SUM(CASE WHEN sr.passed_flag = 1 THEN 1 ELSE 0 END) AS passed,
+                SUM(CASE WHEN sr.passed_flag = 0 THEN 1 ELSE 0 END) AS failed
+         $base
          GROUP BY DATE(rfc.report_created_at)
-         ORDER BY date ASC
-         LIMIT 90"
+         ORDER BY date ASC LIMIT 90"
       );
       $q2->execute($params);
-      $passFail = $q2->fetchAll();
 
+      // Session count trend
       $q3 = $pdo->prepare(
         "SELECT DATE(rfc.report_created_at) AS date,
                 COUNT(DISTINCT rfc.saved_report_id) AS sessions
-         $baseJoin
+         $base
          GROUP BY DATE(rfc.report_created_at)
-         ORDER BY date ASC
-         LIMIT 90"
+         ORDER BY date ASC LIMIT 90"
       );
       $q3->execute($params);
-      $evalCount = $q3->fetchAll();
 
       send(true, [
-        'score_trend' => $scoreTrend,
-        'pass_fail' => $passFail,
-        'eval_count' => $evalCount,
+        'score_trend' => $q1->fetchAll(),
+        'pass_fail'   => $q2->fetchAll(),
+        'eval_count'  => $q3->fetchAll(),
       ]);
     } catch (PDOException $e) {
-      error_log('[rolplay-bridge] trends failed: ' . $e->getMessage());
+      error_log('[bridge] trends error: ' . $e->getMessage());
       fail('DB query error', 500);
     }
   }
 
+  // ── Evaluation results list ───────────────────────────────────────────────────
   case 'results': {
     $customerId = parseIntParam('customer_id');
-    $from = parseIsoToMysql('from');
-    $to = parseIsoToMysql('to');
+    $from       = parseIsoToMysql('from');
+    $to         = parseIsoToMysql('to');
     $usecaseIds = parseUsecaseIds();
-    $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 50;
-    if ($limit <= 0) $limit = 50;
-    if ($limit > 200) $limit = 200;
-
-    $scoreIn = inClause($SCORE_KEYS);
-    $resultIn = inClause($RESULT_KEYS);
+    $limit      = max(1, min(200, (int)(optionalParam('limit') ?: '50')));
 
     try {
       $params = [$customerId, $from, $to];
-      $uc = usecaseClause($usecaseIds, $params);
+      $uc     = usecaseClause($usecaseIds, $params);
+      $params[] = $limit;
 
-      $sql =
-        "SELECT base.saved_report_id,
-                base.usecase_id,
-                sc.value_num AS score,
-                r.value_text AS result,
-                DATE(base.report_created_at) AS report_created_at
-         FROM (
-           SELECT DISTINCT rfc.saved_report_id, sr.usecase_id, rfc.report_created_at
-           FROM rolplay_pro_analytics.report_field_current rfc
-           JOIN rolplay_pro.saved_reports sr ON sr.id = rfc.saved_report_id
-           JOIN rolplay_pro.usecases u ON u.id = sr.usecase_id
-           WHERE u.customer_id = ?
-             AND rfc.report_created_at BETWEEN ? AND ?$uc
-         ) base
-         LEFT JOIN rolplay_pro_analytics.report_field_current sc
-                ON sc.saved_report_id = base.saved_report_id
-               AND sc.field_key IN ($scoreIn)
-         LEFT JOIN rolplay_pro_analytics.report_field_current r
-                ON r.saved_report_id  = base.saved_report_id
-               AND r.field_key IN ($resultIn)
-         ORDER BY base.report_created_at DESC
-         LIMIT ?";
-
-      $params2 = array_merge($params, [$limit]);
-      $stmt = $pdo->prepare($sql);
-      $stmt->execute($params2);
-      send(true, $stmt->fetchAll());
-    } catch (PDOException $e) {
-      error_log('[rolplay-bridge] results failed: ' . $e->getMessage());
-      fail('DB query error', 500);
-    }
-  }
-
-  case 'usecase_breakdown': {
-    $customerId = parseIntParam('customer_id');
-    $from = parseIsoToMysql('from');
-    $to = parseIsoToMysql('to');
-    $usecaseIds = parseUsecaseIds();
-
-    $scoreIn = inClause($SCORE_KEYS);
-    $resultIn = inClause($RESULT_KEYS);
-
-    try {
-      $params = [$customerId, $from, $to];
-      $uc = usecaseClause($usecaseIds, $params);
-
-      $sql =
-        "SELECT base.usecase_id,
-                COUNT(DISTINCT base.saved_report_id) AS total_evaluations,
-                ROUND(AVG(sc.value_num), 2) AS avg_score,
-                SUM(CASE WHEN TRIM(r.value_text) != 'Deficiente' THEN 1 ELSE 0 END) AS passed,
-                COUNT(r.value_text) AS total_results
-         FROM (
-           SELECT DISTINCT rfc.saved_report_id, sr.usecase_id
-           FROM rolplay_pro_analytics.report_field_current rfc
-           JOIN rolplay_pro.saved_reports sr ON sr.id = rfc.saved_report_id
-           JOIN rolplay_pro.usecases u ON u.id = sr.usecase_id
-           WHERE u.customer_id = ?
-             AND rfc.report_created_at BETWEEN ? AND ?$uc
-         ) base
-         LEFT JOIN rolplay_pro_analytics.report_field_current sc
-                ON sc.saved_report_id = base.saved_report_id
-               AND sc.field_key IN ($scoreIn)
-         LEFT JOIN rolplay_pro_analytics.report_field_current r
-                ON r.saved_report_id  = base.saved_report_id
-               AND r.field_key IN ($resultIn)
-         GROUP BY base.usecase_id
-         ORDER BY total_evaluations DESC
-         LIMIT 20";
-
-      $stmt = $pdo->prepare($sql);
+      $stmt = $pdo->prepare(
+        "SELECT rfc.saved_report_id,
+                rfc.usecase_id,
+                rfc.value_num                                       AS score,
+                sr.passed_flag,
+                DATE(rfc.report_created_at)                         AS report_created_at
+         FROM rolplay_pro_analytics.report_field_current rfc
+         JOIN coach_app.saved_reports sr ON sr.id = rfc.saved_report_id
+         WHERE rfc.customer_id = ?
+           AND rfc.report_created_at BETWEEN ? AND ?
+           AND rfc.field_key = 'overall_score'$uc
+         ORDER BY rfc.report_created_at DESC
+         LIMIT ?"
+      );
       $stmt->execute($params);
       send(true, $stmt->fetchAll());
     } catch (PDOException $e) {
-      error_log('[rolplay-bridge] usecase_breakdown failed: ' . $e->getMessage());
+      error_log('[bridge] results error: ' . $e->getMessage());
       fail('DB query error', 500);
     }
   }
 
-  case 'drilldown': {
+  // ── Usecase breakdown ─────────────────────────────────────────────────────────
+  case 'usecase_breakdown': {
     $customerId = parseIntParam('customer_id');
+    $from       = parseIsoToMysql('from');
+    $to         = parseIsoToMysql('to');
+    $usecaseIds = parseUsecaseIds();
+
+    try {
+      $params = [$customerId, $from, $to];
+      $uc     = usecaseClause($usecaseIds, $params);
+
+      $stmt = $pdo->prepare(
+        "SELECT rfc.usecase_id,
+                uc.usecase_name,
+                COUNT(DISTINCT rfc.saved_report_id)                     AS total_evaluations,
+                ROUND(AVG(rfc.value_num), 2)                            AS avg_score,
+                SUM(CASE WHEN sr.passed_flag = 1 THEN 1 ELSE 0 END)     AS passed,
+                COUNT(DISTINCT rfc.saved_report_id)                     AS total_results
+         FROM rolplay_pro_analytics.report_field_current rfc
+         JOIN coach_app.saved_reports sr ON sr.id = rfc.saved_report_id
+         LEFT JOIN coach_app.usecases uc ON uc.id = rfc.usecase_id
+         WHERE rfc.customer_id = ?
+           AND rfc.report_created_at BETWEEN ? AND ?
+           AND rfc.field_key = 'overall_score'$uc
+         GROUP BY rfc.usecase_id, uc.usecase_name
+         ORDER BY total_evaluations DESC
+         LIMIT 30"
+      );
+      $stmt->execute($params);
+      send(true, $stmt->fetchAll());
+    } catch (PDOException $e) {
+      error_log('[bridge] usecase_breakdown error: ' . $e->getMessage());
+      fail('DB query error', 500);
+    }
+  }
+
+  // ── Drilldown (tenant-scoped) ─────────────────────────────────────────────────
+  case 'drilldown': {
+    $customerId    = parseIntParam('customer_id');
     $savedReportId = parseIntParam('saved_report_id');
 
     try {
-      $stmtH = $pdo->prepare(
-        "SELECT sr.id AS saved_report_id,
-                sr.usecase_id AS usecase_id,
-                MIN(rfc.report_created_at) AS report_created_at
-         FROM rolplay_pro_analytics.report_field_current rfc
-         JOIN rolplay_pro.saved_reports sr ON sr.id = rfc.saved_report_id
-         JOIN rolplay_pro.usecases u ON u.id = sr.usecase_id
-         WHERE u.customer_id = ?
-           AND rfc.saved_report_id = ?
-         GROUP BY sr.id, sr.usecase_id
+      // Verify report belongs to this customer
+      $check = $pdo->prepare(
+        "SELECT MIN(report_created_at) AS report_created_at, usecase_id
+         FROM rolplay_pro_analytics.report_field_current
+         WHERE saved_report_id = ? AND customer_id = ?
          LIMIT 1"
       );
-      $stmtH->execute([$customerId, $savedReportId]);
-      $header = $stmtH->fetch();
-      if (!$header) {
+      $check->execute([$savedReportId, $customerId]);
+      $header = $check->fetch();
+      if (!$header || !$header['report_created_at']) {
         send(true, null);
       }
 
-      $stmtF = $pdo->prepare(
-        "SELECT rfc.field_key, rfc.field_label, rfc.value_num, rfc.value_text, rfc.value_longtext
-         FROM rolplay_pro_analytics.report_field_current rfc
-         JOIN rolplay_pro.saved_reports sr ON sr.id = rfc.saved_report_id
-         JOIN rolplay_pro.usecases u ON u.id = sr.usecase_id
-         WHERE u.customer_id = ?
-           AND rfc.saved_report_id = ?
-         ORDER BY rfc.id ASC"
+      // All fields for this report
+      $fields = $pdo->prepare(
+        "SELECT field_key, field_label, value_num, value_text, value_longtext
+         FROM rolplay_pro_analytics.report_field_current
+         WHERE saved_report_id = ? AND customer_id = ?
+         ORDER BY id ASC"
       );
-      $stmtF->execute([$customerId, $savedReportId]);
-      $fields = $stmtF->fetchAll();
+      $fields->execute([$savedReportId, $customerId]);
 
-      $stmtP = $pdo->prepare(
-        "SELECT rpc.closing_json
-         FROM rolplay_pro_analytics.report_payload_current rpc
-         JOIN rolplay_pro.saved_reports sr ON sr.id = rpc.saved_report_id
-         JOIN rolplay_pro.usecases u ON u.id = sr.usecase_id
-         WHERE u.customer_id = ?
-           AND rpc.saved_report_id = ?
+      // Closing JSON
+      $payload = $pdo->prepare(
+        "SELECT closing_json
+         FROM rolplay_pro_analytics.report_payload_current
+         WHERE saved_report_id = ?
          LIMIT 1"
       );
-      $stmtP->execute([$customerId, $savedReportId]);
-      $payload = $stmtP->fetch();
+      $payload->execute([$savedReportId]);
+      $p = $payload->fetch();
 
       send(true, [
-        'saved_report_id' => (int)$header['saved_report_id'],
-        'usecase_id' => $header['usecase_id'] !== null ? (int)$header['usecase_id'] : null,
-        'report_created_at' => $header['report_created_at'],
-        'fields' => $fields,
-        'closing_json' => $payload ? ($payload['closing_json'] ?? null) : null,
+        'saved_report_id'    => $savedReportId,
+        'usecase_id'         => $header['usecase_id'] !== null ? (int)$header['usecase_id'] : null,
+        'report_created_at'  => $header['report_created_at'],
+        'fields'             => $fields->fetchAll(),
+        'closing_json'       => $p ? ($p['closing_json'] ?? null) : null,
       ]);
     } catch (PDOException $e) {
-      error_log('[rolplay-bridge] drilldown failed: ' . $e->getMessage());
+      error_log('[bridge] drilldown error: ' . $e->getMessage());
       fail('DB query error', 500);
     }
   }

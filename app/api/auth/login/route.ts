@@ -65,8 +65,23 @@ export async function POST(request: NextRequest) {
     const passwordValid = await verifyPassword(password, passwordHash)
     if (!passwordValid) return buildApiError('Incorrect password. Please try again.', 401)
 
-    // Resolve tenant ONCE at login
-    const customerId = await resolveCustomerIdByEmail(email)
+    // Resolve tenant ONCE at login.
+    // If bridge is temporarily unavailable, fall back to the last known
+    // customer_id stored in auth DB for already-linked users.
+    let customerId: number | null = null
+    try {
+      customerId = await resolveCustomerIdByEmail(email)
+    } catch (bridgeErr) {
+      const msg = bridgeErr instanceof Error ? bridgeErr.message : String(bridgeErr)
+      console.error('[/api/auth/login] Bridge tenant resolution failed:', msg)
+      const cachedCustomerId = Number(user.customer_id ?? 0)
+      if (Number.isFinite(cachedCustomerId) && cachedCustomerId > 0) {
+        customerId = cachedCustomerId
+      } else {
+        return buildApiError('Organization lookup is temporarily unavailable. Please try again in a few minutes.', 503)
+      }
+    }
+
     if (!customerId) {
       return buildApiError('User not linked to any organization', 403)
     }
