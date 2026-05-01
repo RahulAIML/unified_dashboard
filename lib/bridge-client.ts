@@ -244,6 +244,49 @@ export async function bridgeUsecaseBreakdown(params: {
 }
 
 /**
+ * Best performers — top users by average score.
+ * Groups by user_email, requires at least 2 sessions, orders by avg score DESC.
+ */
+export async function bridgeBestPerformers(params: {
+  customerId:  number
+  fromIso:     string
+  toIso:       string
+  usecaseIds?: number[]
+  limit?:      number
+}): Promise<unknown> {
+  const p: (string | number | null)[] = [
+    params.customerId,
+    isoToMysql(params.fromIso),
+    isoToMysql(params.toIso),
+  ]
+  const uc  = usecaseClause(params.usecaseIds, p)
+  const lim = Math.max(1, Math.min(50, params.limit ?? 10))
+  p.push(lim)
+
+  return bridgePost(
+    `SELECT
+       cu.user_email,
+       cu.user_firstname,
+       cu.user_lastname,
+       COUNT(DISTINCT rfc.saved_report_id)                        AS sessions,
+       ROUND(AVG(rfc.value_num), 1)                               AS avg_score,
+       ROUND(SUM(CASE WHEN sr.passed_flag = 1 THEN 1 ELSE 0 END)
+             / COUNT(DISTINCT rfc.saved_report_id) * 100, 1)      AS pass_rate
+     FROM rolplay_pro_analytics.report_field_current rfc
+     JOIN coach_app.saved_reports sr ON sr.id = rfc.saved_report_id
+     JOIN coach_app.coach_users cu  ON cu.id = sr.user_id
+     WHERE rfc.customer_id = ?
+       AND rfc.report_created_at BETWEEN ? AND ?
+       AND rfc.field_key = 'overall_score'${uc}
+     GROUP BY cu.id, cu.user_email, cu.user_firstname, cu.user_lastname
+     HAVING sessions >= 2
+     ORDER BY avg_score DESC, sessions DESC
+     LIMIT ?`,
+    p
+  )
+}
+
+/**
  * Full drilldown for one saved_report, scoped to customer.
  */
 export async function bridgeDrilldown(params: {

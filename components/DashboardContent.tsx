@@ -2,7 +2,7 @@
 
 import { useMemo, useEffect, useReducer, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Target, PlayCircle, TrendingUp, BadgeCheck, BarChart2, AlertTriangle } from "lucide-react"
+import { Target, PlayCircle, TrendingUp, BadgeCheck, BarChart2, AlertTriangle, Trophy } from "lucide-react"
 import { DashboardHeader }    from "@/components/DashboardHeader"
 import { SummaryCard }        from "@/components/SummaryCard"
 import { ChartCard }          from "@/components/ChartCard"
@@ -27,6 +27,8 @@ import type {
   UsecaseBreakdownApiResponse,
   ResultsApiResponse,
   EvaluationApiRow,
+  BestPerformersApiResponse,
+  BestPerformerRow,
 } from "@/lib/types"
 import type { Module } from "@/lib/types"
 
@@ -142,11 +144,17 @@ export function DashboardContent() {
     solution: selectedSolution,
     rk: refreshKey,
   })
+  const bestUrl = buildApiUrl("/api/dashboard/best-performers", dateRange.from, dateRange.to, {
+    limit: 10,
+    solution: selectedSolution,
+    rk: refreshKey,
+  })
 
   const { data: overview,    loading: overviewLoading, error: overviewError }  = useApi<OverviewApiResponse>(overviewUrl)
   const { data: trends,      loading: trendsLoading,   error: trendsError }    = useApi<TrendsApiResponse>(trendsUrl)
   const { data: ucBreakdown, loading: ucLoading,       error: ucError }        = useApi<UsecaseBreakdownApiResponse>(ucUrl)
   const { data: results,     loading: resultsLoading,  error: resultsError }   = useApi<ResultsApiResponse>(resultsUrl)
+  const { data: bestPerformers, loading: bestLoading }                         = useApi<BestPerformersApiResponse>(bestUrl)
 
   const hasOverviewData = overview && overview.totalEvaluations > 0
 
@@ -451,6 +459,65 @@ export function DashboardContent() {
               : <div className="py-10 text-center text-sm text-muted-foreground">{t.noDataAvailable}</div>
           }
         </div>
+
+        {/* Best Performers section */}
+        {bestPerformers && bestPerformers.data && bestPerformers.data.length > 0 && (
+          <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+            <div className="mb-4">
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <Trophy className="w-4 h-4 text-primary" />
+                Best Performers
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {bestLoading
+                  ? t.loading
+                  : `Top ${bestPerformers.data.length} performers — ${days}d`}
+              </p>
+            </div>
+            <div className="space-y-3">
+              {bestPerformers.data.map((performer, idx) => (
+                <div
+                  key={`${performer.user_email}-${idx}`}
+                  className="flex items-center justify-between p-3 rounded-lg bg-muted/40 hover:bg-muted/60 transition-colors"
+                >
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/20 text-primary font-bold text-xs shrink-0">
+                      {idx + 1}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">
+                        {performer.user_firstname && performer.user_lastname
+                          ? `${performer.user_firstname} ${performer.user_lastname}`
+                          : performer.user_email}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {performer.user_email}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4 text-right shrink-0">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">
+                        {performer.avg_score.toFixed(1)} pts
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {performer.sessions} sessions
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-semibold text-primary">
+                        {(performer.pass_rate * 100).toFixed(0)}%
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        pass rate
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

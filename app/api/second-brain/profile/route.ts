@@ -55,7 +55,31 @@ export async function GET(request: NextRequest) {
 
   try {
     const integration = await getTenantIntegration(auth.customerId)
-    const adminEmail = integration?.second_brain_admin_email || SECOND_BRAIN_ADMIN_EMAIL
+
+    // Resolution order for admin_email:
+    // 1. Per-tenant config from DB (tenant_integrations table)
+    // 2. Dynamic: admin@{company_domain}.com derived from user's email
+    // 3. Global fallback from env var SECOND_BRAIN_ADMIN_EMAIL
+    let adminEmail = integration?.second_brain_admin_email || null
+
+    if (!adminEmail && auth.email) {
+      const domain = auth.email.split("@")[1]?.toLowerCase()
+      if (domain) {
+        // Strip common email provider domains — only derive for company domains
+        const genericDomains = new Set([
+          "gmail.com", "hotmail.com", "outlook.com", "yahoo.com",
+          "icloud.com", "protonmail.com", "live.com", "aol.com",
+        ])
+        if (!genericDomains.has(domain)) {
+          // Extract company name from domain (e.g. coppel.com → coppel)
+          const companyName = domain.split(".")[0]
+          adminEmail = `admin@${companyName}.com`
+        }
+      }
+    }
+
+    if (!adminEmail) adminEmail = SECOND_BRAIN_ADMIN_EMAIL ?? null
+
     const apiToken = integration?.second_brain_api_token || SECOND_BRAIN_API_TOKEN
 
     if (!adminEmail) {

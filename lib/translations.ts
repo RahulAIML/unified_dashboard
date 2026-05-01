@@ -213,6 +213,12 @@ export const translations = {
     notLinkedToOrg:    "You're not linked to any organization yet",
     notLinkedToOrgSub: 'Contact your administrator to get access to your company\'s analytics data.',
     notLinkedContact:  'Contact Administrator',
+
+    // ── Best Performers ──────────────────────────────────────
+    bestPerformers:    'Best Performers',
+    bestPerformersSub: 'Top users by average score',
+    colName:           'Name',
+    colEmail:          'Email',
   },
 
   es: {
@@ -421,6 +427,12 @@ export const translations = {
     notLinkedToOrg:    'Aún no estás vinculado a ninguna organización',
     notLinkedToOrgSub: 'Contacta a tu administrador para obtener acceso a los datos analíticos de tu empresa.',
     notLinkedContact:  'Contactar Administrador',
+
+    // ── Best Performers ──────────────────────────────────────
+    bestPerformers:    'Mejores Participantes',
+    bestPerformersSub: 'Usuarios con mayor puntuación promedio',
+    colName:           'Nombre',
+    colEmail:          'Correo',
   },
 } as const
 
