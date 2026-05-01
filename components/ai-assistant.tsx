@@ -233,7 +233,7 @@ export function AIAssistant() {
       {/* Floating trigger button */}
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-6 right-6 z-40 flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-lg hover:shadow-xl transition-all hover:scale-105"
+        className="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-50 flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-lg hover:shadow-xl transition-all hover:scale-105"
         aria-label="Open AI assistant"
       >
         <Bot className="h-4 w-4" />
@@ -247,7 +247,7 @@ export function AIAssistant() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 16, scale: 0.97 }}
             transition={{ duration: 0.18 }}
-            className="fixed bottom-6 right-6 z-50 flex w-[380px] max-w-[92vw] flex-col rounded-2xl border border-border bg-card shadow-2xl"
+            className="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-50 flex w-[380px] max-w-[92vw] flex-col rounded-2xl border border-border bg-card shadow-2xl"
             style={{ maxHeight: "min(600px, 90vh)" }}
           >
             {/* Header */}
