@@ -147,16 +147,6 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Forgot Password Link */}
-            <div className="text-right">
-              <Link
-                href="#"
-                className="text-xs font-medium text-red-600 hover:text-red-700 transition-colors"
-              >
-                Forgot password?
-              </Link>
-            </div>
-
             {/* Submit Button */}
             <button
               type="submit"
@@ -193,9 +183,9 @@ export default function LoginPage() {
             Terms of Service
           </a>
           {' '}and{' '}
-          <a href="#" className="font-medium text-red-600 hover:text-red-700">
+          <Link href="/privacy" className="font-medium text-red-600 hover:text-red-700">
             Privacy Policy
-          </a>
+          </Link>
         </p>
       </motion.div>
     </div>

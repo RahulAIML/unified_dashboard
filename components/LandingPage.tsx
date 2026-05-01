@@ -159,7 +159,7 @@ export function LandingPage() {
 
       {/* Trust Section */}
       <section className="py-16 sm:py-24 bg-gradient-to-r from-slate-50 to-white">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+        <div className="w-full px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-8">
             Trusted by Leading Companies
           </h2>
@@ -273,13 +273,18 @@ export function LandingPage() {
                 <li><Link href="/auth/login" className="text-sm text-slate-600 hover:text-slate-900 transition-colors">Sign In</Link></li>
                 <li><Link href="/auth/register" className="text-sm text-slate-600 hover:text-slate-900 transition-colors">Create Account</Link></li>
                 <li><a href="mailto:info@rolplay.ai" className="text-sm text-slate-600 hover:text-slate-900 transition-colors">Support</a></li>
+                <li><Link href="/privacy" className="text-sm text-slate-600 hover:text-slate-900 transition-colors">Privacy Policy</Link></li>
               </ul>
             </div>
           </div>
 
           <div className="border-t border-slate-200 pt-8 flex flex-col sm:flex-row justify-between items-center gap-4">
             <p className="text-sm text-slate-500">© 2026 RolPlay. All rights reserved.</p>
-            <p className="text-xs text-slate-400">Analytics Platform · v1.0</p>
+            <div className="flex items-center gap-4">
+              <Link href="/privacy" className="text-xs text-slate-400 hover:text-slate-600 transition-colors">Privacy Policy</Link>
+              <span className="text-xs text-slate-300">·</span>
+              <p className="text-xs text-slate-400">Analytics Platform · v1.0</p>
+            </div>
           </div>
         </div>
       </footer>

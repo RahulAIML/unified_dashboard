@@ -1,5 +1,7 @@
 'use client'
 
+import Link from 'next/link'
+
 export function DashboardFooter() {
   return (
     <footer className="border-t border-border bg-background/60 px-6 py-4">
@@ -15,6 +17,8 @@ export function DashboardFooter() {
         </div>
         <div className="flex items-center gap-4">
           <span>Toronto · Monterrey · CDMX</span>
+          <span className="text-muted-foreground/50">|</span>
+          <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link>
           <span className="text-muted-foreground/50">|</span>
           <a
             href="https://www.linkedin.com/company/rolplay"

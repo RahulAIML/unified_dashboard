@@ -250,6 +250,16 @@ export const translations = {
     sbApiUnavailable:    'Second Brain live data unavailable',
     statusActive:        'Active',
     statusInactive:      'Inactive',
+
+    // ── Second Brain chart titles ─────────────────────────────
+    sbSessionsPerDay:       'Sessions per Day',
+    sbSessionsPerDaySub:    'Daily coaching session activity',
+    sbSessionsByScenario:   'Sessions by Scenario',
+    sbSessionsByScenarioSub:'Distribution of coaching sessions',
+    sbMembersByRole:        'Members by Role',
+    sbMembersByRoleSub:     'Breakdown of member roles',
+    sbMessageTypes:         'Message Types',
+    sbMessageTypesSub:      'Distribution of conversation types',
   },
 
   es: {
@@ -495,6 +505,16 @@ export const translations = {
     sbApiUnavailable:    'Datos en vivo de Second Brain no disponibles',
     statusActive:        'Activo',
     statusInactive:      'Inactivo',
+
+    // ── Second Brain chart titles ─────────────────────────────
+    sbSessionsPerDay:       'Sesiones por Día',
+    sbSessionsPerDaySub:    'Actividad diaria de sesiones de coaching',
+    sbSessionsByScenario:   'Sesiones por Escenario',
+    sbSessionsByScenarioSub:'Distribución de sesiones de coaching',
+    sbMembersByRole:        'Miembros por Rol',
+    sbMembersByRoleSub:     'Distribución de roles de miembros',
+    sbMessageTypes:         'Tipos de Mensaje',
+    sbMessageTypesSub:      'Distribución de tipos de conversación',
   },
 } as const
 
