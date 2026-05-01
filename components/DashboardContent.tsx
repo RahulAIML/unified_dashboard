@@ -296,6 +296,10 @@ export function DashboardContent() {
 
   const isLoading = overviewLoading || shimmer
 
+  // Backwards-compatible labels (some deploys may have older translation typings)
+  const exportAllLabel = (t as Record<string, string>).exportAll ?? "Export All Solutions"
+  const exportingLabel = (t as Record<string, string>).exporting ?? "Exporting…"
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen w-full">
@@ -348,9 +352,9 @@ export function DashboardContent() {
             disabled={exportLoading}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-transparent text-white transition-all"
             style={{ background: brand.primaryColor, opacity: exportLoading ? 0.7 : 1, cursor: exportLoading ? "not-allowed" : "pointer" }}
-            title={t.exportAll}
+            title={exportAllLabel}
           >
-            {exportLoading ? t.exporting : `📊 ${t.exportAll}`}
+            {exportLoading ? exportingLabel : `📊 ${exportAllLabel}`}
           </button>
           <ExportButton
             data={kpiExportRows}

@@ -206,6 +206,10 @@ export const translations = {
     apply:            'Apply',
     cancel:           'Cancel',
     custom:           'Custom',
+    exportAll:        'Export All Solutions',
+    exportCurrent:    'Export Current',
+    exporting:        'Exporting…',
+    liveLabel:        'Live',
     askAi:            'Ask AI',
     noDataAvailable:  'No data available',
 
@@ -420,6 +424,10 @@ export const translations = {
     apply:            'Aplicar',
     cancel:           'Cancelar',
     custom:           'Personalizado',
+    exportAll:        'Exportar Todas las Soluciones',
+    exportCurrent:    'Exportar Actual',
+    exporting:        'Exportando…',
+    liveLabel:        'En vivo',
     askAi:            'Preguntar a la IA',
     noDataAvailable:  'Sin datos disponibles',
 
