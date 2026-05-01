@@ -57,12 +57,18 @@ function getPool(): Pool {
     )
   }
 
+  // Strip ?sslmode=... from the URL so the pg ssl option object takes full control.
+  // When both are present, newer pg versions let the URL sslmode win and ignore
+  // rejectUnauthorized: false — causing "self-signed certificate" on Render/Neon.
+  const sslDisabled = /sslmode=disable/i.test(connectionString)
+  const cleanUrl = connectionString.replace(/[?&]sslmode=[^&]*/gi, '')
+    .replace(/[?&]$/, '')
+
   const pool = new Pool({
-    connectionString,
-    // SSL required for most managed PostgreSQL providers (Neon, Supabase, Railway)
-    ssl: connectionString.includes('sslmode=disable')
-      ? false
-      : { rejectUnauthorized: false },
+    connectionString: cleanUrl,
+    // SSL required for all managed providers (Render, Neon, Supabase, Railway).
+    // rejectUnauthorized: false accepts self-signed certs used by Render Postgres.
+    ssl: sslDisabled ? false : { rejectUnauthorized: false },
     max: 10,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
