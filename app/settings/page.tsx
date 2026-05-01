@@ -70,10 +70,10 @@ export default function SettingsPage() {
           <div className="rounded-xl border border-border bg-card p-6">
             <h2 className="text-lg font-bold mb-4">Logo</h2>
             <div className="flex items-center gap-6 flex-wrap">
-              <div className="flex-shrink-0 w-24 h-24 rounded-lg border border-border bg-muted flex items-center justify-center">
+              <div className="flex-shrink-0 w-40 h-16 rounded-xl border border-border bg-muted/40 p-3 flex items-center justify-center overflow-hidden">
                 {brand.logo ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={brand.logo} alt="Logo" className="w-full h-full object-cover rounded" />
+                  <img src={brand.logo} alt="Logo" className="max-h-10 max-w-[120px] object-contain" />
                 ) : (
                   <span className="text-xs text-muted-foreground text-center px-2">No logo</span>
                 )}

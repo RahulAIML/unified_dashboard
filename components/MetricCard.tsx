@@ -24,21 +24,23 @@ export function MetricCard({ label, value, unit, icon, hint, className }: Props)
         className
       )}
     >
-      <div className="h-[3px] w-full bg-primary" />
-      <div className="absolute inset-0 pointer-events-none bg-primary/5" />
+      <div
+        className="h-[3px] w-full"
+        style={{ background: "linear-gradient(90deg, hsl(var(--primary)), hsl(var(--accent)))" }}
+      />
 
-      <div className="relative p-4 md:p-5">
+      <div className="relative p-5">
         <div className="flex items-start justify-between mb-3">
-          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+          <span className="text-xs font-medium text-muted-foreground uppercase tracking-[0.08em]">
             {label}
           </span>
           {icon && <span className="text-muted-foreground/60">{icon}</span>}
         </div>
 
         <div className="flex items-end justify-between gap-3">
-          <span className="text-2xl md:text-3xl font-bold tracking-tight text-primary">
+          <span className="kpi-value text-[28px] md:text-[32px] leading-none font-bold tracking-tight text-foreground">
             {typeof value === "number" ? value.toLocaleString() : value}
-            {unit && <span className="text-base md:text-lg ml-1 text-primary/60">{unit}</span>}
+            {unit && <span className="text-sm md:text-base ml-1 text-muted-foreground font-medium">{unit}</span>}
           </span>
         </div>
 
@@ -47,4 +49,3 @@ export function MetricCard({ label, value, unit, icon, hint, className }: Props)
     </motion.div>
   )
 }
-

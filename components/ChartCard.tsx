@@ -11,19 +11,28 @@ interface Props {
 
 export function ChartCard({ title, subtitle, children, className }: Props) {
   return (
-    <div className={cn("rounded-xl border border-border bg-card shadow-sm overflow-hidden", className)}>
-      {/* Brand left accent bar */}
-      <div className="flex">
-        <div className="w-[3px] shrink-0 bg-primary" />
-        <div className="flex-1 p-5">
-          <div className="mb-4">
-            <h3 className="text-sm font-bold text-primary">{title}</h3>
-            {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
-          </div>
-          <div className="w-full max-w-full overflow-x-auto">
-            <div className="min-w-[300px] md:min-w-full">
-              {children}
-            </div>
+    <div className={cn("rounded-xl border border-border bg-card shadow-sm hover:shadow-md transition-shadow overflow-hidden", className)}>
+      {/* Gradient top stripe — consistent with SummaryCard */}
+      <div
+        className="h-[3px] w-full"
+        style={{ background: "linear-gradient(90deg, hsl(var(--primary)), hsl(var(--accent)))" }}
+      />
+
+      {/* Header */}
+      <div className="px-5 pt-5 pb-0">
+        <h3 className="text-[16px] font-semibold text-foreground leading-snug tracking-[-0.01em]">
+          {title}
+        </h3>
+        {subtitle && (
+          <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{subtitle}</p>
+        )}
+      </div>
+
+      {/* Chart area */}
+      <div className="px-5 pt-4 pb-5">
+        <div className="w-full max-w-full overflow-x-auto">
+          <div className="min-w-[300px] md:min-w-full">
+            {children}
           </div>
         </div>
       </div>

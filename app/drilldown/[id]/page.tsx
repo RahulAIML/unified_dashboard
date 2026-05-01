@@ -3,7 +3,6 @@
 import { useState, useMemo, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { ArrowLeft, BarChart2, BadgeCheck, XCircle, Hash, CalendarDays, Layers, Globe } from "lucide-react"
-import { useClientBrand }                      from "@/lib/hooks/useClientBrand"
 import { useApi }                              from "@/lib/hooks/useApi"
 import { useTranslation }                      from "@/lib/hooks/useTranslation"
 import { normalizeResult, normalizeScore }       from "@/lib/kpi-builder"
@@ -101,7 +100,6 @@ const PAGE_SIZE = 20
 export default function DrilldownPage() {
   const params = useParams()
   const router = useRouter()
-  const brand  = useClientBrand()
   const refreshKey = useDashboardStore((s) => s.refreshKey)
   const id     = params?.id as string | undefined
 
@@ -240,7 +238,7 @@ export default function DrilldownPage() {
       <div className="border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-10">
         <div
           className="h-[3px] w-full"
-          style={{ background: `linear-gradient(90deg, ${brand.primaryColor}, ${brand.accentColor})` }}
+          style={{ background: "linear-gradient(90deg, hsl(var(--primary)), hsl(var(--accent)))" }}
         />
         <div className="px-6 py-3 flex items-center gap-4">
           <button
@@ -251,7 +249,7 @@ export default function DrilldownPage() {
             Back
           </button>
           <div className="h-4 w-px bg-border" />
-          <h1 className="text-sm font-semibold text-primary">
+          <h1 className="text-sm font-semibold text-foreground">
             Session Detail — Report #{id}
           </h1>
           <div className="ml-auto flex items-center gap-3">

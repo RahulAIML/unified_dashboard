@@ -20,24 +20,24 @@ function LogoImage() {
 
   if (failed) {
     return (
-      <div
-        className="w-10 h-10 rounded-lg flex items-center justify-center text-sidebar-primary-foreground font-extrabold text-lg shrink-0 bg-sidebar-primary"
-      >
-        {brand.name.charAt(0)}
+      <div className="shrink-0 w-32 h-12 rounded-xl border border-sidebar-border bg-sidebar-accent flex items-center justify-center px-2">
+        <div className="w-10 h-10 rounded-lg flex items-center justify-center text-sidebar-primary-foreground font-extrabold text-lg bg-sidebar-primary">
+          {brand.name.charAt(0)}
+        </div>
       </div>
     )
   }
 
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={brand.logo}
-      alt={brand.logoAlt}
-      width={40}
-      height={40}
-      className="rounded-lg object-contain shrink-0"
-      onError={() => setFailed(true)}
-    />
+    <div className="shrink-0 w-32 h-12 rounded-xl border border-sidebar-border bg-sidebar-accent flex items-center justify-center px-2 overflow-hidden">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={brand.logo}
+        alt={brand.logoAlt}
+        className="max-h-10 max-w-[120px] object-contain"
+        onError={() => setFailed(true)}
+      />
+    </div>
   )
 }
 
@@ -86,7 +86,7 @@ export function Sidebar() {
         {/* Brand top gradient stripe — matches drilldown/header stripe */}
         <div
           className="absolute top-0 left-0 right-0 h-[3px]"
-          style={{ background: `linear-gradient(90deg, hsl(var(--primary)), var(--brand-accent, hsl(var(--primary))))` }}
+          style={{ background: `linear-gradient(90deg, hsl(var(--primary)), hsl(var(--accent)))` }}
         />
 
         <LogoImage />

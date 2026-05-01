@@ -119,12 +119,12 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
 
   return (
     <div className="relative isolate z-[70] border-b border-border bg-background/80 backdrop-blur-sm overflow-visible">
-      <div className="h-[3px] w-full" style={{ background: "linear-gradient(90deg, hsl(var(--primary)), var(--brand-accent))" }} />
+      <div className="h-[3px] w-full" style={{ background: "linear-gradient(90deg, hsl(var(--primary)), hsl(var(--accent)))" }} />
 
       <div className="px-4 sm:px-6 py-3 sm:py-4">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 sm:gap-4 mb-3 sm:mb-4">
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-primary">{title}</h1>
+            <h1 className="text-xl font-semibold tracking-tight text-foreground">{title}</h1>
             {subtitle && <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>}
           </div>
 
@@ -197,10 +197,10 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
               <span
                 className={cn(
                   "w-1.5 h-1.5 rounded-full shrink-0",
-                  !selectedSolution && "bg-[var(--brand-accent)]",
+                  !selectedSolution && "bg-[hsl(var(--accent))]",
                   selectedSolution && "bg-muted-foreground/40"
                 )}
-                style={!selectedSolution ? { background: "var(--brand-accent)" } : {}}
+                style={!selectedSolution ? { background: "hsl(var(--accent))" } : {}}
               />
               {t.filterAll}
             </motion.button>
@@ -220,10 +220,10 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
                   <span
                     className={cn(
                       "w-1.5 h-1.5 rounded-full shrink-0",
-                      active && "bg-[var(--brand-accent)]",
+                      active && "bg-[hsl(var(--accent))]",
                       !active && "bg-muted-foreground/40"
                     )}
-                    style={active ? { background: "var(--brand-accent)" } : {}}
+                    style={active ? { background: "hsl(var(--accent))" } : {}}
                   />
                   {label}
                 </motion.button>
