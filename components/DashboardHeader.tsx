@@ -118,17 +118,17 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
   }
 
   return (
-    <div className="border-b border-border bg-background/80 backdrop-blur-sm fixed top-0 left-0 right-0 z-40 h-16 md:static md:h-auto md:z-20 overflow-visible">
+    <div className="border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-40 overflow-visible">
       <div className="h-[3px] w-full" style={{ background: "linear-gradient(90deg, hsl(var(--primary)), var(--brand-accent))" }} />
 
-      <div className="px-6 py-4">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4">
+      <div className="px-4 sm:px-6 py-3 sm:py-4">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 sm:gap-4 mb-3 sm:mb-4">
           <div>
             <h1 className="text-xl font-bold tracking-tight text-primary">{title}</h1>
             {subtitle && <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>}
           </div>
 
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full md:w-auto">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full lg:w-auto">
             <button
               onClick={toggleLang}
               className="px-2.5 py-1 rounded-lg text-xs font-semibold border border-border bg-muted hover:bg-muted/70 transition-colors tabular-nums"
@@ -152,7 +152,7 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
               {t.refresh}
             </button>
 
-            <div className="flex flex-wrap items-center gap-1 bg-muted rounded-lg p-1 w-full sm:w-auto">
+            <div className="flex flex-wrap items-center gap-1 bg-muted rounded-lg p-1 w-full max-w-full sm:w-auto overflow-visible">
               <Calendar className="w-3.5 h-3.5 text-muted-foreground ml-1 hidden sm:block" />
 
               {DATE_PRESETS.map(({ label, days }) => (
@@ -160,7 +160,7 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
                   key={days}
                   onClick={() => applyPreset(days)}
                   className={cn(
-                    "px-2 sm:px-3 py-1 rounded-md text-xs font-semibold transition-all",
+                    "px-2 sm:px-3 py-1 rounded-md text-xs font-semibold transition-all whitespace-nowrap",
                     activeDays === days ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
                   )}
                 >

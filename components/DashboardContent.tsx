@@ -305,8 +305,7 @@ export function DashboardContent() {
         showModuleFilter
       />
 
-      {/* Header is fixed on small screens; add top padding so content never sits underneath it */}
-      <div className="px-6 pb-6 pt-24 md:pt-6 space-y-6 w-full max-w-full overflow-visible">
+      <div className="px-4 sm:px-6 pb-6 pt-6 space-y-6 w-full max-w-full overflow-visible">
 
         {/* Active solution badge */}
         <AnimatePresence>
