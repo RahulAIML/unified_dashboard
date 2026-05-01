@@ -27,7 +27,7 @@ export function SummaryCard({ kpi, index = 0, icon }: Props) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.06, duration: 0.35, ease: "easeOut" }}
       whileHover={{ y: -2, transition: { duration: 0.15 } }}
-      className="relative overflow-hidden rounded-xl border border-border bg-card shadow-sm hover:shadow-md transition-shadow"
+      className="relative w-full min-h-[120px] overflow-hidden rounded-xl border border-border bg-card shadow-sm hover:shadow-md transition-shadow"
     >
       {/* Brand top stripe */}
       <div className="h-[3px] w-full bg-primary" />
@@ -35,7 +35,7 @@ export function SummaryCard({ kpi, index = 0, icon }: Props) {
       {/* Subtle brand tint on background */}
       <div className="absolute inset-0 pointer-events-none bg-primary/5" />
 
-      <div className="relative p-5">
+      <div className="relative p-4 md:p-5">
         <div className="flex items-start justify-between mb-3">
           <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
             {displayLabel}
@@ -54,14 +54,14 @@ export function SummaryCard({ kpi, index = 0, icon }: Props) {
           </div>
         </div>
 
-        <div className="flex items-end justify-between">
-          <span className="text-3xl font-bold tracking-tight text-primary">
+        <div className="flex items-end justify-between gap-3">
+          <span className="text-2xl md:text-3xl font-bold tracking-tight text-primary">
             {typeof value === "number" ? value.toLocaleString() : value}
-            {unit && <span className="text-lg ml-1 text-primary/60">{unit}</span>}
+            {unit && <span className="text-base md:text-lg ml-1 text-primary/60">{unit}</span>}
           </span>
 
           {delta !== 0 && (
-            <div className={cn("flex items-center gap-1 text-sm font-medium", deltaColor(delta))}>
+            <div className={cn("flex items-center gap-1 text-sm font-medium shrink-0", deltaColor(delta))}>
               {isPositive  && <TrendingUp   className="w-3.5 h-3.5" />}
               {isNegative  && <TrendingDown  className="w-3.5 h-3.5" />}
               {!isPositive && !isNegative && <Minus className="w-3.5 h-3.5" />}

@@ -20,7 +20,11 @@ export function ChartCard({ title, subtitle, children, className }: Props) {
             <h3 className="text-sm font-bold text-primary">{title}</h3>
             {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
           </div>
-          {children}
+          <div className="w-full max-w-full overflow-x-auto">
+            <div className="min-w-[300px] md:min-w-full">
+              {children}
+            </div>
+          </div>
         </div>
       </div>
     </div>

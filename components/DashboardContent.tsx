@@ -305,7 +305,7 @@ export function DashboardContent() {
         showModuleFilter
       />
 
-      <div className="px-4 sm:px-6 pb-6 pt-6 space-y-6 w-full max-w-full overflow-visible">
+      <div className="px-0 pb-6 pt-6 space-y-6 w-full max-w-full overflow-visible">
 
         {/* Active solution badge */}
         <AnimatePresence>
@@ -374,7 +374,7 @@ export function DashboardContent() {
             ]}
           />
         </div>
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {isLoading
             ? Array.from({ length: 4 }).map((_, i) => <KpiSkeleton key={i} />)
             : kpiCards.length > 0
