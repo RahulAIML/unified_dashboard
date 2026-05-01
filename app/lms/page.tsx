@@ -30,10 +30,11 @@ const icons = [
 ]
 
 function EmptyState() {
+  const t = useT()
   return (
     <div className="h-48 flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
       <BarChart2 className="w-8 h-8 opacity-30" />
-      <span>No data available</span>
+      <span>{t.noDataAvailable}</span>
     </div>
   )
 }
@@ -118,9 +119,9 @@ export default function LmsPage() {
   ], [t])
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen w-full">
       <DashboardHeader title={t.lmsTitle} subtitle={t.lmsSub} />
-      <div className="p-6 space-y-6">
+      <div className="w-full max-w-[1400px] mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
 
         {/* Error banners */}
         {overviewError && <ErrorBanner message={`${t.errorLoading}: ${overviewError}`} />}
@@ -142,7 +143,7 @@ export default function LmsPage() {
               : Array.from({ length: 4 }).map((_, i) => (
                   <div key={i} className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
                     <div className="h-[3px] bg-primary" />
-                    <div className="p-5 text-center text-sm text-muted-foreground py-8">No data available</div>
+                    <div className="p-5 text-center text-sm text-muted-foreground py-8">{t.noDataAvailable}</div>
                   </div>
                 ))
           }
@@ -186,7 +187,7 @@ export default function LmsPage() {
             ? <div className="py-10 text-center text-sm text-muted-foreground">{t.loading}</div>
             : ucBreakdown?.data?.length
               ? <DataTable data={ucBreakdown.data} columns={ucColumns} pageSize={8} />
-              : <div className="py-10 text-center text-sm text-muted-foreground">No data available</div>
+              : <div className="py-10 text-center text-sm text-muted-foreground">{t.noDataAvailable}</div>
           }
         </div>
       </div>

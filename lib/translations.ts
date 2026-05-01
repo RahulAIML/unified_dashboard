@@ -227,6 +227,29 @@ export const translations = {
     bestPerformersSub: 'Top users by average score',
     colName:           'Name',
     colEmail:          'Email',
+
+    // ── Date picker field labels & errors ────────────────────
+    dateFrom:          'From',
+    dateTo:            'To',
+    dateInvalid:       'Please select valid dates.',
+    dateOrderError:    'Start date must be before end date.',
+
+    // ── Module-specific KPI labels ────────────────────────────
+    passedSessions:      'Passed Sessions',
+    successfulSessions:  'Successful Sessions',
+
+    // ── Second Brain UI strings ───────────────────────────────
+    sbMembers:           'Members',
+    sbMembersCount:      'enrolled members',
+    sbCoachingScenarios: 'Coaching Scenarios',
+    sbScenariosCount:    'scenarios',
+    sbNoMembers:         'No members found',
+    sbNoScenarios:       'No scenarios found',
+    sbApiLive:           'Live · Second Brain API',
+    sbApiDbFallback:     'Evaluation DB fallback',
+    sbApiUnavailable:    'Second Brain live data unavailable',
+    statusActive:        'Active',
+    statusInactive:      'Inactive',
   },
 
   es: {
@@ -449,6 +472,29 @@ export const translations = {
     bestPerformersSub: 'Usuarios con mayor puntuación promedio',
     colName:           'Nombre',
     colEmail:          'Correo',
+
+    // ── Date picker field labels & errors ────────────────────
+    dateFrom:          'Desde',
+    dateTo:            'Hasta',
+    dateInvalid:       'Selecciona fechas válidas.',
+    dateOrderError:    'La fecha de inicio debe ser anterior a la fecha de fin.',
+
+    // ── Module-specific KPI labels ────────────────────────────
+    passedSessions:      'Sesiones Aprobadas',
+    successfulSessions:  'Sesiones Exitosas',
+
+    // ── Second Brain UI strings ───────────────────────────────
+    sbMembers:           'Miembros',
+    sbMembersCount:      'miembros registrados',
+    sbCoachingScenarios: 'Escenarios de Coaching',
+    sbScenariosCount:    'escenarios',
+    sbNoMembers:         'No se encontraron miembros',
+    sbNoScenarios:       'No se encontraron escenarios',
+    sbApiLive:           'En vivo · Second Brain API',
+    sbApiDbFallback:     'Base de datos de evaluación',
+    sbApiUnavailable:    'Datos en vivo de Second Brain no disponibles',
+    statusActive:        'Activo',
+    statusInactive:      'Inactivo',
   },
 } as const
 

@@ -105,10 +105,12 @@ export async function bridgeOverviewKpis(params: {
     total_results:  number | string
   }>(
     `SELECT
-       COUNT(DISTINCT rfc.saved_report_id)                       AS total_sessions,
-       ROUND(AVG(rfc.value_num), 2)                              AS avg_score,
-       SUM(CASE WHEN sr.passed_flag = 1 THEN 1 ELSE 0 END)       AS passed,
-       COUNT(DISTINCT rfc.saved_report_id)                       AS total_results
+       COUNT(DISTINCT rfc.saved_report_id)                                          AS total_sessions,
+       ROUND(AVG(CASE WHEN rfc.value_num <= 10
+                      THEN rfc.value_num * 10
+                      ELSE rfc.value_num END), 2)                                   AS avg_score,
+       SUM(CASE WHEN sr.passed_flag = 1 THEN 1 ELSE 0 END)                         AS passed,
+       COUNT(DISTINCT rfc.saved_report_id)                                          AS total_results
      FROM rolplay_pro_analytics.report_field_current rfc
      JOIN coach_app.saved_reports sr ON sr.id = rfc.saved_report_id
      WHERE rfc.customer_id = ?
@@ -146,7 +148,9 @@ export async function bridgeTrends(params: {
   const [scoreTrend, passFail, evalCount] = await Promise.all([
     bridgePost<{ date: string; avg_score: number }>(
       `SELECT DATE(rfc.report_created_at) AS date,
-              ROUND(AVG(rfc.value_num), 1) AS avg_score
+              ROUND(AVG(CASE WHEN rfc.value_num <= 10
+                             THEN rfc.value_num * 10
+                             ELSE rfc.value_num END), 1) AS avg_score
        ${whereClause}
        GROUP BY DATE(rfc.report_created_at) ORDER BY date ASC LIMIT 90`,
       [...base]
@@ -226,9 +230,11 @@ export async function bridgeUsecaseBreakdown(params: {
   return bridgePost(
     `SELECT rfc.usecase_id,
             uc.usecase_name,
-            COUNT(DISTINCT rfc.saved_report_id)                   AS total_evaluations,
-            ROUND(AVG(rfc.value_num), 2)                          AS avg_score,
-            SUM(CASE WHEN sr.passed_flag = 1 THEN 1 ELSE 0 END)   AS passed,
+            COUNT(DISTINCT rfc.saved_report_id)                              AS total_evaluations,
+            ROUND(AVG(CASE WHEN rfc.value_num <= 10
+                           THEN rfc.value_num * 10
+                           ELSE rfc.value_num END), 2)                       AS avg_score,
+            SUM(CASE WHEN sr.passed_flag = 1 THEN 1 ELSE 0 END)             AS passed,
             COUNT(DISTINCT rfc.saved_report_id)                   AS total_results
      FROM rolplay_pro_analytics.report_field_current rfc
      JOIN coach_app.saved_reports sr ON sr.id = rfc.saved_report_id
@@ -276,8 +282,10 @@ export async function bridgeBestPerformers(params: {
     `SELECT
        cu.user_email,
        cu.user_name,
-       COUNT(DISTINCT rfc.saved_report_id)                        AS sessions,
-       ROUND(AVG(rfc.value_num), 1)                               AS avg_score,
+       COUNT(DISTINCT rfc.saved_report_id)                              AS sessions,
+       ROUND(AVG(CASE WHEN rfc.value_num <= 10
+                      THEN rfc.value_num * 10
+                      ELSE rfc.value_num END), 1)                          AS avg_score,
        ROUND(SUM(CASE WHEN sr.passed_flag = 1 THEN 1 ELSE 0 END)
              / COUNT(DISTINCT rfc.saved_report_id) * 100, 1)      AS pass_rate
      FROM rolplay_pro_analytics.report_field_current rfc

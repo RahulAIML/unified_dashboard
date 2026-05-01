@@ -118,10 +118,11 @@ const dbIcons = [
 ]
 
 function EmptyState({ label }: { label?: string }) {
+  const t = useT()
   return (
     <div className="h-48 flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
       <BarChart2 className="w-8 h-8 opacity-30" />
-      <span>{label ?? "No data available"}</span>
+      <span>{label ?? t.noDataAvailable}</span>
     </div>
   )
 }
@@ -239,7 +240,7 @@ export default function SecondBrainPage() {
 
   // ── Members table columns ─────────────────────────────────────────────────
   const memberColumns: Column<SBMember>[] = useMemo(() => [
-    { key: "full_name",       header: "Name",      render: r => <span className="font-medium">{r.full_name}</span> },
+    { key: "full_name",       header: t.colName,    render: r => <span className="font-medium">{r.full_name}</span> },
     { key: "job_title",       header: "Job Title",  render: r => <span className="text-muted-foreground">{r.job_title ?? "—"}</span> },
     { key: "role_name",       header: "Role",       render: r => (
         <span className={cn(
@@ -253,27 +254,27 @@ export default function SecondBrainPage() {
         <span className={cn(
           "inline-flex px-2 py-0.5 rounded-full text-xs font-medium",
           r.is_active ? "bg-primary/10 text-primary" : "bg-destructive/10 text-destructive"
-        )}>{r.is_active ? "Active" : "Inactive"}</span>
+        )}>{r.is_active ? t.statusActive : t.statusInactive}</span>
       ),
     },
-  ], [])
+  ], [t])
 
   // ── Scenario table columns ────────────────────────────────────────────────
   const scenarioColumns: Column<SBScenario>[] = useMemo(() => [
-    { key: "name",          header: "Scenario",  render: r => <span className="font-medium">{r.name}</span> },
-    { key: "session_count", header: "Sessions",  render: r => <span className="tabular-nums">{r.session_count}</span> },
-    { key: "is_active",     header: "Status",    render: r => (
+    { key: "name",          header: "Scenario",     render: r => <span className="font-medium">{r.name}</span> },
+    { key: "session_count", header: t.colSessions,  render: r => <span className="tabular-nums">{r.session_count}</span> },
+    { key: "is_active",     header: "Status",       render: r => (
         <span className={cn(
           "inline-flex px-2 py-0.5 rounded-full text-xs font-medium",
           r.is_active ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
-        )}>{r.is_active ? "Active" : "Inactive"}</span>
+        )}>{r.is_active ? t.statusActive : t.statusInactive}</span>
       ),
     },
-    { key: "reference_files", header: "KB Files", render: r => (
+    { key: "reference_files", header: "KB Files",   render: r => (
         <span className="tabular-nums">{r.reference_files?.length ?? 0}</span>
       ),
     },
-  ], [])
+  ], [t])
 
   // ── Use-case breakdown columns (DB) ──────────────────────────────────────
   const ucColumns: Column<UsecaseApiRow>[] = useMemo(() => [
@@ -300,15 +301,15 @@ export default function SecondBrainPage() {
   const scenarios = sbProfile?.coaching_scenarios ?? []
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen w-full">
       <DashboardHeader title={t.sbTitle} subtitle={t.sbSub} />
-      <div className="p-6 space-y-6">
+      <div className="w-full max-w-[1400px] mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
 
         {/* Error banners */}
         {sbError && (
           <div className="flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
             <AlertTriangle className="w-4 h-4 shrink-0" />
-            <span>Second Brain live data unavailable — showing evaluation DB data. ({sbError})</span>
+            <span>{t.sbApiUnavailable} — {t.sbApiDbFallback}. ({sbError})</span>
           </div>
         )}
         {overviewError && !isLive && <ErrorBanner message={`${t.errorLoading}: ${overviewError}`} />}
@@ -322,7 +323,7 @@ export default function SecondBrainPage() {
                 ? "bg-primary/10 text-primary"
                 : "bg-muted text-muted-foreground"
             )}>
-              {isLive ? "🔗 Live · Second Brain API" : "📊 Evaluation DB fallback"}
+              {isLive ? `🔗 ${t.sbApiLive}` : `📊 ${t.sbApiDbFallback}`}
             </span>
           </div>
         )}
@@ -344,7 +345,7 @@ export default function SecondBrainPage() {
               : Array.from({ length: 4 }).map((_, i) => (
                   <div key={i} className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
                     <div className="h-[3px] bg-primary" />
-                    <div className="p-5 text-center text-sm text-muted-foreground py-8">No data available</div>
+                    <div className="p-5 text-center text-sm text-muted-foreground py-8">{t.noDataAvailable}</div>
                   </div>
                 ))
           }
@@ -357,12 +358,12 @@ export default function SecondBrainPage() {
               <div>
                 <h3 className="text-sm font-semibold flex items-center gap-2">
                   <Users className="w-4 h-4 text-primary" />
-                  Members
+                  {t.sbMembers}
                 </h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {sbLoading ? t.loading : `${members.length} enrolled members`}
+                  {sbLoading ? t.loading : `${members.length} ${t.sbMembersCount}`}
                   <span className="ml-2 text-[10px] font-medium bg-primary/10 text-primary px-1.5 py-0.5 rounded">
-                    Second Brain API
+                    {t.sbApiLive}
                   </span>
                 </p>
               </div>
@@ -383,7 +384,7 @@ export default function SecondBrainPage() {
               ? <div className="py-10 text-center text-sm text-muted-foreground">{t.loading}</div>
               : members.length > 0
                 ? <DataTable data={members} columns={memberColumns} pageSize={10} />
-                : <div className="py-10 text-center text-sm text-muted-foreground">No members found</div>
+                : <div className="py-10 text-center text-sm text-muted-foreground">{t.sbNoMembers}</div>
             }
           </div>
         )}
@@ -395,12 +396,12 @@ export default function SecondBrainPage() {
               <div>
                 <h3 className="text-sm font-semibold flex items-center gap-2">
                   <Play className="w-4 h-4 text-primary" />
-                  Coaching Scenarios
+                  {t.sbCoachingScenarios}
                 </h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {sbLoading ? t.loading : `${scenarios.length} scenarios`}
+                  {sbLoading ? t.loading : `${scenarios.length} ${t.sbScenariosCount}`}
                   <span className="ml-2 text-[10px] font-medium bg-primary/10 text-primary px-1.5 py-0.5 rounded">
-                    Second Brain API
+                    {t.sbApiLive}
                   </span>
                 </p>
               </div>
@@ -420,7 +421,7 @@ export default function SecondBrainPage() {
               ? <div className="py-10 text-center text-sm text-muted-foreground">{t.loading}</div>
               : scenarios.length > 0
                 ? <DataTable data={scenarios} columns={scenarioColumns} pageSize={10} />
-                : <div className="py-10 text-center text-sm text-muted-foreground">No scenarios found</div>
+                : <div className="py-10 text-center text-sm text-muted-foreground">{t.sbNoScenarios}</div>
             }
           </div>
         )}
@@ -465,7 +466,7 @@ export default function SecondBrainPage() {
             ? <div className="py-10 text-center text-sm text-muted-foreground">{t.loading}</div>
             : ucBreakdown?.data?.length
               ? <DataTable data={ucBreakdown.data} columns={ucColumns} pageSize={10} />
-              : <div className="py-10 text-center text-sm text-muted-foreground">No data available</div>
+              : <div className="py-10 text-center text-sm text-muted-foreground">{t.noDataAvailable}</div>
           }
         </div>
 
