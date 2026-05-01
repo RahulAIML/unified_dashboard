@@ -6,10 +6,10 @@ import { BarChart3, Brain, TrendingUp, FileDown, Palette, Zap } from 'lucide-rea
 
 export function LandingPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-white to-slate-50">
+    <div className="w-screen min-h-screen bg-gradient-to-b from-white to-slate-50 overflow-x-hidden">
       {/* Header */}
-      <header className="border-b border-slate-200">
-        <div className="w-full px-4 py-4 sm:px-6 lg:px-8 flex items-center justify-between">
+      <header className="w-full border-b border-slate-200 sticky top-0 z-50">
+        <div className="w-full px-4 py-4 sm:px-6 lg:px-8 flex items-center justify-between max-w-full">
           <div className="flex items-center gap-2">
             <div
               className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white"

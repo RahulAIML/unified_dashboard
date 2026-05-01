@@ -1,26 +1,22 @@
 "use client"
 
-import { MessageSquare, Users, Play, BookOpen, BarChart2, AlertTriangle, Database, FileType, Layers } from "lucide-react"
+import { MessageSquare, Users, Play, AlertTriangle, FileText, Search, TrendingUp, Database, BarChart2, Layers, FileType, BookOpen } from "lucide-react"
 import { DashboardHeader } from "@/components/DashboardHeader"
+import { SummaryCard } from "@/components/SummaryCard"
 import { ChartCard } from "@/components/ChartCard"
+import { ActivityLineChart } from "@/components/charts/ActivityLineChart"
 import { useDashboardStore } from "@/lib/store"
 import { useT } from "@/lib/lang-store"
 import { useApi, buildApiUrl } from "@/lib/hooks/useApi"
-import { useClientBrand } from "@/lib/hooks/useClientBrand"
-import type {
-  OverviewApiResponse,
-  TrendsApiResponse,
-  UsecaseBreakdownApiResponse,
-  UsecaseApiRow,
-} from "@/lib/types"
-import { SummaryCard } from "@/components/SummaryCard"
-import { ActivityLineChart } from "@/components/charts/ActivityLineChart"
 import { DataTable, type Column } from "@/components/DataTable"
 import { ExportButton } from "@/components/ExportButton"
 import { cn } from "@/lib/utils"
 import { useMemo } from "react"
-import { calcDeltaPct, estimatePassedSessions } from "@/lib/kpi-builder"
 import { csvFilename } from "@/lib/csv-export"
+import { MetricCard } from "@/components/MetricCard"
+import { useClientBrand } from "@/lib/hooks/useClientBrand"
+import { calcDeltaPct, estimatePassedSessions } from "@/lib/kpi-builder"
+import type { OverviewApiResponse, TrendsApiResponse, UsecaseBreakdownApiResponse, UsecaseApiRow } from "@/lib/types"
 
 // ── Real API types (from second-brain-shz8.onrender.com) ─────────────────────
 
@@ -331,8 +327,8 @@ export default function SecondBrainPage() {
           </div>
         )}
 
-        {/* KPI cards */}
-        <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+        {/* KPI cards - Live Second Brain API data */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 relative z-10">
           {(overviewLoading || sbLoading)
             ? Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
