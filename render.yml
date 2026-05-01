@@ -24,7 +24,7 @@ services:
         sync: false
       # ── PHP Bridge (Mode B — no port 3306 required) ──────────────────────
       - key: BRIDGE_URL
-        value: https://improveyourpitchbeta.net/rolplay-ai/rolplay-bridge.php
+        value: https://rolplayadmin.com/coach-app/src/rolplay-bridge.php
       - key: SECOND_BRAIN_API_TOKEN
         sync: false
       - key: BRIDGE_SECRET

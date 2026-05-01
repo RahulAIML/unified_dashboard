@@ -3,25 +3,43 @@
  *
  * Maps dashboard solution filter names → real usecase_ids from the DB.
  *
- * Usecase IDs discovered from the production bridge (action=modules):
- *   323, 351, 363, 369, 381, 385, 389, 390, 391, 392, 394, 396, 397
+ * Usecase IDs verified from coach_app.usecases (production, 2026-05-01):
  *
- * UC 401: discovered during DB audit (2026-04-16). Contains coaching-methodology
- * fields (evaluacion_metodologia_*, apertura_colaborador_*). 15 sessions — the
- * largest single dataset. Mapped to "coach" solution.
+ *   ID  | Name                                | Solution
+ *   ----|-------------------------------------|----------
+ *    7  | HyQvia Coaching Representante Medico| coach
+ *    9  | Coach HyQvia                        | coach
+ *   10  | Coach Takeda Livtencity             | coach
+ *   12  | Coach Takeda SNC (prueba)           | coach
+ *   14  | Coach Livtencity Actualizado        | coach
+ *   17  | Takeda Coach Exkruthera             | coach
+ *   18  | Takeda Coach                        | coach
+ *   19  | Takeda Coach Adcetris               | coach
+ *   23  | Coach Chinoin Antifludes            | coach
+ *   24  | Coach Reforzamiento HyQvia          | coach
+ *   31  | Coach Entyvio                       | coach
+ *   33  | (HyQvia Coach session — pending UC) | coach
+ *   20  | Profuturo Afore                     | lms
+ *   22  | Profuturo Afore Evaluador           | certification
+ *   21  | Profuturo Afore Simulador           | simulator
+ *   30  | Prueba Simulador Alejandro          | simulator
+ *   26  | Coach Second Brain Exkruthera       | second-brain
+ *   27  | Coach Second Brain HyQvia           | second-brain
+ *   28  | Coach Second Brain Adcetris         | second-brain
+ *   29  | Coach Second Brain Livtencity       | second-brain
+ *   42  | (pending usecase)                   | coach
  *
- * Grouped into the five dashboard solutions by ID range / product area.
  * Update this map as new usecases are added to the platform.
  */
 
 export type SolutionKey = "lms" | "coach" | "simulator" | "certification" | "second-brain"
 
 export const SOLUTION_USECASE_MAP: Record<SolutionKey, number[]> = {
-  lms:           [323, 351, 363],
-  coach:         [369, 381, 385, 401],
-  simulator:     [389, 390, 391],
-  certification: [392, 394],
-  "second-brain":[396, 397],
+  lms:           [20],
+  coach:         [7, 9, 10, 12, 14, 17, 18, 19, 23, 24, 31, 33, 42],
+  simulator:     [21, 30],
+  certification: [22],
+  "second-brain":[26, 27, 28, 29],
 }
 
 /**

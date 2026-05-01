@@ -1,4 +1,11 @@
 {
-  "command": "npm run dev",
-  "autoPort": true
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "rolplay-dashboard",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3000
+    }
+  ]
 }

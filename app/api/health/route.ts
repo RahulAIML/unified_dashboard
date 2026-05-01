@@ -8,6 +8,14 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null
 }
 
+function buildBridgeHeaders(secret: string | null): Record<string, string> {
+  if (!secret) return {}
+  return {
+    "X-Bridge-Key": secret,
+    "x-bridge-secret": secret,
+  }
+}
+
 async function fetchJsonWithTimeout(
   url: string,
   init: RequestInit,
@@ -54,24 +62,44 @@ export async function GET() {
       )
     }
 
-    const headers: Record<string, string> = {}
-    if (bridgeSecret) headers["X-Bridge-Key"] = bridgeSecret
+    const headers = buildBridgeHeaders(bridgeSecret)
 
     const bridgeTest = await fetchJsonWithTimeout(`${bridgeUrl}?action=test`, {
       method: "GET",
       headers,
     })
 
-    const bridgeOk =
+    let bridgeConnectivity = bridgeTest
+    let bridgeOk =
       bridgeTest.ok &&
       isRecord(bridgeTest.json) &&
       bridgeTest.json["success"] === true
 
+    if (!bridgeOk) {
+      const sqlTest = await fetchJsonWithTimeout(bridgeUrl, {
+        method: "POST",
+        headers: {
+          ...headers,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ sql: "SELECT 1 AS ok", params: [] }),
+      })
+      bridgeConnectivity = sqlTest
+      bridgeOk =
+        sqlTest.ok &&
+        isRecord(sqlTest.json) &&
+        sqlTest.json["success"] === true
+    }
+
     let dataSample: unknown = null
     if (bridgeOk) {
-      dataSample = await fetchJsonWithTimeout(`${bridgeUrl}?action=kpis`, {
-        method: "GET",
-        headers,
+      dataSample = await fetchJsonWithTimeout(bridgeUrl, {
+        method: "POST",
+        headers: {
+          ...headers,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ sql: "SELECT DATABASE() AS db_name", params: [] }),
       })
     }
 
@@ -79,7 +107,7 @@ export async function GET() {
       {
         status: bridgeOk ? "ok" : "bridge_error",
         config,
-        bridge_connectivity: bridgeTest,
+        bridge_connectivity: bridgeConnectivity,
         data_sample: bridgeOk ? dataSample : null,
       },
       { endpoint: "health" }

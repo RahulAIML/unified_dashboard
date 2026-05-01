@@ -257,9 +257,10 @@ export async function bridgeDrilldown(params: {
     report_created_at: string
     usecase_id: number | null
   }>(
-    `SELECT MIN(report_created_at) AS report_created_at, usecase_id
+    `SELECT report_created_at, usecase_id
      FROM rolplay_pro_analytics.report_field_current
      WHERE saved_report_id = ? AND customer_id = ?
+     ORDER BY id ASC
      LIMIT 1`,
     [savedReportId, customerId]
   )

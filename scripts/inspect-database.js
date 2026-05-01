@@ -10,57 +10,14 @@
  *   node scripts/inspect-database.js
  */
 
-const https = require('https')
-
-const BRIDGE_URL = 'https://rolplay.pro/src/rolplay-bridge.php'
-const BRIDGE_SECRET = 'REDACTED_BRIDGE_SECRET'
+const { bridgeRequest, getBridgeConfig } = require('./bridge-client')
 
 function log(msg) {
   console.log(msg)
 }
 
 function makeRequest(sql) {
-  return new Promise((resolve, reject) => {
-    const payload = JSON.stringify({
-      sql: sql,
-      params: [],
-    })
-
-    const options = {
-      hostname: 'rolplay.pro',
-      path: '/src/rolplay-bridge.php',
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(payload),
-        'X-Bridge-Key': BRIDGE_SECRET,
-      },
-    }
-
-    const req = https.request(options, (res) => {
-      let data = ''
-
-      res.on('data', (chunk) => {
-        data += chunk
-      })
-
-      res.on('end', () => {
-        try {
-          const response = JSON.parse(data)
-          resolve(response)
-        } catch (e) {
-          reject(new Error(`Failed to parse response: ${data}`))
-        }
-      })
-    })
-
-    req.on('error', (e) => {
-      reject(e)
-    })
-
-    req.write(payload)
-    req.end()
-  })
+  return bridgeRequest({ sql: sql, params: [] })
 }
 
 async function inspectDatabase() {
@@ -254,9 +211,14 @@ async function inspectDatabase() {
   } catch (error) {
     log(`\n❌ Error: ${error.message}`)
     log('\nTroubleshooting:')
-    log('  1. Check BRIDGE_URL is correct: ' + BRIDGE_URL)
-    log('  2. Check BRIDGE_SECRET is correct')
-    log('  3. Verify network connectivity to rolplay.pro')
+    try {
+      const { url } = getBridgeConfig()
+      log('  1. Check BRIDGE_URL is correct: ' + url.toString())
+    } catch {
+      log('  1. Check BRIDGE_URL is set (env var or dashboard/.env.local)')
+    }
+    log('  2. Check BRIDGE_SECRET is set')
+    log('  3. Verify network connectivity to the bridge host')
     log('  4. Check PHP bridge is running and accessible')
   }
 }

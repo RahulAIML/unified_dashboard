@@ -24,6 +24,15 @@ function timeoutError(label: string, ms: number) {
   return err
 }
 
+function buildBridgeHeaders(secret: string, includeJson = false): HeadersInit {
+  const headers: Record<string, string> = {
+    "X-Bridge-Key": secret,
+    "x-bridge-secret": secret,
+  }
+  if (includeJson) headers["Content-Type"] = "application/json"
+  return headers
+}
+
 // ── Mode A: PHP bridge ────────────────────────────────────────────────────────
 
 async function queryViaBridge<T>(sql: string, params: unknown[] = []): Promise<T[]> {
@@ -40,10 +49,7 @@ async function queryViaBridge<T>(sql: string, params: unknown[] = []): Promise<T
   try {
     res = await fetch(url, {
       method:  "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Bridge-Key":  secret,
-      },
+      headers: buildBridgeHeaders(secret, true),
       body: JSON.stringify({ sql, params }),
       // Next.js: don't cache DB responses
       cache: "no-store",
@@ -147,7 +153,7 @@ export async function fetchBridge<T = Record<string, unknown>>(
   try {
     const res = await fetch(`${url}?${qs}`, {
       method:  "GET",
-      headers: { "X-Bridge-Key": secret },
+      headers: buildBridgeHeaders(secret),
       cache:   "no-store",
       signal:  controller.signal,
     })
