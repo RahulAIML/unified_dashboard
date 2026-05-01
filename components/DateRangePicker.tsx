@@ -80,12 +80,20 @@ export function DateRangePicker({ onApply, initialFrom, initialTo, className }: 
 
       {/* Dropdown panel */}
       {open && (
-        <div className="absolute right-0 top-full mt-2 z-[30] bg-card border border-border rounded-xl shadow-lg p-4 w-72">
-          <p className="text-xs font-semibold mb-3 text-foreground">
+        <div
+          className={cn(
+            "absolute top-full mt-2 z-50",
+            "bg-card border border-border rounded-xl shadow-lg",
+            "w-72 max-w-[calc(100vw-2rem)]",
+            "left-0 sm:left-auto sm:right-0",
+            "overflow-visible"
+          )}
+        >
+          <p className="px-4 pt-4 text-xs font-semibold text-foreground">
             {t.custom}
           </p>
 
-          <div className="space-y-3">
+          <div className="space-y-3 p-4 max-h-[calc(100vh-8rem)] overflow-auto">
             {/* From */}
             <div>
               <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide block mb-1">
@@ -121,19 +129,21 @@ export function DateRangePicker({ onApply, initialFrom, initialTo, className }: 
             )}
 
             {/* Actions */}
-            <div className="flex gap-2 pt-1">
-              <button
-                onClick={() => { setOpen(false); setError(null) }}
-                className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-border bg-muted hover:bg-muted/70 transition-colors"
-              >
-                {t.cancel}
-              </button>
-              <button
-                onClick={handleApply}
-                className="flex-1 px-3 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground font-semibold transition-colors hover:bg-primary/90"
-              >
-                {t.apply}
-              </button>
+            <div className="sticky bottom-0 -mx-4 -mb-4 mt-4 bg-card p-4 border-t border-border">
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setOpen(false); setError(null) }}
+                  className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-border bg-muted hover:bg-muted/70 transition-colors"
+                >
+                  {t.cancel}
+                </button>
+                <button
+                  onClick={handleApply}
+                  className="flex-1 px-3 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground font-semibold transition-colors hover:bg-primary/90"
+                >
+                  {t.apply}
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -298,14 +298,15 @@ export function DashboardContent() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden overflow-y-auto">
       <DashboardHeader
         title={t.overviewTitle}
         subtitle={t.overviewSub}
         showModuleFilter
       />
 
-      <div className="p-6 space-y-6">
+      {/* Header is fixed on small screens; add top padding so content never sits underneath it */}
+      <div className="px-6 pb-6 pt-24 md:pt-6 space-y-6 w-full max-w-full overflow-visible">
 
         {/* Active solution badge */}
         <AnimatePresence>
@@ -374,7 +375,7 @@ export function DashboardContent() {
             ]}
           />
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {isLoading
             ? Array.from({ length: 4 }).map((_, i) => <KpiSkeleton key={i} />)
             : kpiCards.length > 0
