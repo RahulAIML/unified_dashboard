@@ -258,8 +258,13 @@ export async function bridgeBestPerformers(params: {
   usecaseIds?: number[]
   limit?:      number
 }): Promise<unknown> {
+  // IMPORTANT: enforce tenant isolation on BOTH analytics rows (rfc.customer_id)
+  // and the user table (coach_app.coach_users.customer_id). This prevents a
+  // cross-tenant join from surfacing a user whose coach_users record belongs
+  // to a different customer, even if analytics data is inconsistent.
   const p: (string | number | null)[] = [
-    params.customerId,
+    params.customerId, // rfc.customer_id
+    params.customerId, // cu.customer_id
     isoToMysql(params.fromIso),
     isoToMysql(params.toIso),
   ]
@@ -279,6 +284,7 @@ export async function bridgeBestPerformers(params: {
      JOIN coach_app.saved_reports sr ON sr.id = rfc.saved_report_id
      JOIN coach_app.coach_users cu  ON cu.id = sr.coach_user_id
      WHERE rfc.customer_id = ?
+       AND cu.customer_id = ?
        AND rfc.report_created_at BETWEEN ? AND ?
        AND rfc.field_key = 'overall_score'${uc}
      GROUP BY cu.id, cu.user_email, cu.user_name
