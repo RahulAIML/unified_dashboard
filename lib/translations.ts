@@ -172,6 +172,10 @@ export const translations = {
     sbDocumentsIndexed:    'Documents Indexed',
     sbWhatsAppMessages:    'WhatsApp Messages',
     sbKnowledgeDocs:       'Knowledge Base Docs',
+    sbTotalConversations:  'Total Conversations',
+    sbQueriesCount:        'Queries Count',
+    sbKbDocsUsed:          'KB Documents Used',
+    sbEngagementRate:      'Engagement Rate',
 
     // ── Source badges ────────────────────────────────────────
     sourceUsers:      'Source: coach_users + saved_reports',
@@ -390,6 +394,10 @@ export const translations = {
     sbDocumentsIndexed:    'Documentos Indexados',
     sbWhatsAppMessages:    'Mensajes WhatsApp',
     sbKnowledgeDocs:       'Docs Base de Conocimiento',
+    sbTotalConversations:  'Conversaciones Totales',
+    sbQueriesCount:        'Conteo de Consultas',
+    sbKbDocsUsed:          'Docs de KB Usados',
+    sbEngagementRate:      'Tasa de Participación',
 
     // ── Source badges ────────────────────────────────────────
     sourceUsers:      'Fuente: coach_users + saved_reports',

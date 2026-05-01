@@ -2,9 +2,10 @@
 
 import { useMemo, useEffect, useReducer, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Target, PlayCircle, TrendingUp, BadgeCheck, BarChart2, AlertTriangle, Trophy } from "lucide-react"
+import { Target, PlayCircle, TrendingUp, BadgeCheck, BarChart2, AlertTriangle, Trophy, MessageSquare, Users, Search, FileText } from "lucide-react"
 import { DashboardHeader }    from "@/components/DashboardHeader"
 import { SummaryCard }        from "@/components/SummaryCard"
+import { MetricCard } from "@/components/MetricCard"
 import { ChartCard }          from "@/components/ChartCard"
 import { ActivityLineChart }  from "@/components/charts/ActivityLineChart"
 import { ModuleBarChart }     from "@/components/charts/ModuleBarChart"
@@ -31,6 +32,23 @@ import type {
   BestPerformerRow,
 } from "@/lib/types"
 import type { Module } from "@/lib/types"
+
+type SecondBrainProfile = {
+  stats?: {
+    total_members?: number
+    active_members?: number
+    total_message_logs?: number
+    total_documents?: number
+    knowledgebase_docs?: number
+    datastore_docs?: number
+  }
+  message_logs?: {
+    total?: number
+    recent_30_days?: number
+    rag_queries?: number
+  }
+  members?: Array<{ is_active?: boolean }>
+}
 
 // ── KPI icons ─────────────────────────────────────────────────────────────────
 const kpiIcons = [
@@ -84,6 +102,8 @@ export function DashboardContent() {
   const { user }    = useAuthContext()
   const { exportAllSolutions, loading: exportLoading } = useCombinedExport()
 
+  const isSecondBrain = selectedSolution === "second-brain"
+
   // Shimmer for 400 ms on solution/date change
   const [shimmer, dispatchShimmer] = useReducer((_: boolean, next: boolean) => next, false)
   const prevSolution = useRef<Module | null>(null)
@@ -127,28 +147,25 @@ export function DashboardContent() {
   }
 
   // ── API URLs ──────────────────────────────────────────────────────────────
-  const overviewUrl = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to, {
-    solution: selectedSolution,
-    rk: refreshKey,
-  })
-  const trendsUrl = buildApiUrl("/api/dashboard/trends", dateRange.from, dateRange.to, {
-    solution: selectedSolution,
-    rk: refreshKey,
-  })
-  const ucUrl = buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to, {
-    solution: selectedSolution,
-    rk: refreshKey,
-  })
-  const resultsUrl = buildApiUrl("/api/dashboard/results", dateRange.from, dateRange.to, {
-    limit: 20,
-    solution: selectedSolution,
-    rk: refreshKey,
-  })
-  const bestUrl = buildApiUrl("/api/dashboard/best-performers", dateRange.from, dateRange.to, {
-    limit: 10,
-    solution: selectedSolution,
-    rk: refreshKey,
-  })
+  const overviewUrl = isSecondBrain
+    ? null
+    : buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to, { solution: selectedSolution, rk: refreshKey })
+
+  const trendsUrl = isSecondBrain
+    ? null
+    : buildApiUrl("/api/dashboard/trends", dateRange.from, dateRange.to, { solution: selectedSolution, rk: refreshKey })
+
+  const ucUrl = isSecondBrain
+    ? null
+    : buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to, { solution: selectedSolution, rk: refreshKey })
+
+  const resultsUrl = isSecondBrain
+    ? null
+    : buildApiUrl("/api/dashboard/results", dateRange.from, dateRange.to, { limit: 20, solution: selectedSolution, rk: refreshKey })
+
+  const bestUrl = isSecondBrain
+    ? null
+    : buildApiUrl("/api/dashboard/best-performers", dateRange.from, dateRange.to, { limit: 10, solution: selectedSolution, rk: refreshKey })
 
   const { data: overview,    loading: overviewLoading, error: overviewError }  = useApi<OverviewApiResponse>(overviewUrl)
   const { data: trends,      loading: trendsLoading,   error: trendsError }    = useApi<TrendsApiResponse>(trendsUrl)
@@ -156,10 +173,15 @@ export function DashboardContent() {
   const { data: results,     loading: resultsLoading,  error: resultsError }   = useApi<ResultsApiResponse>(resultsUrl)
   const { data: bestPerformers, loading: bestLoading }                         = useApi<BestPerformersApiResponse>(bestUrl)
 
+  const { data: sbProfile, loading: sbLoading, error: sbError } = useApi<SecondBrainProfile>(
+    isSecondBrain ? "/api/second-brain/profile" : null
+  )
+
   const hasOverviewData = overview && overview.totalEvaluations > 0
 
   // ── KPI cards ─────────────────────────────────────────────────────────────
   const kpiCards = useMemo(() => {
+    if (isSecondBrain) return []
     if (!hasOverviewData) return []
     const d = calcDeltaPct
     return [
@@ -191,7 +213,42 @@ export function DashboardContent() {
         tier: "A" as const,
       },
     ]
-  }, [overview, hasOverviewData])
+  }, [overview, hasOverviewData, isSecondBrain])
+
+  const secondBrainKpis = useMemo(() => {
+    if (!isSecondBrain || !sbProfile) return []
+
+    const stats = sbProfile.stats ?? {}
+    const messageLogs = sbProfile.message_logs ?? {}
+    const members = Array.isArray(sbProfile.members) ? sbProfile.members : []
+
+    const totalMembers = Number(stats.total_members ?? members.length ?? 0)
+    const activeMembers = Number(
+      stats.active_members ?? members.filter((m) => m?.is_active).length ?? 0
+    )
+
+    const totalConversations = Number(
+      messageLogs.total ?? stats.total_message_logs ?? 0
+    )
+
+    const queriesCount = Number(messageLogs.rag_queries ?? 0)
+
+    const kbDocsUsed = Number(
+      (stats.knowledgebase_docs ?? 0) + (stats.datastore_docs ?? 0) || stats.total_documents || 0
+    )
+
+    const engagementRate = totalMembers > 0
+      ? Math.round((activeMembers / totalMembers) * 1000) / 10
+      : 0
+
+    return [
+      { label: t.sbTotalConversations, value: totalConversations, icon: <MessageSquare className="w-4 h-4" /> },
+      { label: t.sbActiveMembers, value: activeMembers, icon: <Users className="w-4 h-4" /> },
+      { label: t.sbQueriesCount, value: queriesCount, icon: <Search className="w-4 h-4" /> },
+      { label: t.sbKbDocsUsed, value: kbDocsUsed, icon: <FileText className="w-4 h-4" /> },
+      { label: t.sbEngagementRate, value: engagementRate, unit: "%", icon: <TrendingUp className="w-4 h-4" /> },
+    ]
+  }, [isSecondBrain, sbProfile, t])
 
   const kpiExportRows = useMemo(() => {
     if (!overview) return []
@@ -345,6 +402,47 @@ export function DashboardContent() {
         {ucError       && <ErrorBanner message={`${t.errorLoading} (breakdown): ${ucError}`} />}
         {resultsError  && <ErrorBanner message={`${t.errorLoading} (results): ${resultsError}`} />}
 
+        {isSecondBrain ? (
+          <>
+            {sbError && <ErrorBanner message={`${t.errorLoading}: ${sbError}`} />}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+              {sbLoading
+                ? Array.from({ length: 5 }).map((_, i) => <KpiSkeleton key={i} />)
+                : secondBrainKpis.length > 0
+                  ? secondBrainKpis.map((kpi) => (
+                      <MetricCard
+                        key={kpi.label}
+                        label={kpi.label}
+                        value={kpi.value}
+                        unit={kpi.unit}
+                        icon={kpi.icon}
+                      />
+                    ))
+                  : (
+                    <div className="sm:col-span-2 lg:col-span-5">
+                      <EmptyState message={t.noDataAvailable} />
+                    </div>
+                  )}
+            </div>
+
+            <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <h3 className="text-sm font-semibold">{t.sbTitle}</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">{t.sbSub}</p>
+                </div>
+                <Link
+                  href="/second-brain"
+                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold border border-border bg-muted hover:bg-muted/70 transition-colors"
+                >
+                  {t.navSecondBrain}
+                </Link>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
         {/* KPI export row */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:justify-end flex-wrap">
           <button
@@ -547,6 +645,8 @@ export function DashboardContent() {
               : <div className="py-10 text-center text-sm text-muted-foreground">{t.noDataAvailable}</div>
           }
         </div>
+          </>
+        )}
       </div>
     </div>
   )
