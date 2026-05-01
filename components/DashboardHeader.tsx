@@ -118,7 +118,7 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
   }
 
   return (
-    <div className="border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-40 overflow-visible">
+    <div className="border-b border-border bg-background/80 backdrop-blur-sm sticky top-16 md:top-0 z-40 overflow-visible">
       <div className="h-[3px] w-full" style={{ background: "linear-gradient(90deg, hsl(var(--primary)), var(--brand-accent))" }} />
 
       <div className="px-4 sm:px-6 py-3 sm:py-4">

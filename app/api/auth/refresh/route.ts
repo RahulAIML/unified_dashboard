@@ -26,10 +26,17 @@ export async function POST(request: NextRequest) {
     const user = await findUserById(claims.user_id)
     if (!user) return buildApiError('User not found', 404)
 
+    // Tenant must come from the session (refresh token claims), not the auth DB.
+    // This prevents a stale DB customer_id from leaking cross-tenant data after refresh.
+    const customerId = Number(claims.customer_id ?? 0)
+    if (!Number.isFinite(customerId) || customerId < 0) {
+      return buildApiError('Unauthorized: Invalid tenant context', 401)
+    }
+
     const access = await signAccessToken({
       user_id: user.id,
       email: user.email,
-      customer_id: user.customer_id,
+      customer_id: customerId,
     })
 
     const response = buildSuccess({ ok: true })
@@ -46,4 +53,3 @@ export async function POST(request: NextRequest) {
     return buildApiError('Internal server error', 500)
   }
 }
-

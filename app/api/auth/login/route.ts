@@ -65,22 +65,24 @@ export async function POST(request: NextRequest) {
     const passwordValid = await verifyPassword(password, passwordHash)
     if (!passwordValid) return buildApiError('Incorrect password. Please try again.', 401)
 
-    // Resolve tenant ONCE at login.
+    // Resolve tenant ONCE at login (authoritative for this session).
     // If bridge is unavailable or user has no mapping → customer_id = 0.
-    // Login ALWAYS succeeds if credentials are valid. Dashboard shows empty
-    // state for users with customer_id = 0 (not linked to any organization).
-    let customerId: number = Number(user.customer_id ?? 0)
+    // IMPORTANT: Do NOT reuse a previously-stored customer_id from the auth DB,
+    // because it can be stale and cause cross-tenant data exposure.
+    let customerId: number = 0
     try {
       const resolved = await resolveCustomerIdByEmail(email)
       if (resolved !== null) customerId = resolved
     } catch (bridgeErr) {
       const msg = bridgeErr instanceof Error ? bridgeErr.message : String(bridgeErr)
       console.warn('[/api/auth/login] Bridge tenant resolution failed (non-fatal):', msg)
-      // Fall through — keep the last known customer_id from auth DB (may be 0)
+      // Fall through with customerId = 0 (empty-state, no data fetch)
     }
 
-    // Cache resolved customer_id in auth DB (non-blocking)
-    if (customerId > 0 && user.customer_id !== customerId) {
+    // Cache resolved customer_id in auth DB (non-blocking).
+    // Also clears any previously-stored value when resolution fails, so refresh/me
+    // can't accidentally revive a stale tenant id.
+    if (user.customer_id !== customerId) {
       await updateUserCustomerId(user.id, customerId).catch(() => null)
       user = { ...user, customer_id: customerId }
     }

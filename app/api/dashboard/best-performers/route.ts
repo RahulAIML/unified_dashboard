@@ -22,7 +22,10 @@ export async function GET(request: NextRequest) {
     }
 
     const { solution, usecaseIds } = parseUsecaseFilter(sp)
-    const limit = Math.min(50, Math.max(1, Number(sp.get('limit')) || 10))
+
+    // Production requirement: always return top 5 performers (no global fallback lists).
+    // Cap limit at 5 even if a client attempts to request more.
+    const limit = Math.min(5, Math.max(1, Number(sp.get('limit')) || 5))
 
     const rows = await bridgeBestPerformers({
       customerId: ctx.customerId,

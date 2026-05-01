@@ -28,7 +28,8 @@ export async function GET(request: NextRequest) {
             id: user.id,
             email: user.email,
             full_name: user.full_name,
-            customer_id: user.customer_id,
+            // Session tenant is authoritative (from JWT); do not trust auth DB here.
+            customer_id: Number(claims.customer_id ?? 0),
             role: user.role,
           },
         })

@@ -83,7 +83,7 @@ export function DateRangePicker({ onApply, initialFrom, initialTo, className }: 
         <div
           className={cn(
             // Mobile: fixed sheet to avoid expanding header / overlapping layout
-            "fixed inset-x-3 top-20 z-[70] sm:absolute sm:inset-auto sm:top-full sm:mt-2 sm:z-[60]",
+            "fixed inset-x-3 top-20 z-[80] sm:absolute sm:inset-auto sm:top-full sm:mt-2 sm:z-[80]",
             "bg-card border border-border rounded-xl shadow-lg",
             "w-[min(28rem,calc(100vw-1.5rem))] sm:w-72 max-w-[calc(100vw-2rem)]",
             "left-0 sm:left-auto sm:right-0",
