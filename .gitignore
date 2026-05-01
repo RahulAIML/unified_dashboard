@@ -33,3 +33,10 @@ Thumbs.db
 
 # ── Misc ──────────────────────────────────────────────────────────────────────
 *.log
+
+# ── Local-only project docs / exports (do not commit) ────────────────────
+/coach_app.sql
+/Dashboard_journey_tracker.xlsx
+/dashboard_project_journey_tracker.xlsx
+/KPI_Mapping_Report.pdf
+/RolplayPro Dashboard Roadmap.docx
