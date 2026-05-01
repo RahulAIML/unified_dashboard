@@ -232,12 +232,11 @@ export interface UsecaseBreakdownApiResponse {
 // ── Best Performers ─────────────────────────────
 
 export interface BestPerformerRow {
-  user_email:      string
-  user_firstname:  string | null
-  user_lastname:   string | null
-  sessions:        number
-  avg_score:       number
-  pass_rate:       number
+  user_email:  string
+  user_name:   string | null   // coach_app.coach_users.user_name (single column)
+  sessions:    number
+  avg_score:   number
+  pass_rate:   number
 }
 
 export interface BestPerformersApiResponse {

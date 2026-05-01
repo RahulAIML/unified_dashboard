@@ -245,7 +245,11 @@ export async function bridgeUsecaseBreakdown(params: {
 
 /**
  * Best performers — top users by average score.
- * Groups by user_email, requires at least 2 sessions, orders by avg score DESC.
+ * Groups by user_email, requires at least 1 session, orders by avg score DESC.
+ *
+ * Live schema (confirmed via DESCRIBE):
+ *   coach_app.coach_users  → id, user_email, user_name   (NO user_firstname/user_lastname)
+ *   coach_app.saved_reports → id, coach_user_id          (NOT user_id)
  */
 export async function bridgeBestPerformers(params: {
   customerId:  number
@@ -266,20 +270,19 @@ export async function bridgeBestPerformers(params: {
   return bridgePost(
     `SELECT
        cu.user_email,
-       cu.user_firstname,
-       cu.user_lastname,
+       cu.user_name,
        COUNT(DISTINCT rfc.saved_report_id)                        AS sessions,
        ROUND(AVG(rfc.value_num), 1)                               AS avg_score,
        ROUND(SUM(CASE WHEN sr.passed_flag = 1 THEN 1 ELSE 0 END)
              / COUNT(DISTINCT rfc.saved_report_id) * 100, 1)      AS pass_rate
      FROM rolplay_pro_analytics.report_field_current rfc
      JOIN coach_app.saved_reports sr ON sr.id = rfc.saved_report_id
-     JOIN coach_app.coach_users cu  ON cu.id = sr.user_id
+     JOIN coach_app.coach_users cu  ON cu.id = sr.coach_user_id
      WHERE rfc.customer_id = ?
        AND rfc.report_created_at BETWEEN ? AND ?
        AND rfc.field_key = 'overall_score'${uc}
-     GROUP BY cu.id, cu.user_email, cu.user_firstname, cu.user_lastname
-     HAVING sessions >= 2
+     GROUP BY cu.id, cu.user_email, cu.user_name
+     HAVING sessions >= 1
      ORDER BY avg_score DESC, sessions DESC
      LIMIT ?`,
     p

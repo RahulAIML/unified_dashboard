@@ -103,7 +103,7 @@ export function DashboardContent() {
   // ── Not linked to organization ────────────────────────────────────────────
   if (user !== null && user.customer_id === 0) {
     return (
-      <div className="min-h-screen">
+      <div className="min-h-screen w-full">
         <DashboardHeader title={t.overviewTitle} subtitle={t.overviewSub} showModuleFilter />
         <div className="flex flex-col items-center justify-center min-h-[60vh] px-6 text-center">
           <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mb-6">
@@ -298,14 +298,14 @@ export function DashboardContent() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen w-full max-w-full overflow-x-hidden overflow-y-auto">
+    <div className="min-h-screen w-full">
       <DashboardHeader
         title={t.overviewTitle}
         subtitle={t.overviewSub}
         showModuleFilter
       />
 
-      <div className="px-0 pb-6 pt-6 space-y-6 w-full max-w-full overflow-visible">
+      <div className="w-full max-w-[1400px] mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
 
         {/* Active solution badge */}
         <AnimatePresence>
@@ -341,21 +341,21 @@ export function DashboardContent() {
         {ucError       && <ErrorBanner message={`${t.errorLoading} (breakdown): ${ucError}`} />}
         {resultsError  && <ErrorBanner message={`${t.errorLoading} (results): ${resultsError}`} />}
 
-        {/* KPI cards */}
-        <div className="flex items-center justify-end gap-3 flex-wrap">
+        {/* KPI export row */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:justify-end flex-wrap">
           <button
             onClick={() => exportAllSolutions()}
             disabled={exportLoading}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-transparent text-white transition-all"
             style={{ background: brand.primaryColor, opacity: exportLoading ? 0.7 : 1, cursor: exportLoading ? "not-allowed" : "pointer" }}
-            title="Export KPI data from all solutions into one CSV"
+            title={t.exportAll}
           >
-            {exportLoading ? "Exporting…" : "📊 Export All Solutions"}
+            {exportLoading ? t.exporting : `📊 ${t.exportAll}`}
           </button>
           <ExportButton
             data={kpiExportRows}
             filename={csvFilename(`kpi-summary-${selectedSolution ?? "all"}`)}
-            label="Export Current"
+            label={t.exportCurrent}
             columns={[
               { header: "Solution", value: (r) => r.solution },
               { header: "From", value: (r) => r.from },
@@ -374,7 +374,7 @@ export function DashboardContent() {
             ]}
           />
         </div>
-        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           {isLoading
             ? Array.from({ length: 4 }).map((_, i) => <KpiSkeleton key={i} />)
             : kpiCards.length > 0
@@ -439,6 +439,90 @@ export function DashboardContent() {
           }
         </ChartCard>
 
+        {/* Best Performers section — shown when data exists */}
+        {(bestLoading || (bestPerformers?.data?.length ?? 0) > 0) && (
+          <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+            <div className="mb-4">
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <Trophy className="w-4 h-4 text-primary" />
+                {t.bestPerformers}
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t.bestPerformersSub} — {t.last} {days} {t.days}
+              </p>
+            </div>
+            {bestLoading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 animate-pulse">
+                    <div className="w-8 h-8 rounded-full bg-muted shrink-0" />
+                    <div className="flex-1 space-y-1.5">
+                      <div className="h-3 w-32 rounded bg-muted" />
+                      <div className="h-2.5 w-24 rounded bg-muted" />
+                    </div>
+                    <div className="w-16 h-6 rounded bg-muted" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {bestPerformers!.data.map((performer, idx) => {
+                  // pass_rate comes from SQL as 0-100 already
+                  const passRateDisplay = Number(performer.pass_rate).toFixed(1)
+                  const avgScoreDisplay = Number(performer.avg_score).toFixed(1)
+                  const displayName = performer.user_name?.trim()
+                    ? performer.user_name.trim()
+                    : performer.user_email
+
+                  return (
+                    <div
+                      key={`${performer.user_email}-${idx}`}
+                      className="flex items-center justify-between p-3 rounded-lg bg-muted/40 hover:bg-muted/60 transition-colors gap-2"
+                    >
+                      {/* Rank + Name */}
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div
+                          className={cn(
+                            "flex items-center justify-center w-7 h-7 rounded-full font-bold text-xs shrink-0",
+                            idx === 0 ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-400"
+                            : idx === 1 ? "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+                            : idx === 2 ? "bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-400"
+                            : "bg-primary/10 text-primary"
+                          )}
+                        >
+                          {idx + 1}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">{displayName}</p>
+                          {displayName !== performer.user_email && (
+                            <p className="text-xs text-muted-foreground truncate">{performer.user_email}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Stats */}
+                      <div className="flex items-center gap-3 sm:gap-5 text-right shrink-0">
+                        <div className="hidden sm:block">
+                          <p className="text-xs text-muted-foreground">{t.colSessions}</p>
+                          <p className="text-sm font-semibold text-foreground tabular-nums">{Number(performer.sessions)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">{t.avgSessionScore}</p>
+                          <p className="text-sm font-semibold text-foreground tabular-nums">{avgScoreDisplay} pts</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">{t.passRate}</p>
+                          <p className="text-sm font-semibold text-primary tabular-nums">{passRateDisplay}%</p>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Recent evaluations table */}
         <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
           <div className="mb-4">
@@ -448,7 +532,7 @@ export function DashboardContent() {
                 ? t.loading
                 : `${results?.data?.length ?? 0} ${t.evaluationsSub} ${days} ${t.days}`}
               <span className="ml-2 text-[10px] font-medium bg-primary/10 text-primary px-1.5 py-0.5 rounded">
-                Live
+                {t.liveLabel}
               </span>
             </p>
           </div>
@@ -459,65 +543,6 @@ export function DashboardContent() {
               : <div className="py-10 text-center text-sm text-muted-foreground">{t.noDataAvailable}</div>
           }
         </div>
-
-        {/* Best Performers section */}
-        {bestPerformers && bestPerformers.data && bestPerformers.data.length > 0 && (
-          <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
-            <div className="mb-4">
-              <h3 className="text-sm font-semibold flex items-center gap-2">
-                <Trophy className="w-4 h-4 text-primary" />
-                Best Performers
-              </h3>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {bestLoading
-                  ? t.loading
-                  : `Top ${bestPerformers.data.length} performers — ${days}d`}
-              </p>
-            </div>
-            <div className="space-y-3">
-              {bestPerformers.data.map((performer, idx) => (
-                <div
-                  key={`${performer.user_email}-${idx}`}
-                  className="flex items-center justify-between p-3 rounded-lg bg-muted/40 hover:bg-muted/60 transition-colors"
-                >
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/20 text-primary font-bold text-xs shrink-0">
-                      {idx + 1}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">
-                        {performer.user_firstname && performer.user_lastname
-                          ? `${performer.user_firstname} ${performer.user_lastname}`
-                          : performer.user_email}
-                      </p>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {performer.user_email}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4 text-right shrink-0">
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">
-                        {performer.avg_score.toFixed(1)} pts
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {performer.sessions} sessions
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-semibold text-primary">
-                        {(performer.pass_rate * 100).toFixed(0)}%
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        pass rate
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   )
