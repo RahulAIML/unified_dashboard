@@ -10,10 +10,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyAccessToken } from './lib/jwt'
 
-const PUBLIC_PAGE_ROUTES = ['/auth/login', '/auth/register']
+// Auth pages — redirect to dashboard if already logged in
+const AUTH_ROUTES = ['/auth/login', '/auth/register']
 
-function isPublicPage(pathname: string) {
-  return PUBLIC_PAGE_ROUTES.some((r) => pathname.startsWith(r))
+// '/' is public: the page component shows LandingPage (unauthenticated)
+// or DashboardContent (authenticated) via useAuthContext — no redirect needed.
+function isAuthRoute(pathname: string) {
+  return AUTH_ROUTES.some((r) => pathname.startsWith(r))
 }
 
 export async function middleware(request: NextRequest) {
@@ -25,16 +28,19 @@ export async function middleware(request: NextRequest) {
   // Allow Next internals/static
   if (pathname.startsWith('/_next/')) return NextResponse.next()
 
+  // Landing page — always accessible, page handles auth client-side
+  if (pathname === '/') return NextResponse.next()
+
   const token = request.cookies.get('accessToken')?.value ?? null
   const isAuthed = token ? Boolean(await verifyAccessToken(token)) : false
 
-  // Redirect authenticated users away from auth pages
-  if (isPublicPage(pathname)) {
+  // Redirect authenticated users away from login/register pages
+  if (isAuthRoute(pathname)) {
     if (isAuthed) return NextResponse.redirect(new URL('/', request.url))
     return NextResponse.next()
   }
 
-  // Protect all non-auth pages
+  // Protect all other pages (coach, lms, settings, drilldown, etc.)
   if (!isAuthed) {
     return NextResponse.redirect(new URL('/auth/login', request.url))
   }
