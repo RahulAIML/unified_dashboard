@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { Bot, Send, X, Loader2 } from "lucide-react"
 import { useDashboardStore } from "@/lib/store"
 import { buildApiUrl } from "@/lib/hooks/useApi"
+import { useT } from "@/lib/lang-store"
 import type { OverviewApiResponse, TrendsApiResponse } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -112,6 +113,7 @@ const QUICK_PROMPTS = ["Summary", "Pass rate", "Score trend", "Top insights"]
 
 export function AIAssistant() {
   const { dateRange } = useDashboardStore()
+  const t = useT()
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -235,7 +237,7 @@ export function AIAssistant() {
         aria-label="Open AI assistant"
       >
         <Bot className="h-4 w-4" />
-        Ask AI
+        {t.askAi}
       </button>
 
       <AnimatePresence>

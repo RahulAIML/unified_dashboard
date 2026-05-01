@@ -9,6 +9,16 @@ export async function GET(request: NextRequest) {
   const ctx = await getAuthContextFromRequest(request)
   if (!ctx) return buildApiError('Unauthorized', 401)
 
+  // User is authenticated but not linked to any organization → empty state
+  if (ctx.customerId === 0) {
+    return buildSuccess({
+      totalEvaluations: 0, prevTotalEvaluations: 0,
+      avgScore: null, prevAvgScore: null,
+      passRate: null, prevPassRate: null,
+      passedEvaluations: 0,
+    })
+  }
+
   try {
     const sp = request.nextUrl.searchParams
     const range = parseDateRange(sp)

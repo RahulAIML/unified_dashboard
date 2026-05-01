@@ -47,17 +47,16 @@ export async function POST(request: NextRequest) {
       return buildApiError('An account with this email already exists. Please sign in instead.', 409)
     }
 
-    let customerId: number | null = null
+    // Resolve tenant from bridge (non-fatal). Users without a mapping get
+    // customer_id = 0 and will see an empty-state dashboard after login.
+    let customerId: number = 0
     try {
-      customerId = await resolveCustomerIdByEmail(email)
+      const resolved = await resolveCustomerIdByEmail(email)
+      if (resolved !== null) customerId = resolved
     } catch (bridgeErr) {
       const msg = bridgeErr instanceof Error ? bridgeErr.message : String(bridgeErr)
-      console.error('[/api/auth/register] Bridge tenant resolution failed:', msg)
-      return buildApiError('Organization lookup is temporarily unavailable. Please try again in a few minutes.', 503)
-    }
-
-    if (!customerId) {
-      return buildApiError('User not linked to any organization', 403)
+      console.warn('[/api/auth/register] Bridge tenant resolution failed (non-fatal):', msg)
+      // Fall through with customerId = 0
     }
 
     const companyDomain = email.split('@')[1]?.toLowerCase() ?? ''

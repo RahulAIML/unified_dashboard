@@ -118,7 +118,7 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
   }
 
   return (
-    <div className="border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-10">
+    <div className="border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-[20]">
       <div className="h-[3px] w-full" style={{ background: "linear-gradient(90deg, hsl(var(--primary)), var(--brand-accent))" }} />
 
       <div className="px-6 py-4">
@@ -146,10 +146,10 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
                 refreshing && "opacity-70 cursor-not-allowed"
               )}
               aria-label="Refresh data"
-              title="Refresh"
+              title={t.refresh}
             >
               <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />
-              Refresh
+              {t.refresh}
             </button>
 
             <div className="flex flex-wrap items-center gap-1 bg-muted rounded-lg p-1 w-full sm:w-auto">

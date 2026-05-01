@@ -20,6 +20,7 @@ import { cn }                 from "@/lib/utils"
 import { csvFilename } from "@/lib/csv-export"
 import { useClientBrand } from "@/lib/hooks/useClientBrand"
 import Link from "next/link"
+import { useAuthContext } from "@/components/AuthProvider"
 import type {
   OverviewApiResponse,
   TrendsApiResponse,
@@ -53,10 +54,11 @@ function KpiSkeleton() {
 
 // ── Empty state ───────────────────────────────────────────────────────────────
 function EmptyState({ message }: { message?: string }) {
+  const t = useT()
   return (
     <div className="h-48 flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
       <BarChart2 className="w-8 h-8 opacity-30" />
-      <span>{message ?? "No data available"}</span>
+      <span>{message ?? t.noDataAvailable}</span>
     </div>
   )
 }
@@ -77,6 +79,7 @@ export function DashboardContent() {
   const { dateRange, selectedSolution, refreshKey } = useDashboardStore()
   const t           = useT()
   const brand       = useClientBrand()
+  const { user }    = useAuthContext()
   const { exportAllSolutions, loading: exportLoading } = useCombinedExport()
 
   // Shimmer for 400 ms on solution/date change
@@ -94,6 +97,32 @@ export function DashboardContent() {
   const days = Math.round(
     (dateRange.to.getTime() - dateRange.from.getTime()) / 86_400_000
   )
+
+  // ── Not linked to organization ────────────────────────────────────────────
+  if (user !== null && user.customer_id === 0) {
+    return (
+      <div className="min-h-screen">
+        <DashboardHeader title={t.overviewTitle} subtitle={t.overviewSub} showModuleFilter />
+        <div className="flex flex-col items-center justify-center min-h-[60vh] px-6 text-center">
+          <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mb-6">
+            <BarChart2 className="w-8 h-8 text-muted-foreground" />
+          </div>
+          <h2 className="text-xl font-bold text-foreground mb-3">{t.notLinkedToOrg}</h2>
+          <p className="text-sm text-muted-foreground max-w-md mb-6">{t.notLinkedToOrgSub}</p>
+          <a
+            href="mailto:info@rolplay.ai"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-white transition-colors"
+            style={{ background: brand.primaryColor }}
+          >
+            {t.notLinkedContact}
+          </a>
+          <p className="mt-4 text-xs text-muted-foreground">
+            {user.email}
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   // ── API URLs ──────────────────────────────────────────────────────────────
   const overviewUrl = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to, {
@@ -356,7 +385,7 @@ export function DashboardContent() {
                   >
                     <div className="h-[3px] bg-primary" />
                     <div className="p-5 text-center text-sm text-muted-foreground py-8">
-                      No data available
+                      {t.noDataAvailable}
                     </div>
                   </div>
                 ))
@@ -419,7 +448,7 @@ export function DashboardContent() {
             ? <div className="py-10 text-center text-sm text-muted-foreground">{t.loading}</div>
             : results?.data?.length
               ? <DataTable data={results.data} columns={evalColumns} pageSize={10} />
-              : <div className="py-10 text-center text-sm text-muted-foreground">No data available</div>
+              : <div className="py-10 text-center text-sm text-muted-foreground">{t.noDataAvailable}</div>
           }
         </div>
       </div>

@@ -66,28 +66,21 @@ export async function POST(request: NextRequest) {
     if (!passwordValid) return buildApiError('Incorrect password. Please try again.', 401)
 
     // Resolve tenant ONCE at login.
-    // If bridge is temporarily unavailable, fall back to the last known
-    // customer_id stored in auth DB for already-linked users.
-    let customerId: number | null = null
+    // If bridge is unavailable or user has no mapping → customer_id = 0.
+    // Login ALWAYS succeeds if credentials are valid. Dashboard shows empty
+    // state for users with customer_id = 0 (not linked to any organization).
+    let customerId: number = Number(user.customer_id ?? 0)
     try {
-      customerId = await resolveCustomerIdByEmail(email)
+      const resolved = await resolveCustomerIdByEmail(email)
+      if (resolved !== null) customerId = resolved
     } catch (bridgeErr) {
       const msg = bridgeErr instanceof Error ? bridgeErr.message : String(bridgeErr)
-      console.error('[/api/auth/login] Bridge tenant resolution failed:', msg)
-      const cachedCustomerId = Number(user.customer_id ?? 0)
-      if (Number.isFinite(cachedCustomerId) && cachedCustomerId > 0) {
-        customerId = cachedCustomerId
-      } else {
-        return buildApiError('Organization lookup is temporarily unavailable. Please try again in a few minutes.', 503)
-      }
+      console.warn('[/api/auth/login] Bridge tenant resolution failed (non-fatal):', msg)
+      // Fall through — keep the last known customer_id from auth DB (may be 0)
     }
 
-    if (!customerId) {
-      return buildApiError('User not linked to any organization', 403)
-    }
-
-    // Cache in auth DB so we don't resolve on every request
-    if (user.customer_id !== customerId) {
+    // Cache resolved customer_id in auth DB (non-blocking)
+    if (customerId > 0 && user.customer_id !== customerId) {
       await updateUserCustomerId(user.id, customerId).catch(() => null)
       user = { ...user, customer_id: customerId }
     }

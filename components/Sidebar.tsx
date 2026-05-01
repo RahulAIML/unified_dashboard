@@ -157,7 +157,7 @@ export function Sidebar() {
       {/* Mobile drawer overlay */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          className="fixed inset-0 bg-black/50 z-[45] md:hidden"
           onClick={() => setMobileOpen(false)}
         />
       )}
@@ -167,13 +167,13 @@ export function Sidebar() {
         initial={false}
         animate={{ x: mobileOpen ? 0 : -256 }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        className="fixed left-0 top-0 bottom-0 w-64 bg-sidebar border-r border-sidebar-border flex flex-col z-50 md:hidden"
+        className="fixed left-0 top-0 bottom-0 w-64 bg-sidebar border-r border-sidebar-border flex flex-col z-[50] md:hidden"
       >
         {sidebarContent}
       </motion.aside>
 
-      {/* Mobile header with hamburger - shown only on mobile */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-30 bg-sidebar border-b border-sidebar-border flex items-center justify-between px-4 h-16">
+      {/* Mobile header with hamburger — always on top (z-[60]) */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-[60] bg-sidebar border-b border-sidebar-border flex items-center justify-between px-4 h-16">
         <button
           onClick={() => setMobileOpen(!mobileOpen)}
           className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors"

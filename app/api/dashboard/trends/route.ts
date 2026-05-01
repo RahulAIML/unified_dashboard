@@ -9,6 +9,10 @@ export async function GET(request: NextRequest) {
   const ctx = await getAuthContextFromRequest(request)
   if (!ctx) return buildApiError('Unauthorized', 401)
 
+  if (ctx.customerId === 0) {
+    return buildSuccess({ score_trend: [], pass_fail: [], eval_count: [], evalCountTrend: [] })
+  }
+
   try {
     const sp = request.nextUrl.searchParams
     const range = parseDateRange(sp)

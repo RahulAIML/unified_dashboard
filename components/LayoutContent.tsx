@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation'
 import { Sidebar } from '@/components/Sidebar'
 import { AIAssistant } from '@/components/ai-assistant'
+import { DashboardFooter } from '@/components/DashboardFooter'
 import { useAuthContext } from '@/components/AuthProvider'
 
 const AUTH_ROUTES = ['/auth/login', '/auth/register']
@@ -22,9 +23,12 @@ export function LayoutContent({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-full min-h-screen">
       {showSidebar && <Sidebar />}
-      <main className={`flex-1 overflow-auto bg-muted/30 ${showSidebar ? 'md:pt-0 pt-16' : ''}`}>
-        {children}
-      </main>
+      <div className={`flex-1 flex flex-col overflow-auto bg-muted/30 ${showSidebar ? 'md:pt-0 pt-16' : ''}`}>
+        <main className="flex-1">
+          {children}
+        </main>
+        {showSidebar && <DashboardFooter />}
+      </div>
       {showSidebar && <AIAssistant />}
     </div>
   )

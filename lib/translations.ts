@@ -200,6 +200,19 @@ export const translations = {
     evalCountSub:     'Evaluations submitted per day',
     usecaseBreakdown: 'Use Case Breakdown',
     usecaseBreakdownSub: 'Score and pass rate by use case',
+
+    // ── Action buttons ────────────────────────────────────────
+    refresh:          'Refresh',
+    apply:            'Apply',
+    cancel:           'Cancel',
+    custom:           'Custom',
+    askAi:            'Ask AI',
+    noDataAvailable:  'No data available',
+
+    // ── Not linked to org ─────────────────────────────────────
+    notLinkedToOrg:    "You're not linked to any organization yet",
+    notLinkedToOrgSub: 'Contact your administrator to get access to your company\'s analytics data.',
+    notLinkedContact:  'Contact Administrator',
   },
 
   es: {
@@ -395,6 +408,19 @@ export const translations = {
     evalCountSub:     'Evaluaciones enviadas por día',
     usecaseBreakdown: 'Desglose por Caso de Uso',
     usecaseBreakdownSub: 'Puntuación y tasa de aprobación por caso de uso',
+
+    // ── Action buttons ────────────────────────────────────────
+    refresh:          'Actualizar',
+    apply:            'Aplicar',
+    cancel:           'Cancelar',
+    custom:           'Personalizado',
+    askAi:            'Preguntar a la IA',
+    noDataAvailable:  'Sin datos disponibles',
+
+    // ── Not linked to org ─────────────────────────────────────
+    notLinkedToOrg:    'Aún no estás vinculado a ninguna organización',
+    notLinkedToOrgSub: 'Contacta a tu administrador para obtener acceso a los datos analíticos de tu empresa.',
+    notLinkedContact:  'Contactar Administrador',
   },
 } as const
 
