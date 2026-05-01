@@ -9,7 +9,7 @@ export function LandingPage() {
     <div className="min-h-screen bg-gradient-to-b from-white to-slate-50">
       {/* Header */}
       <header className="border-b border-slate-200">
-        <div className="max-w-6xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex items-center justify-between">
+        <div className="w-full px-4 py-4 sm:px-6 lg:px-8 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div
               className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white"
@@ -37,7 +37,7 @@ export function LandingPage() {
       </header>
 
       {/* Hero Section */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-20 sm:py-32">
+      <section className="w-full px-4 sm:px-6 lg:px-8 py-20 sm:py-32">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -91,7 +91,7 @@ export function LandingPage() {
 
       {/* Features Section */}
       <section className="bg-white border-t border-slate-200 py-20 sm:py-32">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="w-full px-4 sm:px-6 lg:px-8">
           <motion.div
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
@@ -171,7 +171,7 @@ export function LandingPage() {
 
       {/* CTA Section */}
       <section className="bg-gradient-to-r from-red-600 to-blue-600 py-16 sm:py-20">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+        <div className="w-full px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
             Ready to unlock insights from your data?
           </h2>
@@ -189,7 +189,7 @@ export function LandingPage() {
 
       {/* Footer */}
       <footer className="border-t border-slate-200 bg-white py-12">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="w-full px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-10">
             {/* Brand column */}
             <div className="sm:col-span-2 lg:col-span-1">
