@@ -61,8 +61,11 @@ export function DateRangePicker({ onApply, initialFrom, initialTo, className }: 
     setOpen(false)
   }
 
+  // Keep existing design but allow parents to reserve space when the dropdown is open
+  const reserveSpace = open ? "pb-[18.5rem]" : ""
+
   return (
-    <div className={cn("relative", className)}>
+    <div className={cn("relative", reserveSpace, className)}>
       {/* Trigger button */}
       <button
         onClick={() => setOpen((o) => !o)}
@@ -82,7 +85,7 @@ export function DateRangePicker({ onApply, initialFrom, initialTo, className }: 
       {open && (
         <div
           className={cn(
-            "absolute top-full mt-2 z-50",
+            "absolute top-full mt-2 z-[60]",
             "bg-card border border-border rounded-xl shadow-lg",
             "w-72 max-w-[calc(100vw-2rem)]",
             "left-0 sm:left-auto sm:right-0",
@@ -93,7 +96,7 @@ export function DateRangePicker({ onApply, initialFrom, initialTo, className }: 
             {t.custom}
           </p>
 
-          <div className="space-y-3 p-4 max-h-[calc(100vh-8rem)] overflow-auto">
+          <div className="space-y-3 p-4 max-h-[calc(100vh-10rem)] overflow-auto">
             {/* From */}
             <div>
               <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide block mb-1">
@@ -129,7 +132,7 @@ export function DateRangePicker({ onApply, initialFrom, initialTo, className }: 
             )}
 
             {/* Actions */}
-            <div className="sticky bottom-0 -mx-4 -mb-4 mt-4 bg-card p-4 border-t border-border">
+            <div className="sticky bottom-0 -mx-4 -mb-4 mt-4 bg-card p-4 border-t border-border z-[1]">
               <div className="flex gap-2">
                 <button
                   onClick={() => { setOpen(false); setError(null) }}
