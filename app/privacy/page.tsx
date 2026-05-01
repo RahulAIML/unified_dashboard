@@ -1,9 +1,10 @@
 import Link from 'next/link'
 import { ShieldCheck } from 'lucide-react'
+import { APP_NAME } from '@/lib/constants'
 
 export const metadata = {
-  title: 'Privacy Policy · RolPlay Analytics',
-  description: 'How RolPlay Analytics collects, uses, and protects your data.',
+  title: `Privacy Policy · ${APP_NAME} Analytics`,
+  description: `How ${APP_NAME} Analytics collects, uses, and protects your data.`,
 }
 
 export default function PrivacyPage() {
@@ -19,7 +20,7 @@ export default function PrivacyPage() {
             >
               RP
             </div>
-            <span className="font-bold text-lg text-slate-900">RolPlay</span>
+            <span className="font-bold text-lg text-slate-900">{APP_NAME}</span>
           </Link>
           <Link
             href="/auth/login"
@@ -47,7 +48,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-xl font-semibold text-slate-900 mb-3">1. Information We Collect</h2>
             <p className="text-sm leading-relaxed">
-              When you register or use RolPlay Analytics, we collect the following types of information:
+              When you register or use {APP_NAME} Analytics, we collect the following types of information:
             </p>
             <ul className="mt-3 space-y-2 text-sm list-disc list-inside">
               <li><strong>Account information:</strong> your name, email address, and hashed password.</li>
@@ -105,7 +106,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-xl font-semibold text-slate-900 mb-3">5. Third-Party Services</h2>
             <p className="text-sm leading-relaxed">
-              RolPlay Analytics may interact with the following third-party services on your behalf:
+              {APP_NAME} Analytics may interact with the following third-party services on your behalf:
             </p>
             <ul className="mt-3 space-y-2 text-sm list-disc list-inside">
               <li><strong>Second Brain API</strong> (second-brain-shz8.onrender.com) — provides live member and coaching session data for organizations using the Second Brain module.</li>
@@ -145,7 +146,7 @@ export default function PrivacyPage() {
               If you have questions about this Privacy Policy or how we handle your data, please reach out:
             </p>
             <address className="mt-3 not-italic text-sm space-y-1">
-              <p><strong>RolPlay</strong></p>
+              <p><strong>{APP_NAME}</strong></p>
               <p>
                 <a href="mailto:info@rolplay.ai" className="text-red-600 hover:underline">info@rolplay.ai</a>
               </p>
@@ -162,7 +163,7 @@ export default function PrivacyPage() {
       {/* Footer */}
       <footer className="border-t border-slate-200 bg-white py-6">
         <div className="w-full px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-slate-500">
-          <p>© 2026 RolPlay. All rights reserved.</p>
+          <p>© 2026 {APP_NAME}. All rights reserved.</p>
           <div className="flex items-center gap-4">
             <Link href="/" className="hover:text-slate-700 transition-colors">Home</Link>
             <Link href="/auth/login" className="hover:text-slate-700 transition-colors">Sign In</Link>

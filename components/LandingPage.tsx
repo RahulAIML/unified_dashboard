@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { BarChart3, Brain, TrendingUp, FileDown, Palette, Zap } from 'lucide-react'
+import { APP_NAME } from '@/lib/constants'
 
 export function LandingPage() {
   return (
@@ -17,7 +18,7 @@ export function LandingPage() {
             >
               RP
             </div>
-            <span className="font-bold text-lg">RolPlay Analytics</span>
+            <span className="font-bold text-lg">{APP_NAME} Analytics</span>
           </div>
           <div className="flex items-center gap-3">
             <Link
@@ -200,7 +201,7 @@ export function LandingPage() {
                 >
                   RP
                 </div>
-                <span className="font-bold text-slate-900">RolPlay</span>
+                <span className="font-bold text-slate-900">{APP_NAME}</span>
               </div>
               <p className="text-sm text-slate-600 mb-4 leading-relaxed">
                 AI-powered analytics platform for learning & coaching solutions.
@@ -279,7 +280,7 @@ export function LandingPage() {
           </div>
 
           <div className="border-t border-slate-200 pt-8 flex flex-col sm:flex-row justify-between items-center gap-4">
-            <p className="text-sm text-slate-500">© 2026 RolPlay. All rights reserved.</p>
+            <p className="text-sm text-slate-500">© 2026 {APP_NAME}. All rights reserved.</p>
             <div className="flex items-center gap-4">
               <Link href="/privacy" className="text-xs text-slate-400 hover:text-slate-600 transition-colors">Privacy Policy</Link>
               <span className="text-xs text-slate-300">·</span>

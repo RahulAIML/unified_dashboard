@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Eye, EyeOff, AlertCircle } from 'lucide-react'
 import { useAuthContext } from '@/components/AuthProvider'
+import { APP_NAME } from '@/lib/constants'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -80,7 +81,7 @@ export default function LoginPage() {
           >
             RP
           </div>
-          <span className="ml-3 font-bold text-xl text-slate-900">RolPlay</span>
+          <span className="ml-3 font-bold text-xl text-slate-900">{APP_NAME}</span>
         </div>
 
         {/* Card */}
@@ -163,7 +164,7 @@ export default function LoginPage() {
               <div className="w-full border-t border-slate-300" />
             </div>
             <div className="relative flex justify-center text-xs">
-              <span className="px-2 bg-white text-slate-600">New to RolPlay?</span>
+              <span className="px-2 bg-white text-slate-600">New to {APP_NAME}?</span>
             </div>
           </div>
 

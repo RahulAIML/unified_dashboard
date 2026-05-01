@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Eye, EyeOff, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { useAuthContext } from '@/components/AuthProvider'
+import { APP_NAME } from '@/lib/constants'
 
 function PasswordStrength({ password }: { password: string }) {
   const getStrength = () => {
@@ -161,7 +162,7 @@ export default function RegisterPage() {
           >
             RP
           </div>
-          <span className="ml-3 font-bold text-xl text-slate-900">RolPlay</span>
+          <span className="ml-3 font-bold text-xl text-slate-900">{APP_NAME}</span>
         </div>
 
         {/* Card */}
@@ -169,7 +170,7 @@ export default function RegisterPage() {
           <div className="mb-8">
             <h1 className="text-2xl font-bold text-slate-900 mb-2">Create Account</h1>
             <p className="text-sm text-slate-600">
-              Join RolPlay to unlock powerful analytics for your learning platform
+              Join {APP_NAME} to unlock powerful analytics for your learning platform
             </p>
           </div>
 

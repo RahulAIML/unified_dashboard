@@ -51,6 +51,24 @@ export function Sidebar() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
 
+  // Close on Escape + prevent background scroll when open (mobile)
+  useEffect(() => {
+    if (!mobileOpen) return
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileOpen(false)
+    }
+    window.addEventListener("keydown", onKeyDown)
+
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+
+    return () => {
+      window.removeEventListener("keydown", onKeyDown)
+      document.body.style.overflow = prevOverflow
+    }
+  }, [mobileOpen])
+
   const handleLogout = useCallback(async () => {
     if (loggingOut) return
     setLoggingOut(true)
@@ -164,10 +182,10 @@ export function Sidebar() {
 
       {/* Mobile drawer */}
       <motion.aside
-        initial={false}
-        animate={{ x: mobileOpen ? 0 : -256 }}
+        initial={{ x: "-100%" }}
+        animate={{ x: mobileOpen ? 0 : "-100%" }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        className="fixed left-0 top-0 bottom-0 w-64 bg-sidebar border-r border-sidebar-border flex flex-col z-[50] md:hidden"
+        className="fixed left-0 top-0 h-[100vh] w-[80vw] max-w-[300px] bg-sidebar border-r border-sidebar-border flex flex-col z-[50] md:hidden"
       >
         {sidebarContent}
       </motion.aside>
