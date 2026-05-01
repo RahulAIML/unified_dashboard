@@ -152,7 +152,7 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
               {t.refresh}
             </button>
 
-            <div className="flex flex-wrap items-center gap-1 bg-muted rounded-lg p-1 w-full max-w-full sm:w-auto overflow-visible">
+            <div className="flex flex-wrap items-center gap-1 bg-muted rounded-lg p-1 w-full max-w-full sm:w-auto overflow-visible min-h-0">
               <Calendar className="w-3.5 h-3.5 text-muted-foreground ml-1 hidden sm:block" />
 
               {DATE_PRESETS.map(({ label, days }) => (
@@ -160,7 +160,7 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
                   key={days}
                   onClick={() => applyPreset(days)}
                   className={cn(
-                    "px-2 sm:px-3 py-1 rounded-md text-xs font-semibold transition-all whitespace-nowrap",
+                    "px-2 sm:px-3 py-1 rounded-md text-xs font-semibold transition-all whitespace-nowrap leading-none",
                     activeDays === days ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
                   )}
                 >
@@ -168,12 +168,14 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
                 </button>
               ))}
 
-              <DateRangePicker
-                key={`${dateRange.from.getTime()}-${dateRange.to.getTime()}`}
-                onApply={applyCustomRange}
-                initialFrom={dateRange.from}
-                initialTo={dateRange.to}
-              />
+              <div className="ml-auto sm:ml-0">
+                <DateRangePicker
+                  key={`${dateRange.from.getTime()}-${dateRange.to.getTime()}`}
+                  onApply={applyCustomRange}
+                  initialFrom={dateRange.from}
+                  initialTo={dateRange.to}
+                />
+              </div>
             </div>
           </div>
         </div>
