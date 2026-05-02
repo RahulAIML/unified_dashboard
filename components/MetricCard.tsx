@@ -15,12 +15,15 @@ interface Props {
 export function MetricCard({ label, value, unit, icon, hint, className }: Props) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 16 }}
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, ease: "easeOut" }}
+      transition={{ duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
+      whileHover={{ y: -3, transition: { duration: 0.2 } }}
       className={cn(
-        "relative w-full min-h-[120px] overflow-hidden rounded-xl border border-border bg-card shadow-sm",
-        "hover:shadow-md transition-shadow",
+        "relative w-full overflow-hidden rounded-2xl border border-border/60 bg-card",
+        "shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)]",
+        "hover:shadow-[0_10px_15px_-3px_rgba(0,0,0,0.06),0_4px_6px_-4px_rgba(0,0,0,0.04)]",
+        "transition-all duration-200",
         className
       )}
     >
@@ -29,22 +32,33 @@ export function MetricCard({ label, value, unit, icon, hint, className }: Props)
         style={{ background: "linear-gradient(90deg, hsl(var(--primary)), hsl(var(--accent)))" }}
       />
 
-      <div className="relative p-5">
-        <div className="flex items-start justify-between mb-3">
-          <span className="text-xs font-medium text-muted-foreground uppercase tracking-[0.08em]">
+      <div className="p-5 sm:p-6">
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
             {label}
           </span>
-          {icon && <span className="text-muted-foreground/60">{icon}</span>}
+          {icon && (
+            <div 
+              className="w-9 h-9 rounded-xl flex items-center justify-center text-primary"
+              style={{ 
+                background: "linear-gradient(135deg, hsl(var(--primary)/0.12), hsl(var(--accent)/0.08))",
+              }}
+            >
+              {icon}
+            </div>
+          )}
         </div>
 
-        <div className="flex items-end justify-between gap-3">
-          <span className="kpi-value text-[28px] md:text-[32px] leading-none font-bold tracking-tight text-foreground">
+        <div className="flex items-baseline gap-2">
+          <span className="kpi-value text-[32px] sm:text-[36px] leading-none font-bold text-foreground tracking-tight">
             {typeof value === "number" ? value.toLocaleString() : value}
-            {unit && <span className="text-sm md:text-base ml-1 text-muted-foreground font-medium">{unit}</span>}
           </span>
+          {unit && (
+            <span className="text-sm font-medium text-muted-foreground">{unit}</span>
+          )}
         </div>
 
-        {hint && <p className="text-[11px] text-muted-foreground mt-1">{hint}</p>}
+        {hint && <p className="text-xs text-muted-foreground mt-2">{hint}</p>}
       </div>
     </motion.div>
   )

@@ -168,33 +168,33 @@ export function Sidebar() {
   return (
     <>
       {/* Desktop sidebar - hidden on mobile, shown on md+ */}
-      <aside className="hidden md:flex w-64 shrink-0 bg-sidebar border-r border-sidebar-border flex-col">
+      <aside className="hidden md:flex w-64 shrink-0 bg-sidebar border-r border-sidebar-border flex-col z-30">
         {sidebarContent}
       </aside>
 
-      {/* Mobile drawer overlay */}
+      {/* Mobile drawer overlay - higher z-index than content but below drawer */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-[45] md:hidden"
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 md:hidden"
           onClick={() => setMobileOpen(false)}
         />
       )}
 
-      {/* Mobile drawer */}
+      {/* Mobile drawer - highest z-index */}
       <motion.aside
         initial={{ x: "-100%" }}
         animate={{ x: mobileOpen ? 0 : "-100%" }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        className="fixed left-0 top-0 h-[100vh] w-[80vw] max-w-[300px] bg-sidebar border-r border-sidebar-border flex flex-col z-[50] md:hidden"
+        className="fixed left-0 top-0 h-screen w-[85vw] max-w-[320px] bg-sidebar border-r border-sidebar-border flex flex-col z-50 md:hidden shadow-2xl"
       >
         {sidebarContent}
       </motion.aside>
 
-      {/* Mobile header with hamburger — always on top (z-[60]) */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-[60] bg-sidebar border-b border-sidebar-border flex items-center justify-between px-4 h-16">
+      {/* Mobile header with hamburger — fixed on top */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-sidebar/95 backdrop-blur-sm border-b border-sidebar-border flex items-center justify-between px-4 h-16">
         <button
           onClick={() => setMobileOpen(!mobileOpen)}
-          className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors"
+          className="p-2.5 rounded-xl hover:bg-sidebar-accent transition-colors"
           aria-label="Toggle menu"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -202,7 +202,7 @@ export function Sidebar() {
           </svg>
         </button>
         <div className="text-sm font-semibold text-sidebar-foreground">{brand.name}</div>
-        <div className="w-5" /> {/* Spacer for alignment */}
+        <div className="w-9" /> {/* Spacer for alignment */}
       </div>
     </>
   )

@@ -20,10 +20,10 @@ export function LayoutContent({ children }: { children: React.ReactNode }) {
   const showSidebar = !isAuthRoute && !isLoading && isAuthenticated
 
   return (
-    <div className="flex h-full min-h-screen">
+    <div className="flex h-full min-h-screen overflow-hidden">
       {showSidebar && <Sidebar />}
-      <div className="flex-1 flex flex-col bg-muted/30 overflow-x-hidden overflow-y-auto md:pt-0 pt-16">
-        <main className="flex-1 pb-6 md:pb-10">
+      <div className="flex-1 flex flex-col bg-muted/30 overflow-x-hidden overflow-y-auto md:pt-0 pt-16 relative z-0">
+        <main className="flex-1 pb-6 md:pb-10 w-full">
           {children}
         </main>
       </div>

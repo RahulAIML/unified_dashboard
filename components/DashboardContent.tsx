@@ -61,13 +61,54 @@ const kpiIcons = [
 // ── Skeleton shimmer ──────────────────────────────────────────────────────────
 function KpiSkeleton() {
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
+    <div className="rounded-2xl border border-border/60 bg-card overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)]">
       <div className="h-[3px] bg-primary" />
-      <div className="p-5 space-y-3 animate-pulse">
-        <div className="h-3 w-24 rounded bg-muted" />
-        <div className="h-8 w-20 rounded bg-muted" />
-        <div className="h-2.5 w-16 rounded bg-muted" />
+      <div className="p-5 sm:p-6 space-y-4 animate-pulse">
+        <div className="flex items-center justify-between">
+          <div className="h-3 w-24 rounded bg-muted" />
+          <div className="w-9 h-9 rounded-xl bg-muted" />
+        </div>
+        <div className="h-9 w-28 rounded bg-muted" />
+        <div className="flex items-center gap-2">
+          <div className="h-6 w-16 rounded-lg bg-muted" />
+          <div className="h-3 w-12 rounded bg-muted/50" />
+        </div>
       </div>
+    </div>
+  )
+}
+
+// ── Chart skeleton ────────────────────────────────────────────────────────────
+function ChartSkeleton() {
+  return (
+    <div className="h-72 sm:h-80 animate-pulse">
+      <div className="h-full bg-muted/50 rounded-xl" />
+    </div>
+  )
+}
+
+// ── Table skeleton ─────────────────────────────────────────────────────────────
+function TableSkeleton({ rows = 5 }: { rows?: number }) {
+  return (
+    <div className="space-y-3 animate-pulse">
+      {/* Header */}
+      <div className="flex gap-3 pb-3 border-b border-border/50">
+        <div className="h-4 w-20 rounded bg-muted" />
+        <div className="h-4 w-24 rounded bg-muted" />
+        <div className="h-4 w-20 rounded bg-muted" />
+        <div className="h-4 w-16 rounded bg-muted" />
+        <div className="h-4 w-24 rounded bg-muted" />
+      </div>
+      {/* Rows */}
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="flex gap-3 py-3">
+          <div className="h-4 w-20 rounded bg-muted/70" />
+          <div className="h-4 w-24 rounded bg-muted/70" />
+          <div className="h-4 w-20 rounded bg-muted/70" />
+          <div className="h-4 w-16 rounded bg-muted/70" />
+          <div className="h-4 w-24 rounded bg-muted/70" />
+        </div>
+      ))}
     </div>
   )
 }
@@ -365,7 +406,7 @@ export function DashboardContent() {
         showModuleFilter
       />
 
-      <div className="w-full px-3 sm:px-4 md:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
+      <div className="w-full px-4 sm:px-6 lg:px-8 py-5 sm:py-8 space-y-6 sm:space-y-8 max-w-[1600px] mx-auto">
 
         {/* Active solution badge */}
         <AnimatePresence>
@@ -425,15 +466,15 @@ export function DashboardContent() {
                   )}
             </div>
 
-            <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
-              <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="rounded-2xl border border-border/60 bg-card p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)] hover:shadow-[0_10px_15px_-3px_rgba(0,0,0,0.06),0_4px_6px_-4px_rgba(0,0,0,0.04)] transition-all duration-200">
+              <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div>
-                  <h3 className="text-sm font-semibold">{t.sbTitle}</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">{t.sbSub}</p>
+                  <h3 className="text-base sm:text-lg font-semibold">{t.sbTitle}</h3>
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-1">{t.sbSub}</p>
                 </div>
                 <Link
                   href="/second-brain"
-                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold border border-border bg-muted hover:bg-muted/70 transition-colors"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold border border-border/60 bg-muted/60 hover:bg-muted transition-all duration-200"
                 >
                   {t.navSecondBrain}
                 </Link>
@@ -443,14 +484,24 @@ export function DashboardContent() {
         ) : (
           <>
         {/* KPI export row */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:justify-end flex-wrap">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:justify-end">
           <button
             onClick={() => exportAllSolutions()}
             disabled={exportLoading}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-transparent bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.99] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed shadow-[0_1px_3px_rgba(0,0,0,0.1)]"
             title={exportAllLabel}
           >
-            {exportLoading ? exportingLabel : `📊 ${exportAllLabel}`}
+            {exportLoading ? (
+              <>
+                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                {exportingLabel}
+              </>
+            ) : (
+              <>
+                <BarChart2 className="w-4 h-4" />
+                {exportAllLabel}
+              </>
+            )}
           </button>
           <ExportButton
             data={kpiExportRows}
@@ -474,7 +525,8 @@ export function DashboardContent() {
             ]}
           />
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {/* KPI Cards - Top Row */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
           {isLoading
             ? Array.from({ length: 4 }).map((_, i) => <KpiSkeleton key={i} />)
             : kpiCards.length > 0
@@ -489,10 +541,10 @@ export function DashboardContent() {
               : Array.from({ length: 4 }).map((_, i) => (
                   <div
                     key={i}
-                    className="rounded-xl border border-border bg-card shadow-sm overflow-hidden"
+                    className="rounded-2xl border border-border/60 bg-card overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)]"
                   >
                     <div className="h-[3px] bg-primary" />
-                    <div className="p-5 text-center text-sm text-muted-foreground py-8">
+                    <div className="p-5 sm:p-6 text-center text-sm text-muted-foreground py-10">
                       {t.noDataAvailable}
                     </div>
                   </div>
@@ -500,15 +552,15 @@ export function DashboardContent() {
           }
         </div>
 
-        {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Main Charts Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 sm:gap-6">
           <ChartCard
             title={t.activityTrend}
             subtitle={`${t.evalCountSub} — ${t.last} ${days} ${t.days}`}
             className="lg:col-span-2"
           >
             {shimmer || trendsLoading
-              ? <div className="h-48 animate-pulse rounded-lg bg-muted" />
+              ? <ChartSkeleton />
               : activityData.length > 0
                 ? <ActivityLineChart data={activityData} label="Evaluations" color={brand.chartColors[0]} />
                 : <EmptyState />
@@ -519,7 +571,7 @@ export function DashboardContent() {
             subtitle={`${t.moduleDistSub} — ${days}d`}
           >
             {shimmer || ucLoading
-              ? <div className="h-48 animate-pulse rounded-lg bg-muted" />
+              ? <ChartSkeleton />
               : donutData.length > 0
                 ? <DonutChart data={donutData} />
                 : <EmptyState />
@@ -527,12 +579,13 @@ export function DashboardContent() {
           </ChartCard>
         </div>
 
+        {/* Module Breakdown */}
         <ChartCard
           title={t.sessionsByModule}
           subtitle={`${t.sessionsByModuleSub} — ${t.last} ${days} ${t.days}`}
         >
           {shimmer || ucLoading
-            ? <div className="h-48 animate-pulse rounded-lg bg-muted" />
+            ? <ChartSkeleton />
             : moduleBreakdownData.length > 0
               ? <ModuleBarChart data={moduleBreakdownData} sessionsColor={brand.chartColors[0]} passedColor={brand.chartColors[1]} />
               : <EmptyState />
@@ -541,26 +594,31 @@ export function DashboardContent() {
 
         {/* Best Performers section — shown when data exists */}
         {(bestLoading || (bestPerformers?.data?.length ?? 0) > 0) && (
-          <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
-            <div className="mb-4">
-              <h3 className="text-sm font-semibold flex items-center gap-2">
-                <Trophy className="w-4 h-4 text-primary" />
+          <div className="rounded-2xl border border-border/60 bg-card p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)] hover:shadow-[0_10px_15px_-3px_rgba(0,0,0,0.06),0_4px_6px_-4px_rgba(0,0,0,0.04)] transition-all duration-200">
+            <div className="mb-5">
+              <h3 className="text-base sm:text-lg font-semibold flex items-center gap-2">
+                <div 
+                  className="w-8 h-8 rounded-xl flex items-center justify-center"
+                  style={{ background: "linear-gradient(135deg, hsl(var(--primary)/0.12), hsl(var(--accent)/0.08))" }}
+                >
+                  <Trophy className="w-4 h-4 text-primary" />
+                </div>
                 {t.bestPerformers}
               </h3>
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <p className="text-xs sm:text-sm text-muted-foreground mt-1.5 ml-10">
                 {t.bestPerformersSub} — {t.last} {days} {t.days}
               </p>
             </div>
             {bestLoading ? (
               <div className="space-y-3">
                 {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 animate-pulse">
-                    <div className="w-8 h-8 rounded-full bg-muted shrink-0" />
-                    <div className="flex-1 space-y-1.5">
-                      <div className="h-3 w-32 rounded bg-muted" />
-                      <div className="h-2.5 w-24 rounded bg-muted" />
+                  <div key={i} className="flex items-center gap-3 p-4 rounded-xl bg-muted/40 animate-pulse">
+                    <div className="w-9 h-9 rounded-full bg-muted shrink-0" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-3.5 w-36 rounded bg-muted" />
+                      <div className="h-3 w-28 rounded bg-muted/70" />
                     </div>
-                    <div className="w-16 h-6 rounded bg-muted" />
+                    <div className="w-20 h-7 rounded-lg bg-muted" />
                   </div>
                 ))}
               </div>
@@ -577,23 +635,23 @@ export function DashboardContent() {
                   return (
                     <div
                       key={`${performer.user_email}-${idx}`}
-                      className="flex items-center justify-between p-3 rounded-lg bg-muted/40 hover:bg-muted/60 transition-colors gap-2"
+                      className="flex items-center justify-between p-3 sm:p-4 rounded-xl bg-muted/30 hover:bg-muted/50 transition-all duration-200 gap-3"
                     >
                       {/* Rank + Name */}
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
                         <div
                           className={cn(
-                            "flex items-center justify-center w-7 h-7 rounded-full font-bold text-xs shrink-0",
-                            idx === 0 ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-400"
-                            : idx === 1 ? "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
-                            : idx === 2 ? "bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-400"
+                            "flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-xl font-bold text-xs sm:text-sm shrink-0",
+                            idx === 0 ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 shadow-sm"
+                            : idx === 1 ? "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300 shadow-sm"
+                            : idx === 2 ? "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400 shadow-sm"
                             : "bg-primary/10 text-primary"
                           )}
                         >
                           {idx + 1}
                         </div>
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-foreground truncate">{displayName}</p>
+                          <p className="text-sm sm:text-base font-semibold text-foreground truncate">{displayName}</p>
                           {displayName !== performer.user_email && (
                             <p className="text-xs text-muted-foreground truncate">{performer.user_email}</p>
                           )}
@@ -601,18 +659,18 @@ export function DashboardContent() {
                       </div>
 
                       {/* Stats */}
-                      <div className="flex items-center gap-3 sm:gap-5 text-right shrink-0">
+                      <div className="flex items-center gap-3 sm:gap-6 text-right shrink-0">
                         <div className="hidden sm:block">
-                          <p className="text-xs text-muted-foreground">{t.colSessions}</p>
-                          <p className="text-sm font-semibold text-foreground tabular-nums">{Number(performer.sessions)}</p>
+                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">{t.colSessions}</p>
+                          <p className="text-sm font-bold text-foreground tabular-nums">{Number(performer.sessions)}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-muted-foreground">{t.avgSessionScore}</p>
-                          <p className="text-sm font-semibold text-foreground tabular-nums">{avgScoreDisplay} pts</p>
+                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">{t.avgSessionScore}</p>
+                          <p className="text-sm font-bold text-foreground tabular-nums">{avgScoreDisplay} <span className="text-xs font-normal text-muted-foreground">pts</span></p>
                         </div>
                         <div>
-                          <p className="text-xs text-muted-foreground">{t.passRate}</p>
-                          <p className="text-sm font-semibold text-primary tabular-nums">{passRateDisplay}%</p>
+                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">{t.passRate}</p>
+                          <p className="text-sm font-bold text-primary tabular-nums">{passRateDisplay}%</p>
                         </div>
                       </div>
                     </div>
@@ -624,23 +682,31 @@ export function DashboardContent() {
         )}
 
         {/* Recent evaluations table */}
-        <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
-          <div className="mb-4">
-            <h3 className="text-sm font-semibold">{t.evaluationResults}</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {resultsLoading
-                ? t.loading
-                : `${results?.data?.length ?? 0} ${t.evaluationsSub} ${days} ${t.days}`}
-              <span className="ml-2 text-[10px] font-medium bg-primary/10 text-primary px-1.5 py-0.5 rounded">
-                {t.liveLabel}
-              </span>
-            </p>
+        <div className="rounded-2xl border border-border/60 bg-card p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)] hover:shadow-[0_10px_15px_-3px_rgba(0,0,0,0.06),0_4px_6px_-4px_rgba(0,0,0,0.04)] transition-all duration-200">
+          <div className="mb-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <h3 className="text-base sm:text-lg font-semibold">{t.evaluationResults}</h3>
+              <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+                {resultsLoading
+                  ? t.loading
+                  : `${results?.data?.length ?? 0} ${t.evaluationsSub} ${days} ${t.days}`}
+              </p>
+            </div>
+            <span className="inline-flex items-center gap-1.5 self-start sm:self-auto text-[11px] font-semibold bg-primary/10 text-primary px-3 py-1.5 rounded-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+              {t.liveLabel}
+            </span>
           </div>
           {resultsLoading
-            ? <div className="py-10 text-center text-sm text-muted-foreground">{t.loading}</div>
+            ? <TableSkeleton rows={5} />
             : results?.data?.length
               ? <DataTable data={results.data} columns={evalColumns} pageSize={10} />
-              : <div className="py-10 text-center text-sm text-muted-foreground">{t.noDataAvailable}</div>
+              : <div className="py-12 text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-muted/50 flex items-center justify-center mx-auto mb-4">
+                    <BarChart2 className="w-8 h-8 text-muted-foreground/50" />
+                  </div>
+                  <p className="text-sm text-muted-foreground">{t.noDataAvailable}</p>
+                </div>
           }
         </div>
           </>
