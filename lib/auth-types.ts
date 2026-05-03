@@ -16,3 +16,12 @@ export interface JwtClaims {
   exp: number
 }
 
+export interface AccessStatus {
+  /** User has DB records (coach_app) */
+  hasCoachData: boolean
+  /** User has Second Brain API records */
+  hasSecondBrainData: boolean
+  /** Overall: user has access to at least one module */
+  hasAnyAccess: boolean
+}
+

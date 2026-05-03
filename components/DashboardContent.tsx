@@ -1,6 +1,7 @@
 "use client"
 
-import { useMemo, useEffect, useReducer, useRef } from "react"
+import { useMemo, useEffect, useReducer, useRef, useState } from "react"
+import { useParams, useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import { Target, PlayCircle, TrendingUp, BadgeCheck, BarChart2, AlertTriangle, Trophy, MessageSquare, Users, Search, FileText } from "lucide-react"
 import { DashboardHeader }    from "@/components/DashboardHeader"
@@ -20,6 +21,7 @@ import { calcDeltaPct, estimatePassedSessions } from "@/lib/kpi-builder"
 import { cn }                 from "@/lib/utils"
 import { csvFilename } from "@/lib/csv-export"
 import { useClientBrand } from "@/lib/hooks/useClientBrand"
+import { getAccessStatus, type AccessStatus } from "@/lib/multi-source-auth"
 import Link from "next/link"
 import { useAuthContext } from "@/components/AuthProvider"
 import type {
@@ -148,6 +150,35 @@ export function DashboardContent() {
   const { user }    = useAuthContext()
   const { exportAllSolutions, loading: exportLoading } = useCombinedExport()
 
+  // ── Multi-source access check ─────────────────────────────────────────────
+  const [accessStatus, setAccessStatus] = useState<AccessStatus | null>(null)
+  const [accessLoading, setAccessLoading] = useState(true)
+
+  useEffect(() => {
+    const checkAccess = async () => {
+      if (!user) {
+        setAccessStatus(null)
+        setAccessLoading(false)
+        return
+      }
+      try {
+        const status = await getAccessStatus(user.customer_id, user.email)
+        setAccessStatus(status)
+      } catch (err) {
+        console.error('Failed to check access status:', err)
+        // Default to checking DB only on error
+        setAccessStatus({
+          hasCoachData: user.customer_id > 0,
+          hasSecondBrainData: false,
+          hasAnyAccess: user.customer_id > 0,
+        })
+      } finally {
+        setAccessLoading(false)
+      }
+    }
+    checkAccess()
+  }, [user])
+
   const isSecondBrain = selectedSolution === "second-brain"
 
   // Shimmer for 400 ms on solution/date change
@@ -166,26 +197,84 @@ export function DashboardContent() {
     (dateRange.to.getTime() - dateRange.from.getTime()) / 86_400_000
   )
 
-  // ── Not linked to organization ────────────────────────────────────────────
-  if (user !== null && user.customer_id === 0) {
+  // ── Access check: show appropriate message if needed ──────────────────────
+  if (user !== null && accessStatus !== null && !accessLoading) {
+    // User has no access to any module
+    if (!accessStatus.hasAnyAccess) {
+      return (
+        <div className="min-h-screen w-full">
+          <DashboardHeader title={t.overviewTitle} subtitle={t.overviewSub} showModuleFilter />
+          <div className="flex flex-col items-center justify-center min-h-[60vh] px-6 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mb-6">
+              <BarChart2 className="w-8 h-8 text-muted-foreground" />
+            </div>
+            <h2 className="text-xl font-bold text-foreground mb-3">{t.notLinkedToOrg}</h2>
+            <p className="text-sm text-muted-foreground max-w-md mb-6">{t.notLinkedToOrgSub}</p>
+            <a
+              href="mailto:info@rolplay.ai"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+            >
+              {t.notLinkedContact}
+            </a>
+            <p className="mt-4 text-xs text-muted-foreground">
+              {user.email}
+            </p>
+          </div>
+        </div>
+      )
+    }
+
+    // User has partial access but trying to access a module they don't have
+    const isCoachModule = selectedSolution && ["lms", "coach", "simulator", "certification"].includes(selectedSolution)
+    if (isCoachModule && !accessStatus.hasCoachData) {
+      return (
+        <div className="min-h-screen w-full">
+          <DashboardHeader title={t.overviewTitle} subtitle={t.overviewSub} showModuleFilter />
+          <div className="flex flex-col items-center justify-center min-h-[60vh] px-6 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-amber-100 flex items-center justify-center mb-6">
+              <AlertTriangle className="w-8 h-8 text-amber-600" />
+            </div>
+            <h2 className="text-xl font-bold text-foreground mb-3">{t.partialAccessTitle}</h2>
+            <p className="text-sm text-muted-foreground max-w-md mb-6">{t.partialAccessSub}</p>
+            {accessStatus.hasSecondBrainData && (
+              <Link href="?solution=second-brain" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
+                Go to Second Brain
+              </Link>
+            )}
+          </div>
+        </div>
+      )
+    }
+
+    if (isSecondBrain && !accessStatus.hasSecondBrainData) {
+      return (
+        <div className="min-h-screen w-full">
+          <DashboardHeader title={t.overviewTitle} subtitle={t.overviewSub} showModuleFilter />
+          <div className="flex flex-col items-center justify-center min-h-[60vh] px-6 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-amber-100 flex items-center justify-center mb-6">
+              <AlertTriangle className="w-8 h-8 text-amber-600" />
+            </div>
+            <h2 className="text-xl font-bold text-foreground mb-3">{t.moduleNotAvailable}</h2>
+            <p className="text-sm text-muted-foreground max-w-md mb-6">{t.partialAccessSub}</p>
+            {accessStatus.hasCoachData && (
+              <Link href="?solution=lms" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
+                Go to LMS
+              </Link>
+            )}
+          </div>
+        </div>
+      )
+    }
+  }
+
+  // Show loading state while checking access
+  if (user !== null && accessLoading) {
     return (
       <div className="min-h-screen w-full">
         <DashboardHeader title={t.overviewTitle} subtitle={t.overviewSub} showModuleFilter />
-        <div className="flex flex-col items-center justify-center min-h-[60vh] px-6 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mb-6">
-            <BarChart2 className="w-8 h-8 text-muted-foreground" />
-          </div>
-          <h2 className="text-xl font-bold text-foreground mb-3">{t.notLinkedToOrg}</h2>
-          <p className="text-sm text-muted-foreground max-w-md mb-6">{t.notLinkedToOrgSub}</p>
-          <a
-            href="mailto:info@rolplay.ai"
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-          >
-            {t.notLinkedContact}
-          </a>
-          <p className="mt-4 text-xs text-muted-foreground">
-            {user.email}
-          </p>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] px-6">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
+          <p className="mt-4 text-sm text-muted-foreground">Loading access information...</p>
         </div>
       </div>
     )

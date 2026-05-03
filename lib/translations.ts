@@ -218,9 +218,14 @@ export const translations = {
     noDataAvailable:  'No data available',
 
     // ── Not linked to org ─────────────────────────────────────
-    notLinkedToOrg:    "You're not linked to any organization yet",
-    notLinkedToOrgSub: 'Contact your administrator to get access to your company\'s analytics data.',
-    notLinkedContact:  'Contact Administrator',
+    notLinkedToOrg:       "You're not linked to any organization yet",
+    notLinkedToOrgSub:    'Contact your administrator to get access to your company\'s analytics data.',
+    notLinkedContact:     'Contact Administrator',
+    
+    // ── Partial Access ────────────────────────────────────────
+    partialAccessTitle:   'Some modules are unavailable',
+    partialAccessSub:     'Your account has access to some features, but not all modules. Contact your administrator for full access.',
+    moduleNotAvailable:   'This module is not available for your account',
 
     // ── Best Performers ──────────────────────────────────────
     bestPerformers:    'Best Performers',
@@ -473,9 +478,14 @@ export const translations = {
     noDataAvailable:  'Sin datos disponibles',
 
     // ── Not linked to org ─────────────────────────────────────
-    notLinkedToOrg:    'Aún no estás vinculado a ninguna organización',
-    notLinkedToOrgSub: 'Contacta a tu administrador para obtener acceso a los datos analíticos de tu empresa.',
-    notLinkedContact:  'Contactar Administrador',
+    notLinkedToOrg:       'Aún no estás vinculado a ninguna organización',
+    notLinkedToOrgSub:    'Contacta a tu administrador para obtener acceso a los datos analíticos de tu empresa.',
+    notLinkedContact:     'Contactar Administrador',
+    
+    // ── Partial Access ────────────────────────────────────────
+    partialAccessTitle:   'Algunos módulos no están disponibles',
+    partialAccessSub:     'Tu cuenta tiene acceso a algunas funciones, pero no todos los módulos. Contacta a tu administrador para obtener acceso completo.',
+    moduleNotAvailable:   'Este módulo no está disponible para tu cuenta',
 
     // ── Best Performers ──────────────────────────────────────
     bestPerformers:    'Mejores Participantes',
