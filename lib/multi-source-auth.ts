@@ -7,7 +7,7 @@
  * - Users with neither get a helpful message, not a hard block
  */
 
-import { fetchSecondBrainProfile } from './second-brain-api'
+import { fetchSecondBrainProfile, fetchSecondBrainProfileByOrgName } from './second-brain-api'
 
 export interface AccessStatus {
   /** User has DB records (coach_app) */
@@ -16,6 +16,15 @@ export interface AccessStatus {
   hasSecondBrainData: boolean
   /** Overall: user has access to at least one module */
   hasAnyAccess: boolean
+}
+
+/**
+ * Extract organization name from email
+ * e.g. "admin@salinas.com" -> "salinas"
+ */
+function extractOrgNameFromEmail(email: string): string | null {
+  const match = email.match(/@([^.]+)\./)
+  return match ? match[1] : null
 }
 
 /**
@@ -32,11 +41,29 @@ export async function getAccessStatus(
 
   let hasSecondBrainData = false
   try {
-    // Try to fetch Second Brain profile using email
-    const profile = await fetchSecondBrainProfile(email)
+    // Try to fetch Second Brain profile using email first
+    console.log(`[Multi-source Auth] Checking Second Brain for email: ${email}`)
+    let profile = await fetchSecondBrainProfile(email)
+    
+    // If email lookup fails, try organization name extracted from email
+    if (!profile) {
+      const orgName = extractOrgNameFromEmail(email)
+      if (orgName) {
+        console.log(`[Multi-source Auth] Email lookup failed, trying org name: ${orgName}`)
+        profile = await fetchSecondBrainProfileByOrgName(orgName)
+      }
+    }
+    
     hasSecondBrainData = profile !== null
-  } catch {
+    
+    if (hasSecondBrainData) {
+      console.log(`[Multi-source Auth] Second Brain access confirmed for ${email}`)
+    } else {
+      console.log(`[Multi-source Auth] No Second Brain access for ${email}`)
+    }
+  } catch (err) {
     // API error or not configured — assume no access
+    console.error(`[Multi-source Auth] Error checking Second Brain:`, err)
     hasSecondBrainData = false
   }
 

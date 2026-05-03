@@ -61,37 +61,110 @@ function requireConfig() {
 export async function fetchSecondBrainProfile(adminEmail: string): Promise<SecondBrainProfile | null> {
   const { url, token } = requireConfig()
 
-  const queryUrl = `${url}/organizations/full-profile?admin_email=${encodeURIComponent(adminEmail)}`
+  // Try multiple query parameter formats for compatibility
+  const queryUrls = [
+    `${url}/organizations/full-profile?admin_email=${encodeURIComponent(adminEmail)}`,
+    `${url}/organizations/full-profile?email=${encodeURIComponent(adminEmail)}`,
+  ]
 
-  try {
-    const res = await fetch(queryUrl, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json',
-      },
-      cache: 'no-store',
-      signal: AbortSignal.timeout(15_000),
-    })
+  for (const queryUrl of queryUrls) {
+    try {
+      console.log(`[Second Brain API] Attempting fetch from: ${queryUrl.split('?')[0]}`)
+      
+      const res = await fetch(queryUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+        },
+        cache: 'no-store',
+        signal: AbortSignal.timeout(15_000),
+      })
 
-    if (!res.ok) {
-      if (res.status === 404) return null
-      throw new Error(`Second Brain API HTTP ${res.status}`)
+      if (res.ok) {
+        const json = (await res.json()) as RawSecondBrainResponse
+        console.log(`[Second Brain API] Success for email: ${adminEmail}`)
+        
+        return {
+          organization_name: json.organization_name || 'Unknown',
+          admin_email: json.admin_email || adminEmail,
+          members: Array.isArray(json.members) ? json.members : [],
+          message_logs: json.message_logs || {},
+          stats: json.stats || {},
+        }
+      }
+
+      if (res.status === 404) {
+        console.log(`[Second Brain API] Not found (404) for email: ${adminEmail}`)
+        continue
+      }
+
+      console.log(`[Second Brain API] HTTP ${res.status} for email: ${adminEmail}`)
+      continue
+    } catch (err) {
+      console.error(`[Second Brain API] Error with query URL:`, err)
+      continue
     }
-
-    const json = (await res.json()) as RawSecondBrainResponse
-
-    return {
-      organization_name: json.organization_name || 'Unknown',
-      admin_email: json.admin_email || adminEmail,
-      members: Array.isArray(json.members) ? json.members : [],
-      message_logs: json.message_logs || {},
-      stats: json.stats || {},
-    }
-  } catch (err) {
-    console.error('Second Brain API error:', err)
-    return null
   }
+
+  return null
+}
+
+/**
+ * Fetch Second Brain profile by organization name
+ * Alternative method when email lookup fails
+ */
+export async function fetchSecondBrainProfileByOrgName(orgName: string): Promise<SecondBrainProfile | null> {
+  const { url, token } = requireConfig()
+
+  // Try multiple query parameter formats
+  const queryUrls = [
+    `${url}/organizations/full-profile?organization_name=${encodeURIComponent(orgName)}`,
+    `${url}/organizations/full-profile?org_name=${encodeURIComponent(orgName)}`,
+    `${url}/organizations/${encodeURIComponent(orgName)}`,
+  ]
+
+  for (const queryUrl of queryUrls) {
+    try {
+      console.log(`[Second Brain API] Attempting org lookup: ${queryUrl.split('?')[0]}`)
+      
+      const res = await fetch(queryUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+        },
+        cache: 'no-store',
+        signal: AbortSignal.timeout(15_000),
+      })
+
+      if (res.ok) {
+        const json = (await res.json()) as RawSecondBrainResponse
+        console.log(`[Second Brain API] Success for org: ${orgName}`)
+        
+        return {
+          organization_name: json.organization_name || orgName,
+          admin_email: json.admin_email || 'unknown@example.com',
+          members: Array.isArray(json.members) ? json.members : [],
+          message_logs: json.message_logs || {},
+          stats: json.stats || {},
+        }
+      }
+
+      if (res.status === 404) {
+        console.log(`[Second Brain API] Not found (404) for org: ${orgName}`)
+        continue
+      }
+
+      console.log(`[Second Brain API] HTTP ${res.status} for org: ${orgName}`)
+      continue
+    } catch (err) {
+      console.error(`[Second Brain API] Error fetching org:`, err)
+      continue
+    }
+  }
+
+  return null
 }
 
 /**
