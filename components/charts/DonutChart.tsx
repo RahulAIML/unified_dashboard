@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState } from "react"
 import { motion } from "framer-motion"
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts"
 
@@ -48,15 +48,15 @@ function CustomTooltip({ active, payload }: { active?: boolean; payload?: DonutT
 function CustomLegend({ payload }: { payload?: Array<{ value?: string; color?: string }> }) {
   if (!payload?.length) return null
   return (
-    <div className="flex flex-wrap gap-x-4 gap-y-2 justify-center lg:flex-col lg:items-start lg:gap-y-2.5 pt-2 lg:pt-0">
+    <div className="flex flex-wrap gap-x-6 gap-y-3 justify-center">
       {payload.map((entry, i) => (
-        <div key={i} className="flex items-center gap-2 min-w-0">
+        <div key={i} className="flex items-center gap-2">
           <span
             className="w-2.5 h-2.5 rounded-full shrink-0"
             style={{ backgroundColor: entry.color }}
           />
-          <span className="text-xs text-muted-foreground truncate max-w-[130px] sm:max-w-[150px]" title={entry.value}>
-            {truncateLabel(entry.value ?? "")}
+          <span className="text-xs text-muted-foreground break-words max-w-xs" title={entry.value}>
+            {entry.value}
           </span>
         </div>
       ))}
@@ -67,18 +67,6 @@ function CustomLegend({ payload }: { payload?: Array<{ value?: string; color?: s
 export function DonutChart({ data }: { data: Segment[] }) {
   const total = data.reduce((sum, item) => sum + item.value, 0)
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
-
-  // STEP 4: Dynamic mobile detection for responsive radius adjustment
-  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768)
-
-  // STEP 3: Use fixed pixel values instead of percentages for safer rendering
-  // Mobile: 70px outer, 35px inner | Desktop: 80px outer, 40px inner
-  const chartRadius = useMemo(() => {
-    if (typeof window === 'undefined') return { outer: 80, inner: 40 }
-    return window.innerWidth < 768
-      ? { outer: 70, inner: 35 }
-      : { outer: 80, inner: 40 }
-  }, [isMobile])
 
   // Truncate names for the chart data to prevent overflow
   const chartData = data.map(d => ({
@@ -94,16 +82,16 @@ export function DonutChart({ data }: { data: Segment[] }) {
       transition={{ duration: 0.5, ease: [0.25, 0.1, 0.25, 1] }}
       className="w-full overflow-visible"
     >
-      {/* STEP 1: Parent container with proper flex, width, and overflow-visible */}
-      <div className="flex flex-col lg:flex-row items-center lg:items-stretch justify-center gap-3 sm:gap-4 lg:gap-8 w-full overflow-visible">
+      {/* Main container: chart stacked above legend */}
+      <div className="flex flex-col items-center justify-center gap-6 w-full overflow-visible">
 
-        {/* Chart container with padding wrapper (STEP 7) */}
-        <div className="flex flex-col items-center justify-center flex-shrink-0 w-full lg:w-auto px-4">
-          {/* STEP 7: 16px padding wrapper to prevent edge cutting */}
-          <div className="relative w-[240px] h-[240px] sm:w-[280px] sm:h-[280px] lg:w-[300px] lg:h-[300px]">
-            {/* STEP 2: ResponsiveContainer with explicit width/height and overflow-visible */}
+        {/* Chart container - centered, properly sized */}
+        <div className="flex flex-col items-center justify-center flex-shrink-0 w-full">
+          {/* Padding wrapper to prevent edge cutting */}
+          <div className="relative w-[260px] h-[260px] sm:w-[300px] sm:h-[300px] lg:w-[340px] lg:h-[340px] px-4">
+            {/* ResponsiveContainer with explicit dimensions */}
             <ResponsiveContainer width="100%" height="100%">
-              <PieChart margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
+              <PieChart margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
                 <defs>
                   <filter id="innerShadow">
                     <feGaussianBlur in="SourceAlpha" stdDeviation="3" result="blur" />
@@ -113,13 +101,13 @@ export function DonutChart({ data }: { data: Segment[] }) {
                     <feComposite in2="SourceGraphic" operator="in" />
                   </filter>
                 </defs>
-                {/* STEP 3 & 5: Use fixed pixel radius values and disable default labels */}
+                {/* Use percentage-based radii with safety margins - fills container properly */}
                 <Pie
                   data={chartData}
                   cx="50%"
                   cy="50%"
-                  innerRadius={chartRadius.inner}
-                  outerRadius={chartRadius.outer}
+                  innerRadius="50%"
+                  outerRadius="75%"
                   paddingAngle={2}
                   dataKey="value"
                   strokeWidth={0}
@@ -149,15 +137,15 @@ export function DonutChart({ data }: { data: Segment[] }) {
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="text-center">
                 <p className="text-[10px] sm:text-xs text-muted-foreground font-medium uppercase tracking-wide">Total</p>
-                <p className="text-2xl sm:text-3xl font-bold text-foreground">{total.toLocaleString()}</p>
+                <p className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground">{total.toLocaleString()}</p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Legend: centered below chart on all sizes */}
-        <div className="w-full lg:w-auto lg:flex-shrink-0 flex justify-center lg:justify-start px-4">
-          <div className="max-w-full lg:max-w-xs">
+        {/* Legend: below chart, full width, text can wrap properly */}
+        <div className="w-full flex justify-center px-4 sm:px-6">
+          <div className="max-w-2xl w-full">
             <CustomLegend payload={chartData.map((d, i) => ({
               value: d.fullName ?? d.name,
               color: d.color ?? PALETTE[i % PALETTE.length],
