@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils"
 import { useTheme } from "./ThemeProvider"
 import { useT } from "@/lib/lang-store"
 import { useClientBrand } from "@/lib/hooks/useClientBrand"
+import { usePlatformName } from "@/lib/hooks/usePlatformName"
 import { useAuthContext } from "./AuthProvider"
 
 function LogoImage() {
@@ -53,6 +54,7 @@ export function Sidebar() {
   const { theme, toggle } = useTheme()
   const t     = useT()
   const brand = useClientBrand()
+  const { platformName } = usePlatformName()
   const { clearAuth } = useAuthContext()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
@@ -116,8 +118,8 @@ export function Sidebar() {
         <LogoImage />
 
         <div className="min-w-0">
-          <p className="text-sm font-extrabold tracking-tight leading-tight truncate text-sidebar-foreground">
-            {brand.name}
+          <p className="text-sm font-extrabold tracking-tight leading-tight truncate text-sidebar-foreground" title={platformName}>
+            {platformName}
           </p>
           <p className="text-[10px] text-sidebar-foreground/50 leading-tight">Analytics Dashboard</p>
         </div>

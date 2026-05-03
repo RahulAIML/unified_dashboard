@@ -4,6 +4,7 @@ import { useRef, useState, useEffect, useCallback } from 'react'
 import { Upload, RotateCcw, Check, Save, Palette, ChevronDown, ChevronUp, Sparkles } from 'lucide-react'
 import { DashboardHeader } from '@/components/DashboardHeader'
 import { useClientBrand } from '@/lib/hooks/useClientBrand'
+import { usePlatformName } from '@/lib/hooks/usePlatformName'
 import { cn } from '@/lib/utils'
 import { DEFAULT_BRANDING_SETTINGS, type BrandingSettings } from '@/lib/branding'
 
@@ -94,10 +95,11 @@ function useDebounced<T>(value: T, delay: number): T {
 export default function SettingsPage() {
   const brand       = useClientBrand()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const { platformName, setPlatformName, isLoaded: platformNameLoaded } = usePlatformName()
 
   // Local draft state (doesn't auto-save)
   const [draft,     setDraft]     = useState<BrandingSettings | null>(null)
-  const [platformName, setPlatformName] = useState<string>("Rolplay Analytics")
+  const [platformNameDraft, setPlatformNameDraft] = useState<string>("")
   const [saving,    setSaving]    = useState(false)
   const [saved,     setSaved]     = useState(false)
   const [copied,    setCopied]    = useState<string | null>(null)
@@ -115,6 +117,13 @@ export default function SettingsPage() {
       })
     }
   }, [brand.isLoading, brand.logo, brand.primaryColor, brand.secondaryColor, brand.accentColor, draft])
+
+  // Initialize platform name draft from stored value
+  useEffect(() => {
+    if (platformNameLoaded && !platformNameDraft) {
+      setPlatformNameDraft(platformName)
+    }
+  }, [platformNameLoaded, platformName, platformNameDraft])
 
   const current = draft ?? {
     logo_url:        brand.logo,
@@ -143,7 +152,14 @@ export default function SettingsPage() {
     }
   }, [brand])
 
-  const handleSave = () => void doSave(current)
+  const handleSave = () => {
+    // Save platform name if it changed
+    if (platformNameDraft && platformNameDraft !== platformName) {
+      setPlatformName(platformNameDraft)
+    }
+    // Save branding
+    void doSave(current)
+  }
 
   const handleReset = () => {
     setDraft(DEFAULT_BRANDING_SETTINGS)
@@ -216,15 +232,15 @@ export default function SettingsPage() {
             <div className="flex flex-col sm:flex-row gap-3">
               <input
                 type="text"
-                value={platformName}
-                onChange={(e) => setPlatformName(e.target.value)}
+                value={platformNameDraft}
+                onChange={(e) => setPlatformNameDraft(e.target.value)}
                 maxLength={50}
                 placeholder="Rolplay Analytics"
                 className="flex-1 px-3 py-2.5 text-sm rounded-lg border border-border bg-muted focus:outline-none focus:ring-1 focus:ring-primary"
               />
-              <span className="text-xs text-muted-foreground self-center sm:self-auto">{platformName.length}/50</span>
+              <span className="text-xs text-muted-foreground self-center sm:self-auto">{platformNameDraft.length}/50</span>
             </div>
-            <p className="text-xs text-muted-foreground mt-2">Note: This setting is stored locally in your browser for now</p>
+            <p className="text-xs text-muted-foreground mt-2">Changes are saved when you click "Save Changes" button</p>
           </div>
         </section>
 
