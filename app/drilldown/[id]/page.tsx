@@ -227,23 +227,18 @@ export default function DrilldownPage() {
   const refreshKey = useDashboardStore((s) => s.refreshKey)
   const id         = params?.id as string | undefined
 
-  // Translation — sync with global lang store
-  const globalLang = useLangStore((s) => s.lang)
-  const { language, setLanguage, translateTexts, translating } = useTranslation()
+  // Translation — LOCAL to this page only (don't affect global lang)
+  const { translateTexts, translating } = useTranslation()
+  const [language, setLanguage] = useState<'en' | 'es'>('en')
   const [translatedLabels, setTranslatedLabels] = useState<Record<string, string>>({})
   const [translatedValues, setTranslatedValues] = useState<Record<string, string>>({})
   const [showRawKeys, setShowRawKeys] = useState(false)
 
-  // Sync drilldown language with global lang on mount & change
-  useEffect(() => {
-    setLanguage(globalLang)
-  }, [globalLang, setLanguage])
-
+  // Toggle language for THIS PAGE ONLY (don't change global lang)
   const toggleLanguage = useCallback(() => {
     const next = language === 'en' ? 'es' : 'en'
     setLanguage(next)
-    useLangStore.getState().setLang(next)
-  }, [language, setLanguage])
+  }, [language])
 
   // Validate ID
   const idNum   = id ? parseInt(id, 10) : NaN
@@ -417,11 +412,11 @@ export default function DrilldownPage() {
               <span className="hidden sm:inline">{showRawKeys ? 'Hide Data' : 'View Data'}</span>
             </button>
 
-            {/* Language toggle: EN / ES */}
+            {/* Language toggle: EN / ES (report content only) */}
             <button
               onClick={toggleLanguage}
               disabled={translating}
-              title={language === 'en' ? 'Translate all labels and feedback to Spanish' : 'Show original English text'}
+              title={language === 'en' ? 'Translate report content to Spanish (report values only)' : 'Show original English report text'}
               className={cn(
                 "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors",
                 language !== 'en'
@@ -435,7 +430,7 @@ export default function DrilldownPage() {
               ) : (
                 <>
                   <Languages className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">{language === 'en' ? 'English' : 'Español'}</span>
+                  <span className="hidden sm:inline">{language === 'en' ? 'Report: English' : 'Report: Español'}</span>
                   <span className="sm:hidden">{language === 'en' ? 'EN' : 'ES'}</span>
                 </>
               )}
