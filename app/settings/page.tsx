@@ -97,6 +97,7 @@ export default function SettingsPage() {
 
   // Local draft state (doesn't auto-save)
   const [draft,     setDraft]     = useState<BrandingSettings | null>(null)
+  const [platformName, setPlatformName] = useState<string>("Rolplay Analytics")
   const [saving,    setSaving]    = useState(false)
   const [saved,     setSaved]     = useState(false)
   const [copied,    setCopied]    = useState<string | null>(null)
@@ -205,6 +206,27 @@ export default function SettingsPage() {
       <DashboardHeader title="Settings" subtitle="Customize your dashboard branding" />
 
       <div className="px-4 sm:px-6 py-6 max-w-2xl space-y-6">
+
+        {/* ── Platform Name ─────────────────────────────────────────────────── */}
+        <section className="rounded-[16px] border border-border/60 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)] overflow-hidden">
+          <div className="h-[3px] bg-gradient-to-r from-primary to-accent" />
+          <div className="p-5">
+            <h2 className="text-sm font-semibold mb-3">Platform Name</h2>
+            <p className="text-xs text-muted-foreground mb-4">Customize the name displayed in the header and navigation</p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <input
+                type="text"
+                value={platformName}
+                onChange={(e) => setPlatformName(e.target.value)}
+                maxLength={50}
+                placeholder="Rolplay Analytics"
+                className="flex-1 px-3 py-2.5 text-sm rounded-lg border border-border bg-muted focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+              <span className="text-xs text-muted-foreground self-center sm:self-auto">{platformName.length}/50</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">Note: This setting is stored locally in your browser for now</p>
+          </div>
+        </section>
 
         {/* ── Logo ─────────────────────────────────────────────────────────── */}
         <section className="rounded-[16px] border border-border/60 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)] overflow-hidden">

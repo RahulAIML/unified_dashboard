@@ -411,17 +411,17 @@ export default function DrilldownPage() {
                   ? "border-primary/40 bg-primary/10 text-primary"
                   : "border-border bg-muted text-muted-foreground hover:text-foreground"
               )}
-              title={showRawKeys ? 'Hide technical field keys' : 'Show technical field keys'}
+              title={showRawKeys ? 'Hide technical database field keys' : 'Show technical database field keys for debugging'}
             >
               <Hash className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{showRawKeys ? 'Hide Keys' : 'Show Keys'}</span>
+              <span className="hidden sm:inline">{showRawKeys ? 'Hide Data' : 'View Data'}</span>
             </button>
 
-            {/* Language toggle: [EN | Original] */}
+            {/* Language toggle: EN / ES */}
             <button
               onClick={toggleLanguage}
               disabled={translating}
-              title={language === 'en' ? 'Translate to Spanish' : 'Show original text'}
+              title={language === 'en' ? 'Translate all labels and feedback to Spanish' : 'Show original English text'}
               className={cn(
                 "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors",
                 language !== 'en'
@@ -435,7 +435,8 @@ export default function DrilldownPage() {
               ) : (
                 <>
                   <Languages className="w-3.5 h-3.5" />
-                  <span>{language === 'en' ? 'EN | Original' : 'ES | Traducido'}</span>
+                  <span className="hidden sm:inline">{language === 'en' ? 'English' : 'Español'}</span>
+                  <span className="sm:hidden">{language === 'en' ? 'EN' : 'ES'}</span>
                 </>
               )}
             </button>

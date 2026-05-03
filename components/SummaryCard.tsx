@@ -25,7 +25,7 @@ export function SummaryCard({ kpi, index = 0, icon }: Props) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05, duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
       whileHover={{ y: -3, transition: { duration: 0.2 } }}
-      className="relative w-full overflow-hidden rounded-[16px] border border-border/60 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)] hover:shadow-[0_10px_15px_-3px_rgba(0,0,0,0.06),0_4px_6px_-4px_rgba(0,0,0,0.04)] transition-all duration-200"
+      className="relative w-full overflow-hidden rounded-[16px] border border-border/50 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.05),0_1px_2px_rgba(0,0,0,0.02)] hover:shadow-[0_12px_20px_-5px_rgba(0,0,0,0.08),0_4px_8px_-4px_rgba(0,0,0,0.05)] transition-all duration-300 ease-out"
     >
       {/* Gradient top stripe — brand primary → accent */}
       <div

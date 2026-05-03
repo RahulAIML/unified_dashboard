@@ -48,14 +48,14 @@ function CustomTooltip({ active, payload }: { active?: boolean; payload?: DonutT
 function CustomLegend({ payload }: { payload?: Array<{ value?: string; color?: string }> }) {
   if (!payload?.length) return null
   return (
-    <div className="flex flex-wrap gap-x-4 gap-y-1.5 justify-center lg:flex-col lg:items-start lg:gap-y-2 pt-2 lg:pt-0">
+    <div className="flex flex-wrap gap-x-3 gap-y-2 justify-center lg:flex-col lg:items-start lg:gap-y-2.5 w-full lg:w-auto">
       {payload.map((entry, i) => (
-        <div key={i} className="flex items-center gap-2 min-w-0">
+        <div key={i} className="flex items-center gap-2 min-w-0 flex-shrink-0">
           <span
             className="w-2.5 h-2.5 rounded-full shrink-0"
             style={{ backgroundColor: entry.color }}
           />
-          <span className="text-xs text-muted-foreground truncate max-w-[140px]">
+          <span className="text-xs text-muted-foreground truncate max-w-[120px] sm:max-w-[140px]">
             {truncateLabel(entry.value ?? "")}
           </span>
         </div>
@@ -83,10 +83,10 @@ export function DonutChart({ data }: { data: Segment[] }) {
       className="w-full overflow-hidden"
     >
       {/* Chart + Legend wrapper: column on mobile, row on desktop */}
-      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-center gap-6">
+      <div className="flex flex-col lg:flex-row items-center justify-center gap-4 sm:gap-6 px-2 sm:px-0">
         {/* Chart container - fixed size for proper centering */}
-        <div className="flex-shrink-0 w-full sm:w-auto flex justify-center items-center">
-          <div className="relative w-[260px] h-[260px] sm:w-[300px] sm:h-[300px] lg:w-[320px] lg:h-[320px]">
+        <div className="flex-shrink-0 flex justify-center items-center py-2 sm:py-0">
+          <div className="relative w-[240px] h-[240px] sm:w-[280px] sm:h-[280px] lg:w-[320px] lg:h-[320px]">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <defs>
@@ -139,7 +139,7 @@ export function DonutChart({ data }: { data: Segment[] }) {
         </div>
 
         {/* Legend: below on mobile, right side on desktop */}
-        <div className="w-full lg:w-auto lg:flex-shrink-0">
+        <div className="w-full lg:w-auto lg:flex-shrink-0 mt-2 lg:mt-0 px-2 sm:px-0">
           <CustomLegend payload={chartData.map((d, i) => ({
             value: d.fullName ?? d.name,
             color: d.color ?? PALETTE[i % PALETTE.length],

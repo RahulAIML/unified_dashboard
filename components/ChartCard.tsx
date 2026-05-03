@@ -13,10 +13,10 @@ interface Props {
 export function ChartCard({ title, subtitle, children, className, headerAction }: Props) {
   return (
     <div className={cn(
-      "relative overflow-hidden rounded-[16px] border border-border/60 bg-card",
-      "shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)]",
-      "hover:shadow-[0_10px_15px_-3px_rgba(0,0,0,0.06),0_4px_6px_-4px_rgba(0,0,0,0.04)]",
-      "transition-all duration-200",
+      "relative overflow-hidden rounded-[16px] border border-border/50 bg-card",
+      "shadow-[0_1px_3px_rgba(0,0,0,0.05),0_1px_2px_rgba(0,0,0,0.02)]",
+      "hover:shadow-[0_12px_20px_-5px_rgba(0,0,0,0.08),0_4px_8px_-4px_rgba(0,0,0,0.05)]",
+      "transition-all duration-300 ease-out",
       className
     )}>
       {/* Gradient top stripe — consistent with SummaryCard */}
