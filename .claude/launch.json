@@ -2,10 +2,9 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "RolplayPro Dashboard",
+      "name": "rolplay-dashboard",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
-      "cwd": "dashboard",
       "port": 3000
     }
   ]
