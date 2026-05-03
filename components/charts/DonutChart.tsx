@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { motion } from "framer-motion"
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts"
 
@@ -68,6 +68,18 @@ export function DonutChart({ data }: { data: Segment[] }) {
   const total = data.reduce((sum, item) => sum + item.value, 0)
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
 
+  // STEP 4: Dynamic mobile detection for responsive radius adjustment
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768)
+
+  // STEP 3: Use fixed pixel values instead of percentages for safer rendering
+  // Mobile: 70px outer, 35px inner | Desktop: 80px outer, 40px inner
+  const chartRadius = useMemo(() => {
+    if (typeof window === 'undefined') return { outer: 80, inner: 40 }
+    return window.innerWidth < 768
+      ? { outer: 70, inner: 35 }
+      : { outer: 80, inner: 40 }
+  }, [isMobile])
+
   // Truncate names for the chart data to prevent overflow
   const chartData = data.map(d => ({
     ...d,
@@ -82,13 +94,16 @@ export function DonutChart({ data }: { data: Segment[] }) {
       transition={{ duration: 0.5, ease: [0.25, 0.1, 0.25, 1] }}
       className="w-full overflow-visible"
     >
-      {/* Chart + Legend wrapper: stacked column on mobile, row on desktop */}
-      <div className="flex flex-col lg:flex-row items-center lg:items-stretch justify-center gap-3 sm:gap-4 lg:gap-8">
-        {/* Chart container - fixed size for proper centering */}
-        <div className="flex flex-col items-center justify-center flex-shrink-0 w-full lg:w-auto">
+      {/* STEP 1: Parent container with proper flex, width, and overflow-visible */}
+      <div className="flex flex-col lg:flex-row items-center lg:items-stretch justify-center gap-3 sm:gap-4 lg:gap-8 w-full overflow-visible">
+
+        {/* Chart container with padding wrapper (STEP 7) */}
+        <div className="flex flex-col items-center justify-center flex-shrink-0 w-full lg:w-auto px-4">
+          {/* STEP 7: 16px padding wrapper to prevent edge cutting */}
           <div className="relative w-[240px] h-[240px] sm:w-[280px] sm:h-[280px] lg:w-[300px] lg:h-[300px]">
+            {/* STEP 2: ResponsiveContainer with explicit width/height and overflow-visible */}
             <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
+              <PieChart margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
                 <defs>
                   <filter id="innerShadow">
                     <feGaussianBlur in="SourceAlpha" stdDeviation="3" result="blur" />
@@ -98,15 +113,17 @@ export function DonutChart({ data }: { data: Segment[] }) {
                     <feComposite in2="SourceGraphic" operator="in" />
                   </filter>
                 </defs>
+                {/* STEP 3 & 5: Use fixed pixel radius values and disable default labels */}
                 <Pie
                   data={chartData}
                   cx="50%"
                   cy="50%"
-                  innerRadius="55%"
-                  outerRadius="80%"
+                  innerRadius={chartRadius.inner}
+                  outerRadius={chartRadius.outer}
                   paddingAngle={2}
                   dataKey="value"
                   strokeWidth={0}
+                  label={false}
                   onMouseEnter={(_, i) => setHoveredIdx(i)}
                   onMouseLeave={() => setHoveredIdx(null)}
                   style={{ filter: "url(#innerShadow)" }}
@@ -139,7 +156,7 @@ export function DonutChart({ data }: { data: Segment[] }) {
         </div>
 
         {/* Legend: centered below chart on all sizes */}
-        <div className="w-full lg:w-auto lg:flex-shrink-0 flex justify-center lg:justify-start">
+        <div className="w-full lg:w-auto lg:flex-shrink-0 flex justify-center lg:justify-start px-4">
           <div className="max-w-full lg:max-w-xs">
             <CustomLegend payload={chartData.map((d, i) => ({
               value: d.fullName ?? d.name,
