@@ -49,12 +49,12 @@ export interface EvaluationRow {
 }
 
 export interface UsecaseRow {
-  usecaseId: number
-  usecase_name: string | null
+  usecaseId:        number
+  usecase_name:     string | null   // display name from coach_app.usecases
   totalEvaluations: number
-  avgScore: number | null
-  passRate: number | null
-  passed: number
+  avgScore:         number | null
+  passRate:         number | null
+  passed:           number
 }
 
 export interface DrilldownField {
@@ -207,14 +207,15 @@ export async function getUsecaseBreakdown(filters: AnalyticsFilters): Promise<Us
   }[]
 
   return (raw ?? []).map((r) => {
-    const passed = Number(r.passed ?? 0)
+    const row = r as typeof r & { usecase_name?: string | null }
+    const passed      = Number(r.passed ?? 0)
     const totalResults = Number(r.total_results ?? 0)
     return {
-      usecaseId: Number(r.usecase_id),
-      usecase_name: (r as { usecase_name?: string | null }).usecase_name ?? null,
+      usecaseId:        Number(r.usecase_id),
+      usecase_name:     row.usecase_name ?? null,
       totalEvaluations: Number(r.total_evaluations ?? 0),
-      avgScore: normalizeScore(r.avg_score),
-      passRate: computePassRate(passed, totalResults),
+      avgScore:         normalizeScore(r.avg_score),
+      passRate:         computePassRate(passed, totalResults),
       passed,
     }
   })

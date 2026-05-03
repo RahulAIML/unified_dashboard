@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server'
 import { getDashboardTrends } from '@/lib/data-provider'
-import { buildSuccess, buildApiError, parseDateRange, parseUsecaseFilter } from '@/lib/api-utils'
+import { buildSuccess, buildApiError, parseDateRange } from '@/lib/api-utils'
 import { getAuthContextFromRequest } from '@/lib/server-auth'
+import { resolveDynamicUsecaseIds } from '@/lib/dynamic-usecase-resolver'
 
 export const runtime = 'nodejs'
 
@@ -10,7 +11,7 @@ export async function GET(request: NextRequest) {
   if (!ctx) return buildApiError('Unauthorized', 401)
 
   if (ctx.customerId === 0) {
-    return buildSuccess({ score_trend: [], pass_fail: [], eval_count: [], evalCountTrend: [] })
+    return buildSuccess({ scoreTrend: [], passFailTrend: [], evalCountTrend: [] })
   }
 
   try {
@@ -19,21 +20,35 @@ export async function GET(request: NextRequest) {
     if (!range) {
       return buildApiError('Invalid date range — provide ?from= and ?to= as ISO strings', 400, {
         from: sp.get('from'),
-        to: sp.get('to'),
+        to:   sp.get('to'),
       })
     }
 
-    const { solution, usecaseIds } = parseUsecaseFilter(sp)
+    // ── Dynamic usecase resolution ────────────────────────────────────────────
+    const solution   = sp.get('solution')
+    const idsParam   = sp.get('usecaseIds')
+    const usecaseIds = idsParam
+      ? idsParam.split(',').map(Number).filter(n => !isNaN(n))
+      : await resolveDynamicUsecaseIds(ctx.customerId, solution)
+
+    // Second Brain → API-only, no DB trends
+    if (solution === 'second-brain') {
+      return buildSuccess(
+        { scoreTrend: [], passFailTrend: [], evalCountTrend: [] },
+        { solution, source: 'second-brain-api-only' }
+      )
+    }
+
     const data = await getDashboardTrends({
-      from: range.from,
-      to: range.to,
+      from:       range.from,
+      to:         range.to,
       usecaseIds,
       customerId: ctx.customerId,
     })
 
     return buildSuccess(data, {
-      from: range.from.toISOString(),
-      to: range.to.toISOString(),
+      from:       range.from.toISOString(),
+      to:         range.to.toISOString(),
       solution,
       usecaseIds: usecaseIds ?? null,
     })
@@ -42,4 +57,3 @@ export async function GET(request: NextRequest) {
     return buildApiError('Failed to load trend data')
   }
 }
-

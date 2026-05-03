@@ -325,7 +325,8 @@ export function DashboardContent() {
   const donutData = useMemo(() => {
     if (!ucBreakdown?.data?.length) return []
     return ucBreakdown.data.map((row) => ({
-      name:  `UC-${row.usecaseId}`,
+      // Prefer human-readable usecase_name; fall back to UC-id
+      name:  row.usecase_name?.trim() || `UC-${row.usecaseId}`,
       value: row.totalEvaluations,
     }))
   }, [ucBreakdown])
@@ -334,10 +335,23 @@ export function DashboardContent() {
   const moduleBreakdownData = useMemo(() => {
     if (!ucBreakdown?.data?.length) return []
     return ucBreakdown.data.map(row => ({
-      module:   `UC-${row.usecaseId}`,
+      module:   row.usecase_name?.trim() || `UC-${row.usecaseId}`,
       sessions: row.totalEvaluations,
       passed:   row.passed,
     }))
+  }, [ucBreakdown])
+
+  // ── Usecase name lookup from breakdown data ───────────────────────────────
+  const ucNameMap = useMemo(() => {
+    const m = new Map<number, string>()
+    if (ucBreakdown?.data) {
+      for (const row of ucBreakdown.data) {
+        if (row.usecaseId != null && row.usecase_name?.trim()) {
+          m.set(row.usecaseId, row.usecase_name.trim())
+        }
+      }
+    }
+    return m
   }, [ucBreakdown])
 
   // ── Evaluation results table columns ─────────────────────────────────────
@@ -357,11 +371,13 @@ export function DashboardContent() {
     {
       key: "usecaseId",
       header: t.colUsecaseId,
-      render: r => (
-        <span className="text-muted-foreground">
-          {r.usecaseId != null ? `UC-${r.usecaseId}` : "—"}
-        </span>
-      ),
+      render: r => {
+        if (r.usecaseId == null) return <span className="text-muted-foreground">—</span>
+        const name = ucNameMap.get(r.usecaseId)
+        return name
+          ? <span className="text-xs font-medium">{name}</span>
+          : <span className="text-muted-foreground text-xs">UC-{r.usecaseId}</span>
+      },
     },
     {
       key: "score",

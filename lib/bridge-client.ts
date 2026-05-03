@@ -66,6 +66,20 @@ function usecaseClause(
   return ` AND rfc.usecase_id IN (${placeholders})`
 }
 
+/**
+ * Conditional CASE expression that normalises a score value to 0-100.
+ * Scores ≤ 10 are assumed to be on a 0-10 scale and are multiplied by 10.
+ * Used inline inside AVG() so NULL rows are correctly excluded.
+ */
+const SCORE_CASE = `
+  CASE WHEN rfc.field_key IN ('overall_score','final_score')
+       THEN CASE WHEN rfc.value_num <= 10
+                 THEN rfc.value_num * 10
+                 ELSE rfc.value_num
+            END
+       ELSE NULL
+  END`
+
 // ── Public API (same signatures — data-provider.ts unchanged) ─────────────────
 
 /**
@@ -83,6 +97,12 @@ export async function resolveCustomerIdByEmail(email: string): Promise<number | 
 
 /**
  * Overview KPIs for one time window.
+ *
+ * FIX: Sessions are counted from ALL field rows (not just score-field rows).
+ * This ensures modules whose sessions lack 'overall_score' (LMS, Simulator,
+ * Certification) are still counted. Scores are computed conditionally via
+ * SCORE_CASE so NULLs are excluded from AVG automatically.
+ *
  * data-provider.ts calls this twice (current + prior) when prev is missing.
  */
 export async function bridgeOverviewKpis(params: {
@@ -105,17 +125,15 @@ export async function bridgeOverviewKpis(params: {
     total_results:  number | string
   }>(
     `SELECT
-       COUNT(DISTINCT rfc.saved_report_id)                                          AS total_sessions,
-       ROUND(AVG(CASE WHEN rfc.value_num <= 10
-                      THEN rfc.value_num * 10
-                      ELSE rfc.value_num END), 2)                                   AS avg_score,
-       SUM(CASE WHEN sr.passed_flag = 1 THEN 1 ELSE 0 END)                         AS passed,
-       COUNT(DISTINCT rfc.saved_report_id)                                          AS total_results
+       COUNT(DISTINCT rfc.saved_report_id)                               AS total_sessions,
+       ROUND(AVG(${SCORE_CASE}), 2)                                      AS avg_score,
+       COUNT(DISTINCT CASE WHEN sr.passed_flag = 1
+                           THEN rfc.saved_report_id END)                 AS passed,
+       COUNT(DISTINCT rfc.saved_report_id)                               AS total_results
      FROM rolplay_pro_analytics.report_field_current rfc
      JOIN coach_app.saved_reports sr ON sr.id = rfc.saved_report_id
      WHERE rfc.customer_id = ?
-       AND rfc.report_created_at BETWEEN ? AND ?
-       AND rfc.field_key = 'overall_score'${uc}`,
+       AND rfc.report_created_at BETWEEN ? AND ?${uc}`,
     p
   )
 
@@ -125,6 +143,11 @@ export async function bridgeOverviewKpis(params: {
 
 /**
  * Three trend series: score / pass-fail / session count.
+ *
+ * FIX: Removed AND rfc.field_key = 'overall_score' from count/pass-fail queries
+ * so sessions without an overall_score field are still counted.
+ * Score trend still filters to score fields (field_key IN ...) so AVG is valid.
+ * Pass/fail and eval-count use DISTINCT saved_report_id — no double-counting.
  */
 export async function bridgeTrends(params: {
   customerId:  number
@@ -135,40 +158,50 @@ export async function bridgeTrends(params: {
   const from = isoToMysql(params.fromIso)
   const to   = isoToMysql(params.toIso)
 
-  const base: (string | number | null)[] = [params.customerId, from, to]
-  const uc = usecaseClause(params.usecaseIds, base)
+  // Separate param arrays — each query has its own copy so usecaseClause
+  // can push into them independently without stomping the others.
+  const scoreBase: (string | number | null)[] = [params.customerId, from, to]
+  const countBase: (string | number | null)[] = [params.customerId, from, to]
+  const ucScore = usecaseClause(params.usecaseIds, scoreBase)
+  const ucCount = usecaseClause(params.usecaseIds, countBase)
 
-  const whereClause = `
+  const joinBase = `
      FROM rolplay_pro_analytics.report_field_current rfc
-     JOIN coach_app.saved_reports sr ON sr.id = rfc.saved_report_id
+     JOIN coach_app.saved_reports sr ON sr.id = rfc.saved_report_id`
+
+  const scoreWhere = `${joinBase}
     WHERE rfc.customer_id = ?
       AND rfc.report_created_at BETWEEN ? AND ?
-      AND rfc.field_key = 'overall_score'${uc}`
+      AND rfc.field_key IN ('overall_score','final_score')${ucScore}`
+
+  const countWhere = `${joinBase}
+    WHERE rfc.customer_id = ?
+      AND rfc.report_created_at BETWEEN ? AND ?${ucCount}`
 
   const [scoreTrend, passFail, evalCount] = await Promise.all([
     bridgePost<{ date: string; avg_score: number }>(
       `SELECT DATE(rfc.report_created_at) AS date,
-              ROUND(AVG(CASE WHEN rfc.value_num <= 10
-                             THEN rfc.value_num * 10
-                             ELSE rfc.value_num END), 1) AS avg_score
-       ${whereClause}
+              ROUND(AVG(${SCORE_CASE}), 1) AS avg_score
+       ${scoreWhere}
        GROUP BY DATE(rfc.report_created_at) ORDER BY date ASC LIMIT 90`,
-      [...base]
+      scoreBase
     ),
     bridgePost<{ date: string; passed: number; failed: number }>(
       `SELECT DATE(rfc.report_created_at) AS date,
-              SUM(CASE WHEN sr.passed_flag = 1 THEN 1 ELSE 0 END) AS passed,
-              SUM(CASE WHEN sr.passed_flag = 0 THEN 1 ELSE 0 END) AS failed
-       ${whereClause}
+              COUNT(DISTINCT CASE WHEN sr.passed_flag = 1
+                                  THEN rfc.saved_report_id END) AS passed,
+              COUNT(DISTINCT CASE WHEN sr.passed_flag = 0
+                                  THEN rfc.saved_report_id END) AS failed
+       ${countWhere}
        GROUP BY DATE(rfc.report_created_at) ORDER BY date ASC LIMIT 90`,
-      [...base]
+      [...countBase]
     ),
     bridgePost<{ date: string; sessions: number }>(
       `SELECT DATE(rfc.report_created_at) AS date,
               COUNT(DISTINCT rfc.saved_report_id) AS sessions
-       ${whereClause}
+       ${countWhere}
        GROUP BY DATE(rfc.report_created_at) ORDER BY date ASC LIMIT 90`,
-      [...base]
+      [...countBase]
     ),
   ])
 
@@ -176,7 +209,11 @@ export async function bridgeTrends(params: {
 }
 
 /**
- * Paginated evaluation results.
+ * Paginated evaluation results — one row per session.
+ *
+ * FIX: Removed field_key = 'overall_score' filter. Now groups by
+ * saved_report_id so every session appears regardless of which score
+ * field it uses. MAX(SCORE_CASE) picks up any normalised score value.
  */
 export async function bridgeResults(params: {
   customerId:  number
@@ -195,17 +232,18 @@ export async function bridgeResults(params: {
   p.push(lim)
 
   return bridgePost(
-    `SELECT rfc.saved_report_id,
-            rfc.usecase_id,
-            rfc.value_num                       AS score,
-            sr.passed_flag,
-            DATE(rfc.report_created_at)         AS report_created_at
+    `SELECT
+       rfc.saved_report_id,
+       MIN(rfc.usecase_id)                                         AS usecase_id,
+       MAX(${SCORE_CASE})                                          AS score,
+       MAX(sr.passed_flag)                                         AS passed_flag,
+       DATE(MAX(rfc.report_created_at))                           AS report_created_at
      FROM rolplay_pro_analytics.report_field_current rfc
      JOIN coach_app.saved_reports sr ON sr.id = rfc.saved_report_id
      WHERE rfc.customer_id = ?
-       AND rfc.report_created_at BETWEEN ? AND ?
-       AND rfc.field_key = 'overall_score'${uc}
-     ORDER BY rfc.report_created_at DESC
+       AND rfc.report_created_at BETWEEN ? AND ?${uc}
+     GROUP BY rfc.saved_report_id
+     ORDER BY MAX(rfc.report_created_at) DESC
      LIMIT ?`,
     p
   )
@@ -213,6 +251,10 @@ export async function bridgeResults(params: {
 
 /**
  * Per-usecase breakdown with display names.
+ *
+ * FIX: Removed field_key = 'overall_score' filter. Uses SCORE_CASE in AVG
+ * so only actual score fields contribute to avg_score. Uses DISTINCT
+ * CASE WHEN for passed count to avoid row-level double-counting.
  */
 export async function bridgeUsecaseBreakdown(params: {
   customerId:  number
@@ -228,20 +270,19 @@ export async function bridgeUsecaseBreakdown(params: {
   const uc = usecaseClause(params.usecaseIds, p)
 
   return bridgePost(
-    `SELECT rfc.usecase_id,
-            uc.usecase_name,
-            COUNT(DISTINCT rfc.saved_report_id)                              AS total_evaluations,
-            ROUND(AVG(CASE WHEN rfc.value_num <= 10
-                           THEN rfc.value_num * 10
-                           ELSE rfc.value_num END), 2)                       AS avg_score,
-            SUM(CASE WHEN sr.passed_flag = 1 THEN 1 ELSE 0 END)             AS passed,
-            COUNT(DISTINCT rfc.saved_report_id)                   AS total_results
+    `SELECT
+       rfc.usecase_id,
+       uc.usecase_name,
+       COUNT(DISTINCT rfc.saved_report_id)                                    AS total_evaluations,
+       ROUND(AVG(${SCORE_CASE}), 2)                                           AS avg_score,
+       COUNT(DISTINCT CASE WHEN sr.passed_flag = 1
+                           THEN rfc.saved_report_id END)                      AS passed,
+       COUNT(DISTINCT rfc.saved_report_id)                                    AS total_results
      FROM rolplay_pro_analytics.report_field_current rfc
      JOIN coach_app.saved_reports sr ON sr.id = rfc.saved_report_id
      LEFT JOIN coach_app.usecases uc ON uc.id = rfc.usecase_id
      WHERE rfc.customer_id = ?
-       AND rfc.report_created_at BETWEEN ? AND ?
-       AND rfc.field_key = 'overall_score'${uc}
+       AND rfc.report_created_at BETWEEN ? AND ?${uc}
      GROUP BY rfc.usecase_id, uc.usecase_name
      ORDER BY total_evaluations DESC
      LIMIT 30`,
@@ -278,23 +319,26 @@ export async function bridgeBestPerformers(params: {
   const lim = Math.max(1, Math.min(50, params.limit ?? 10))
   p.push(lim)
 
+  // FIX: Removed AND rfc.field_key = 'overall_score'. Uses SCORE_CASE so
+  // only score fields influence avg_score. Pass rate uses DISTINCT session
+  // IDs to avoid row-level inflation from multi-field reports.
   return bridgePost(
     `SELECT
        cu.user_email,
        cu.user_name,
-       COUNT(DISTINCT rfc.saved_report_id)                              AS sessions,
-       ROUND(AVG(CASE WHEN rfc.value_num <= 10
-                      THEN rfc.value_num * 10
-                      ELSE rfc.value_num END), 1)                          AS avg_score,
-       ROUND(SUM(CASE WHEN sr.passed_flag = 1 THEN 1 ELSE 0 END)
-             / COUNT(DISTINCT rfc.saved_report_id) * 100, 1)      AS pass_rate
+       COUNT(DISTINCT rfc.saved_report_id)                                    AS sessions,
+       ROUND(AVG(${SCORE_CASE}), 1)                                           AS avg_score,
+       ROUND(
+         COUNT(DISTINCT CASE WHEN sr.passed_flag = 1
+                             THEN rfc.saved_report_id END)
+         / NULLIF(COUNT(DISTINCT rfc.saved_report_id), 0) * 100
+       , 1)                                                                   AS pass_rate
      FROM rolplay_pro_analytics.report_field_current rfc
      JOIN coach_app.saved_reports sr ON sr.id = rfc.saved_report_id
      JOIN coach_app.coach_users cu  ON cu.id = sr.coach_user_id
      WHERE rfc.customer_id = ?
        AND cu.customer_id = ?
-       AND rfc.report_created_at BETWEEN ? AND ?
-       AND rfc.field_key = 'overall_score'${uc}
+       AND rfc.report_created_at BETWEEN ? AND ?${uc}
      GROUP BY cu.id, cu.user_email, cu.user_name
      HAVING sessions >= 1
      ORDER BY avg_score DESC, sessions DESC
@@ -357,4 +401,108 @@ export async function bridgeDrilldown(params: {
     fields,
     closing_json:      payloadRows[0]?.closing_json ?? null,
   }
+}
+
+// ── Dynamic Usecase Discovery ────────────────────────────────────────────────
+
+export interface UsecaseFieldInfo {
+  usecase_id: number
+  field_key: string
+}
+
+export interface UsecaseMetadata {
+  id: number
+  usecase_name: string | null
+}
+
+export interface UsecaseSummary {
+  usecase_id: number
+  sessions: number
+}
+
+/**
+ * Spec Steps 1 + 2: Discover all usecases for a customer with their field
+ * signatures and display names — used for dynamic module classification.
+ *
+ * No date filter: classification is structural (field patterns), not temporal.
+ * No hardcoded IDs — everything is derived from live DB data.
+ */
+export async function bridgeDiscoverUsecaseFields(customerId: number): Promise<{
+  usecases: UsecaseSummary[]
+  fieldsByUsecase: Map<number, string[]>
+  metadata: UsecaseMetadata[]
+}> {
+  // Step 1 — usecase IDs + field signatures (exact spec query)
+  const usecaseRows = await bridgePost<{
+    usecase_id: number | string
+    fields: string | null
+    sessions: number | string
+  }>(
+    `SELECT
+       rfc.usecase_id,
+       GROUP_CONCAT(DISTINCT rfc.field_key) AS fields,
+       COUNT(DISTINCT rfc.saved_report_id)  AS sessions
+     FROM rolplay_pro_analytics.report_field_current rfc
+     WHERE rfc.customer_id = ?
+     GROUP BY rfc.usecase_id
+     ORDER BY sessions DESC`,
+    [customerId]
+  )
+
+  if (usecaseRows.length === 0) {
+    return { usecases: [], fieldsByUsecase: new Map(), metadata: [] }
+  }
+
+  const fieldsByUsecase = new Map<number, string[]>()
+  const usecases: UsecaseSummary[] = []
+
+  for (const row of usecaseRows) {
+    const id = Number(row.usecase_id)
+    usecases.push({ usecase_id: id, sessions: Number(row.sessions ?? 0) })
+    fieldsByUsecase.set(
+      id,
+      row.fields ? row.fields.split(',').map(f => f.trim()).filter(Boolean) : []
+    )
+  }
+
+  const usecaseIds = usecases.map(u => u.usecase_id)
+
+  // Step 2 — display names from coach_app.usecases
+  const metadata = await bridgePost<UsecaseMetadata>(
+    `SELECT id, usecase_name
+     FROM coach_app.usecases
+     WHERE id IN (${usecaseIds.map(() => '?').join(',')})
+     ORDER BY id`,
+    [...usecaseIds]
+  )
+
+  return { usecases, fieldsByUsecase, metadata }
+}
+
+/**
+ * @deprecated Use bridgeDiscoverUsecaseFields instead.
+ * Kept for backward compatibility only.
+ */
+export async function discoverActiveUsecases(params: {
+  customerId: number
+  fromIso?: string
+  toIso?: string
+}): Promise<{
+  usecases: UsecaseSummary[]
+  fields: UsecaseFieldInfo[]
+  metadata: UsecaseMetadata[]
+}> {
+  const { customerId } = params
+
+  const { usecases, fieldsByUsecase, metadata } = await bridgeDiscoverUsecaseFields(customerId)
+
+  // Flatten fieldsByUsecase back to UsecaseFieldInfo[] for legacy callers
+  const fields: UsecaseFieldInfo[] = []
+  for (const [usecase_id, keys] of fieldsByUsecase.entries()) {
+    for (const field_key of keys) {
+      fields.push({ usecase_id, field_key })
+    }
+  }
+
+  return { usecases, fields, metadata }
 }

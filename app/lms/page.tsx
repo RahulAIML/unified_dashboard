@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
-import { BookOpen, Users, CheckCircle, Star, BarChart2, AlertTriangle } from "lucide-react"
+import { BookOpen, CheckCircle, TrendingUp, Star, BarChart2, AlertTriangle } from "lucide-react"
 import { DashboardHeader } from "@/components/DashboardHeader"
 import { SummaryCard } from "@/components/SummaryCard"
 import { ChartCard } from "@/components/ChartCard"
@@ -23,10 +23,10 @@ import type {
 } from "@/lib/types"
 
 const icons = [
-  <Users       key="u" className="w-4 h-4" />,
+  <BookOpen    key="b" className="w-4 h-4" />,
   <CheckCircle key="c" className="w-4 h-4" />,
   <Star        key="s" className="w-4 h-4" />,
-  <BookOpen    key="b" className="w-4 h-4" />,
+  <TrendingUp  key="t" className="w-4 h-4" />,
 ]
 
 function EmptyState() {
@@ -44,6 +44,28 @@ function ErrorBanner({ message }: { message: string }) {
     <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
       <AlertTriangle className="w-4 h-4 shrink-0" />
       <span>{message}</span>
+    </div>
+  )
+}
+
+function PassRateBar({ value }: { value: number }) {
+  const color =
+    value >= 70 ? "bg-primary"
+    : value >= 50 ? "bg-amber-500"
+    : "bg-destructive"
+  return (
+    <div className="flex items-center gap-2">
+      <span className={cn(
+        "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold min-w-[44px] justify-center",
+        value >= 70 ? "bg-primary/10 text-primary"
+          : value >= 50 ? "bg-amber-500/10 text-amber-600"
+          : "bg-destructive/10 text-destructive"
+      )}>
+        {value}%
+      </span>
+      <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden hidden sm:block">
+        <div className={cn("h-full rounded-full", color)} style={{ width: `${Math.min(100, value)}%` }} />
+      </div>
     </div>
   )
 }
@@ -68,7 +90,6 @@ export default function LmsPage() {
     if (!hasData) return []
     return [
       {
-        // FIX: was passedEvaluations + totalEvaluations (double-count) — use totalEvaluations only
         label: "Enrolled Users", labelKey: "enrolledUsers" as const,
         value: overview!.totalEvaluations,
         delta: calcDeltaPct(overview!.totalEvaluations, overview!.prevTotalEvaluations),
@@ -98,24 +119,45 @@ export default function LmsPage() {
     ]
   }, [overview, hasData])
 
-  const activityData = useMemo(
-    () => trends?.evalCountTrend ?? [],
-    [trends]
-  )
+  const activityData = useMemo(() => trends?.evalCountTrend ?? [], [trends])
+  const scoreTrend   = useMemo(() => trends?.scoreTrend ?? [],     [trends])
 
   const ucColumns: Column<UsecaseApiRow>[] = useMemo(() => [
-    { key: "usecaseId",        header: t.colScenario,  render: r => <span className="font-medium">UC-{r.usecaseId}</span> },
-    { key: "totalEvaluations", header: t.colSessions,  render: r => <span className="tabular-nums">{r.totalEvaluations}</span> },
-    { key: "avgScore",         header: t.colAvgScore,  render: r => r.avgScore != null ? <span className="tabular-nums">{r.avgScore} pts</span> : <span className="text-muted-foreground">—</span> },
-    { key: "passRate", header: t.colPassRate, render: r => r.passRate != null ? (
-      <span className={cn("inline-flex px-2 py-0.5 rounded-full text-xs font-medium",
-        r.passRate >= 70 ? "bg-primary/10 text-primary"
-          : r.passRate >= 50 ? "bg-secondary text-secondary-foreground"
-          : "bg-destructive/10 text-destructive")}>
-        {r.passRate}%
-      </span>
-    ) : <span className="text-muted-foreground">—</span> },
-    { key: "passed", header: t.colPassed, render: r => <span className="tabular-nums">{r.passed}</span> },
+    {
+      key: "usecaseId", header: t.colScenario,
+      render: r => (
+        <span className="font-medium text-sm">
+          {r.usecase_name?.trim() || `UC-${r.usecaseId}`}
+        </span>
+      ),
+    },
+    {
+      key: "totalEvaluations", header: t.colSessions,
+      render: r => <span className="tabular-nums font-medium">{r.totalEvaluations}</span>,
+    },
+    {
+      key: "avgScore", header: t.colAvgScore,
+      render: r => r.avgScore != null ? (
+        <span className={cn(
+          "tabular-nums font-semibold",
+          r.avgScore >= 80 ? "text-primary"
+            : r.avgScore >= 60 ? "text-foreground"
+            : "text-amber-600"
+        )}>
+          {r.avgScore} pts
+        </span>
+      ) : <span className="text-muted-foreground">—</span>,
+    },
+    {
+      key: "passRate", header: t.colPassRate,
+      render: r => r.passRate != null
+        ? <PassRateBar value={r.passRate} />
+        : <span className="text-muted-foreground">—</span>,
+    },
+    {
+      key: "passed", header: t.colPassed,
+      render: r => <span className="tabular-nums text-primary font-semibold">{r.passed}</span>,
+    },
   ], [t])
 
   return (
@@ -123,11 +165,10 @@ export default function LmsPage() {
       <DashboardHeader title={t.lmsTitle} subtitle={t.lmsSub} />
       <div className="w-full max-w-[1400px] mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
 
-        {/* Error banners */}
         {overviewError && <ErrorBanner message={`${t.errorLoading}: ${overviewError}`} />}
 
         {/* KPI cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {overviewLoading
             ? Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
@@ -135,6 +176,7 @@ export default function LmsPage() {
                   <div className="p-5 space-y-3 animate-pulse">
                     <div className="h-3 w-24 rounded bg-muted" />
                     <div className="h-8 w-20 rounded bg-muted" />
+                    <div className="h-5 w-16 rounded bg-muted" />
                   </div>
                 </div>
               ))
@@ -149,32 +191,45 @@ export default function LmsPage() {
           }
         </div>
 
-        {/* Activity chart */}
+        {/* Charts */}
         {trendsError && <ErrorBanner message={`${t.errorLoading}: ${trendsError}`} />}
-        <ChartCard title={t.activityTrend} subtitle={`${t.evalCountSub} — ${t.last} ${days} ${t.days}`}>
-          {trendsLoading
-            ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
-            : activityData.length > 0
-              ? <ActivityLineChart data={activityData} label="Sessions" color={brand.chartColors[0]} />
-              : <EmptyState />
-          }
-        </ChartCard>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+          <ChartCard title={t.activityTrend} subtitle={`${t.evalCountSub} — ${t.last} ${days} ${t.days}`}>
+            {trendsLoading
+              ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
+              : activityData.length > 0
+                ? <ActivityLineChart data={activityData} label="Enrollments" color={brand.chartColors[0]} />
+                : <EmptyState />
+            }
+          </ChartCard>
+          <ChartCard title={t.scoreTrend ?? "Score Trend"} subtitle={`${t.last} ${days} ${t.days}`}>
+            {trendsLoading
+              ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
+              : scoreTrend.length > 0
+                ? <ActivityLineChart data={scoreTrend} label="Avg Score" color={brand.chartColors[1] ?? brand.chartColors[0]} />
+                : <EmptyState />
+            }
+          </ChartCard>
+        </div>
 
         {/* Usecase breakdown table */}
         {ucError && <ErrorBanner message={`${t.errorLoading}: ${ucError}`} />}
-        <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
-          <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
+        <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-4 flex-wrap">
             <div>
               <h3 className="text-sm font-semibold">{t.usecaseBreakdown}</h3>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {ucLoading ? t.loading : `${ucBreakdown?.data?.length ?? 0} ${t.usecaseBreakdownSub}`}
-                <span className="ml-2 text-[10px] font-medium bg-primary/10 text-primary px-1.5 py-0.5 rounded">{t.navLms}</span>
+                <span className="ml-2 text-[10px] font-medium bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">
+                  {t.navLms}
+                </span>
               </p>
             </div>
             <ExportButton
               data={ucBreakdown?.data ?? []}
               filename={csvFilename("lms-usecase-breakdown")}
               columns={[
+                { header: "Use Case",           value: r => r.usecase_name ?? `UC-${r.usecaseId}` },
                 { header: "Use Case ID",        value: r => r.usecaseId },
                 { header: "Total Evaluations",  value: r => r.totalEvaluations },
                 { header: "Avg Score (pts)",    value: r => r.avgScore },
@@ -183,13 +238,16 @@ export default function LmsPage() {
               ]}
             />
           </div>
-          {ucLoading
-            ? <div className="py-10 text-center text-sm text-muted-foreground">{t.loading}</div>
-            : ucBreakdown?.data?.length
-              ? <DataTable data={ucBreakdown.data} columns={ucColumns} pageSize={8} />
-              : <div className="py-10 text-center text-sm text-muted-foreground">{t.noDataAvailable}</div>
-          }
+          <div className="p-5">
+            {ucLoading
+              ? <div className="py-10 text-center text-sm text-muted-foreground">{t.loading}</div>
+              : ucBreakdown?.data?.length
+                ? <DataTable data={ucBreakdown.data} columns={ucColumns} pageSize={8} />
+                : <div className="py-10 text-center text-sm text-muted-foreground">{t.noDataAvailable}</div>
+            }
+          </div>
         </div>
+
       </div>
     </div>
   )

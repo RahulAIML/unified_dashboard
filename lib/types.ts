@@ -218,6 +218,7 @@ export interface ResultsApiResponse {
 /** A single row from GET /api/dashboard/usecase-breakdown */
 export interface UsecaseApiRow {
   usecaseId:        number
+  usecase_name:     string | null   // real display name from coach_app.usecases
   totalEvaluations: number
   avgScore:         number | null
   passRate:         number | null

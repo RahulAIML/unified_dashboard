@@ -7,6 +7,7 @@ import { DashboardHeader } from "@/components/DashboardHeader"
 import { SummaryCard } from "@/components/SummaryCard"
 import { ChartCard } from "@/components/ChartCard"
 import { StackedBarChart } from "@/components/charts/StackedBarChart"
+import { ActivityLineChart } from "@/components/charts/ActivityLineChart"
 import { DataTable, type Column } from "@/components/DataTable"
 import { ExportButton } from "@/components/ExportButton"
 import { useDashboardStore } from "@/lib/store"
@@ -100,6 +101,9 @@ export default function CertificationPage() {
     ]
   }, [overview, hasData])
 
+  const passFailData  = useMemo(() => trends?.passFailTrend ?? [],  [trends])
+  const scoreTrend    = useMemo(() => trends?.scoreTrend ?? [],      [trends])
+
   const columns: Column<EvaluationApiRow>[] = useMemo(() => [
     {
       key: "savedReportId",
@@ -117,7 +121,7 @@ export default function CertificationPage() {
       key: "usecaseId",
       header: t.colUsecaseId,
       render: r => (
-        <span className="text-muted-foreground">
+        <span className="text-muted-foreground text-xs">
           {r.usecaseId != null ? `UC-${r.usecaseId}` : "—"}
         </span>
       ),
@@ -126,7 +130,16 @@ export default function CertificationPage() {
       key: "score",
       header: t.colScore,
       render: r => r.score != null
-        ? <span className="tabular-nums font-semibold">{r.score} pts</span>
+        ? (
+          <span className={cn(
+            "tabular-nums font-semibold",
+            r.score >= 80 ? "text-primary"
+              : r.score >= 60 ? "text-foreground"
+              : "text-amber-600"
+          )}>
+            {r.score} pts
+          </span>
+        )
         : <span className="text-muted-foreground">—</span>,
     },
     {
@@ -155,18 +168,15 @@ export default function CertificationPage() {
     },
   ], [t])
 
-  const passFailData = trends?.passFailTrend ?? []
-
   return (
     <div className="min-h-screen w-full">
       <DashboardHeader title={t.certTitle} subtitle={t.certSub} />
       <div className="w-full max-w-[1400px] mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
 
-        {/* Error banners */}
         {overviewError && <ErrorBanner message={`${t.errorLoading}: ${overviewError}`} />}
 
         {/* KPI cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {overviewLoading
             ? Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
@@ -174,6 +184,7 @@ export default function CertificationPage() {
                   <div className="p-5 space-y-3 animate-pulse">
                     <div className="h-3 w-24 rounded bg-muted" />
                     <div className="h-8 w-20 rounded bg-muted" />
+                    <div className="h-5 w-16 rounded bg-muted" />
                   </div>
                 </div>
               ))
@@ -190,31 +201,44 @@ export default function CertificationPage() {
           }
         </div>
 
-        {/* Pass/Fail chart */}
+        {/* Charts: pass/fail stacked + score trend */}
         {trendsError && <ErrorBanner message={`${t.errorLoading}: ${trendsError}`} />}
-        <ChartCard
-          title={t.passFailOverTime}
-          subtitle={`${t.passFailSub} — ${t.last} ${days} ${t.days}`}
-        >
-          {trendsLoading
-            ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
-            : passFailData.length > 0
-              ? <StackedBarChart data={passFailData} passColor={brand.chartColors[0]} failColor={brand.chartColors[1]} />
-              : <EmptyState />
-          }
-        </ChartCard>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+          <ChartCard
+            title={t.passFailOverTime}
+            subtitle={`${t.passFailSub} — ${t.last} ${days} ${t.days}`}
+          >
+            {trendsLoading
+              ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
+              : passFailData.length > 0
+                ? <StackedBarChart data={passFailData} passColor={brand.chartColors[0]} failColor={brand.chartColors[1]} />
+                : <EmptyState />
+            }
+          </ChartCard>
+          <ChartCard
+            title={t.scoreTrend ?? "Score Trend"}
+            subtitle={`${t.last} ${days} ${t.days}`}
+          >
+            {trendsLoading
+              ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
+              : scoreTrend.length > 0
+                ? <ActivityLineChart data={scoreTrend} label="Avg Score" color={brand.chartColors[0]} />
+                : <EmptyState />
+            }
+          </ChartCard>
+        </div>
 
         {/* Results table */}
         {resultsError && <ErrorBanner message={`${t.errorLoading}: ${resultsError}`} />}
-        <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
-          <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
+        <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-4 flex-wrap">
             <div>
               <h3 className="text-sm font-semibold">{t.evaluationResults}</h3>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {resultsLoading
                   ? t.loading
                   : `${results?.data?.length ?? 0} ${t.evaluationsSub} ${days} ${t.days}`}
-                <span className="ml-2 text-[10px] font-medium bg-primary/10 text-primary px-1.5 py-0.5 rounded">
+                <span className="ml-2 text-[10px] font-medium bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">
                   {t.sourceCert}
                 </span>
               </p>
@@ -223,22 +247,25 @@ export default function CertificationPage() {
               data={results?.data ?? []}
               filename={csvFilename("certification-results")}
               columns={[
-                { header: "Report ID",       value: r => r.savedReportId },
-                { header: "Use Case ID",     value: r => r.usecaseId },
-                { header: "Score (pts)",     value: r => r.score },
-                { header: "Result",          value: r => r.passed ? "PASS" : "FAIL" },
-                { header: "Segment",         value: r => r.result },
-                { header: "Date",            value: r => r.date },
+                { header: "Report ID",   value: r => r.savedReportId },
+                { header: "Use Case ID", value: r => r.usecaseId },
+                { header: "Score (pts)", value: r => r.score },
+                { header: "Result",      value: r => r.passed ? "PASS" : "FAIL" },
+                { header: "Segment",     value: r => r.result },
+                { header: "Date",        value: r => r.date },
               ]}
             />
           </div>
-          {resultsLoading
-            ? <div className="py-10 text-center text-sm text-muted-foreground">{t.loading}</div>
-            : results?.data?.length
-              ? <DataTable data={results.data} columns={columns} pageSize={10} />
-              : <div className="py-10 text-center text-sm text-muted-foreground">{t.noDataAvailable}</div>
-          }
+          <div className="p-5">
+            {resultsLoading
+              ? <div className="py-10 text-center text-sm text-muted-foreground">{t.loading}</div>
+              : results?.data?.length
+                ? <DataTable data={results.data} columns={columns} pageSize={10} />
+                : <div className="py-10 text-center text-sm text-muted-foreground">{t.noDataAvailable}</div>
+            }
+          </div>
         </div>
+
       </div>
     </div>
   )

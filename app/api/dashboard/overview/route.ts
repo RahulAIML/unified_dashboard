@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server'
 import { getDashboardOverview } from '@/lib/data-provider'
-import { buildSuccess, buildApiError, parseDateRange, parseUsecaseFilter } from '@/lib/api-utils'
+import { buildSuccess, buildApiError, parseDateRange } from '@/lib/api-utils'
 import { getAuthContextFromRequest } from '@/lib/server-auth'
+import { resolveDynamicUsecaseIds } from '@/lib/dynamic-usecase-resolver'
 
 export const runtime = 'nodejs'
 
@@ -9,12 +10,12 @@ export async function GET(request: NextRequest) {
   const ctx = await getAuthContextFromRequest(request)
   if (!ctx) return buildApiError('Unauthorized', 401)
 
-  // User is authenticated but not linked to any organization → empty state
+  // User is authenticated but not linked to any organisation → empty state
   if (ctx.customerId === 0) {
     return buildSuccess({
       totalEvaluations: 0, prevTotalEvaluations: 0,
-      avgScore: null, prevAvgScore: null,
-      passRate: null, prevPassRate: null,
+      avgScore: null,      prevAvgScore: null,
+      passRate: null,      prevPassRate: null,
       passedEvaluations: 0,
     })
   }
@@ -25,22 +26,38 @@ export async function GET(request: NextRequest) {
     if (!range) {
       return buildApiError('Invalid date range — provide ?from= and ?to= as ISO strings', 400, {
         from: sp.get('from'),
-        to: sp.get('to'),
+        to:   sp.get('to'),
       })
     }
 
-    const { solution, usecaseIds } = parseUsecaseFilter(sp)
+    // ── Dynamic usecase resolution (Step 1-5 of spec) ────────────────────────
+    // solution=second-brain returns [] → we short-circuit to empty (API-only)
+    const solution    = sp.get('solution')
+    const idsParam    = sp.get('usecaseIds')
+    const usecaseIds  = idsParam
+      ? idsParam.split(',').map(Number).filter(n => !isNaN(n))
+      : await resolveDynamicUsecaseIds(ctx.customerId, solution)
+
+    // Second Brain requested on a DB route → return empty (it's API-only)
+    if (solution === 'second-brain') {
+      return buildSuccess({
+        totalEvaluations: 0, prevTotalEvaluations: 0,
+        avgScore: null,      prevAvgScore: null,
+        passRate: null,      prevPassRate: null,
+        passedEvaluations: 0,
+      }, { solution, source: 'second-brain-api-only' })
+    }
 
     const data = await getDashboardOverview({
-      from: range.from,
-      to: range.to,
+      from:        range.from,
+      to:          range.to,
       usecaseIds,
-      customerId: ctx.customerId,
+      customerId:  ctx.customerId,
     })
 
     return buildSuccess(data, {
-      from: range.from.toISOString(),
-      to: range.to.toISOString(),
+      from:       range.from.toISOString(),
+      to:         range.to.toISOString(),
       solution,
       usecaseIds: usecaseIds ?? null,
     })
@@ -49,4 +66,3 @@ export async function GET(request: NextRequest) {
     return buildApiError('Failed to load overview data')
   }
 }
-

@@ -18,9 +18,13 @@ function LogoImage() {
   const brand = useClientBrand()
   const [failed, setFailed] = useState(false)
 
+  // Shared container — consistent dimensions and overflow protection
+  const containerCls =
+    "shrink-0 w-32 h-12 rounded-xl border border-sidebar-border bg-sidebar-accent flex items-center justify-center px-2 overflow-hidden"
+
   if (failed) {
     return (
-      <div className="shrink-0 w-32 h-12 rounded-xl border border-sidebar-border bg-sidebar-accent flex items-center justify-center px-2">
+      <div className={containerCls}>
         <div className="w-10 h-10 rounded-lg flex items-center justify-center text-sidebar-primary-foreground font-extrabold text-lg bg-sidebar-primary">
           {brand.name.charAt(0)}
         </div>
@@ -29,12 +33,14 @@ function LogoImage() {
   }
 
   return (
-    <div className="shrink-0 w-32 h-12 rounded-xl border border-sidebar-border bg-sidebar-accent flex items-center justify-center px-2 overflow-hidden">
+    <div className={containerCls}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={brand.logo}
         alt={brand.logoAlt}
-        className="max-h-10 max-w-[120px] object-contain"
+        // max-h-10 = 40px tall cap; max-w-[120px] prevents wide logos from
+        // overflowing the 128px container; object-contain preserves aspect ratio.
+        className="max-h-10 max-w-[120px] w-auto h-auto object-contain"
         onError={() => setFailed(true)}
       />
     </div>

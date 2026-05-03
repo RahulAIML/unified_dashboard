@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server'
 import { getUsecaseBreakdown } from '@/lib/data-provider'
-import { buildSuccess, buildApiError, parseDateRange, parseUsecaseFilter } from '@/lib/api-utils'
+import { buildSuccess, buildApiError, parseDateRange } from '@/lib/api-utils'
 import { getAuthContextFromRequest } from '@/lib/server-auth'
+import { resolveDynamicUsecaseIds } from '@/lib/dynamic-usecase-resolver'
 
 export const runtime = 'nodejs'
 
@@ -19,15 +20,28 @@ export async function GET(request: NextRequest) {
     if (!range) {
       return buildApiError('Invalid date range — provide ?from= and ?to= as ISO strings', 400, {
         from: sp.get('from'),
-        to: sp.get('to'),
+        to:   sp.get('to'),
       })
     }
 
-    const { solution, usecaseIds } = parseUsecaseFilter(sp)
+    // ── Dynamic usecase resolution ────────────────────────────────────────────
+    const solution   = sp.get('solution')
+    const idsParam   = sp.get('usecaseIds')
+    const usecaseIds = idsParam
+      ? idsParam.split(',').map(Number).filter(n => !isNaN(n))
+      : await resolveDynamicUsecaseIds(ctx.customerId, solution)
+
+    // Second Brain → API-only, no DB breakdown
+    if (solution === 'second-brain') {
+      return buildSuccess(
+        { data: [] },
+        { solution, source: 'second-brain-api-only' }
+      )
+    }
 
     const rows = await getUsecaseBreakdown({
-      from: range.from,
-      to: range.to,
+      from:       range.from,
+      to:         range.to,
       usecaseIds,
       customerId: ctx.customerId,
     })
@@ -35,8 +49,8 @@ export async function GET(request: NextRequest) {
     return buildSuccess(
       { data: rows },
       {
-        from: range.from.toISOString(),
-        to: range.to.toISOString(),
+        from:       range.from.toISOString(),
+        to:         range.to.toISOString(),
         solution,
         usecaseIds: usecaseIds ?? null,
       }
@@ -46,4 +60,3 @@ export async function GET(request: NextRequest) {
     return buildApiError('Failed to load usecase breakdown')
   }
 }
-
