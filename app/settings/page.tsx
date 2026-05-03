@@ -132,12 +132,17 @@ export default function SettingsPage() {
     accent_color:    brand.accentColor,
   }
 
-  const hasUnsaved = draft !== null && (
+  // Check if ANY changes have been made (branding OR platform name)
+  const hasUnsavedBranding = draft !== null && (
     draft.primary_color   !== brand.primaryColor   ||
     draft.secondary_color !== brand.secondaryColor ||
     draft.accent_color    !== brand.accentColor    ||
     draft.logo_url        !== brand.logo
   )
+
+  const hasUnsavedPlatformName = platformNameDraft !== platformName
+
+  const hasUnsaved = hasUnsavedBranding || hasUnsavedPlatformName
 
   // ── Actions ──────────────────────────────────────────────────────────────────
 
