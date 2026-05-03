@@ -22,7 +22,7 @@ export function LayoutContent({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-full min-h-screen overflow-hidden">
       {showSidebar && <Sidebar />}
-      <div className="flex-1 flex flex-col bg-muted/30 overflow-x-hidden overflow-y-auto md:pt-0 pt-16 relative z-0">
+      <div className="flex-1 flex flex-col bg-muted/30 overflow-x-hidden overflow-y-auto md:pt-0 pt-14 relative z-0">
         <main className="flex-1 pb-6 md:pb-10 w-full">
           {children}
         </main>

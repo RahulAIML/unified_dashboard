@@ -13,7 +13,7 @@ interface Props {
 export function ChartCard({ title, subtitle, children, className, headerAction }: Props) {
   return (
     <div className={cn(
-      "relative overflow-hidden rounded-2xl border border-border/60 bg-card",
+      "relative overflow-hidden rounded-[16px] border border-border/60 bg-card",
       "shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)]",
       "hover:shadow-[0_10px_15px_-3px_rgba(0,0,0,0.06),0_4px_6px_-4px_rgba(0,0,0,0.04)]",
       "transition-all duration-200",
@@ -43,9 +43,9 @@ export function ChartCard({ title, subtitle, children, className, headerAction }
       </div>
 
       {/* Chart area */}
-      <div className="px-5 sm:px-6 pt-4 sm:pt-5 pb-5 sm:pb-6">
-        <div className="w-full max-w-full overflow-x-auto">
-          <div className="min-w-[280px] md:min-w-full">
+      <div className="px-4 sm:px-6 pt-4 sm:pt-5 pb-4 sm:pb-6">
+        <div className="w-full max-w-full overflow-hidden">
+          <div className="min-w-0">
             {children}
           </div>
         </div>

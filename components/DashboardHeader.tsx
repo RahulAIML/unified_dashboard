@@ -131,7 +131,7 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full lg:w-auto">
             <button
               onClick={toggleLang}
-              className="px-2.5 py-1 rounded-lg text-xs font-semibold border border-border bg-muted hover:bg-muted/70 transition-colors tabular-nums"
+              className="px-3 py-2 rounded-lg text-xs font-semibold border border-border bg-muted hover:bg-muted/70 transition-colors tabular-nums min-h-[36px]"
               aria-label="Toggle language"
             >
               {lang === "en" ? "ES" : "EN"}
@@ -141,8 +141,8 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
               onClick={handleRefresh}
               disabled={refreshing}
               className={cn(
-                "px-2.5 py-1 rounded-lg text-xs font-semibold border border-border bg-muted hover:bg-muted/70 transition-colors",
-                "inline-flex items-center gap-1.5",
+                "px-3 py-2 rounded-lg text-xs font-semibold border border-border bg-muted hover:bg-muted/70 transition-colors",
+                "inline-flex items-center gap-1.5 min-h-[36px]",
                 refreshing && "opacity-70 cursor-not-allowed"
               )}
               aria-label="Refresh data"
@@ -160,7 +160,7 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
                   key={days}
                   onClick={() => applyPreset(days)}
                   className={cn(
-                    "px-2 sm:px-3 py-1 rounded-md text-xs font-semibold transition-all whitespace-nowrap leading-none",
+                    "px-2.5 sm:px-3 py-1.5 sm:py-1 rounded-md text-xs font-semibold transition-all whitespace-nowrap leading-none min-h-[32px]",
                     activeDays === days ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
                   )}
                 >
@@ -190,7 +190,7 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
               onClick={() => setSolution(null)}
               whileTap={{ scale: 0.95 }}
               className={cn(
-                "flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-full text-xs font-semibold border transition-all",
+                "flex items-center gap-1.5 px-3 sm:px-2.5 py-1.5 sm:py-1 rounded-full text-xs font-semibold border transition-all min-h-[32px]",
                 !selectedSolution ? "bg-primary text-primary-foreground border-transparent" : "border-border text-muted-foreground hover:border-foreground/30"
               )}
             >
@@ -213,7 +213,7 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
                   onClick={() => setSolution(id)}
                   whileTap={{ scale: 0.95 }}
                   className={cn(
-                    "flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-full text-xs font-semibold border transition-all",
+                    "flex items-center gap-1.5 px-3 sm:px-2.5 py-1.5 sm:py-1 rounded-full text-xs font-semibold border transition-all min-h-[32px]",
                     active ? "bg-primary text-primary-foreground border-transparent" : "border-border text-muted-foreground hover:border-foreground/30"
                   )}
                 >

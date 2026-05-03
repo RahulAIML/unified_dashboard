@@ -18,6 +18,11 @@ export function useTranslation() {
   const [translating, setTranslating] = useState(false)
   const cacheRef = useRef<TranslationCache>({})
 
+  // Expose setLanguage so callers can sync with external lang stores
+  const setLang = useCallback((lang: Language) => {
+    setLanguage(lang)
+  }, [])
+
   // ── Cache helpers ────────────────────────────────────────────────────────────
   const getCache = useCallback((): TranslationCache => {
     if (typeof window === 'undefined') return cacheRef.current
@@ -142,6 +147,7 @@ export function useTranslation() {
 
   return {
     language,
+    setLanguage: setLang,
     toggleLanguage,
     translateText,
     translateTexts,

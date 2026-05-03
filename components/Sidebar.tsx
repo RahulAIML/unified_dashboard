@@ -186,21 +186,21 @@ export function Sidebar() {
         />
       )}
 
-      {/* Mobile drawer - highest z-index */}
+      {/* Mobile drawer - highest z-index, full height, no content cutoff */}
       <motion.aside
         initial={{ x: "-100%" }}
         animate={{ x: mobileOpen ? 0 : "-100%" }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        className="fixed left-0 top-0 h-screen w-[85vw] max-w-[320px] bg-sidebar border-r border-sidebar-border flex flex-col z-50 md:hidden shadow-2xl"
+        className="fixed left-0 top-0 h-dvh w-[85vw] max-w-[320px] bg-sidebar border-r border-sidebar-border flex flex-col z-50 md:hidden shadow-2xl overflow-y-auto"
       >
         {sidebarContent}
       </motion.aside>
 
-      {/* Mobile header with hamburger — fixed on top */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-sidebar/95 backdrop-blur-sm border-b border-sidebar-border flex items-center justify-between px-4 h-16">
+      {/* Mobile header with hamburger — fixed on top, larger tap targets */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-sidebar/95 backdrop-blur-sm border-b border-sidebar-border flex items-center justify-between px-4 h-14">
         <button
           onClick={() => setMobileOpen(!mobileOpen)}
-          className="p-2.5 rounded-xl hover:bg-sidebar-accent transition-colors"
+          className="p-3 rounded-xl hover:bg-sidebar-accent transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
           aria-label="Toggle menu"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -208,7 +208,7 @@ export function Sidebar() {
           </svg>
         </button>
         <div className="text-sm font-semibold text-sidebar-foreground">{brand.name}</div>
-        <div className="w-9" /> {/* Spacer for alignment */}
+        <div className="w-11" />
       </div>
     </>
   )

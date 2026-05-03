@@ -166,6 +166,7 @@ export default function PrivacyPage() {
           <p>© 2026 {APP_NAME}. All rights reserved.</p>
           <div className="flex items-center gap-4">
             <Link href="/" className="hover:text-slate-700 transition-colors">Home</Link>
+            <Link href="/terms" className="hover:text-slate-700 transition-colors">Terms of Service</Link>
             <Link href="/auth/login" className="hover:text-slate-700 transition-colors">Sign In</Link>
             <a href="mailto:info@rolplay.ai" className="hover:text-slate-700 transition-colors">Contact</a>
           </div>

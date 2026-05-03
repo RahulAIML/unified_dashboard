@@ -309,9 +309,9 @@ export default function RegisterPage() {
         {/* Footer */}
         <p className="text-center text-xs text-slate-600 mt-6">
           By creating an account, you agree to our{' '}
-          <a href="#" className="font-medium text-red-600 hover:text-red-700">
+          <Link href="/terms" className="font-medium text-red-600 hover:text-red-700">
             Terms of Service
-          </a>
+          </Link>
           {' '}and{' '}
           <Link href="/privacy" className="font-medium text-red-600 hover:text-red-700">
             Privacy Policy

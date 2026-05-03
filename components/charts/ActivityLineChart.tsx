@@ -74,12 +74,20 @@ export function ActivityLineChart({
         <AreaChart data={formatted} margin={{ top: 10, right: 10, left: -10, bottom: 5 }}>
           <defs>
             <linearGradient id="grad1" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%"  stopColor={color}  stopOpacity={0.25} />
+              <stop offset="5%"  stopColor={color}  stopOpacity={0.2} />
               <stop offset="95%" stopColor={color}  stopOpacity={0}   />
             </linearGradient>
             <linearGradient id="grad2" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%"  stopColor={color2} stopOpacity={0.25} />
+              <stop offset="5%"  stopColor={color2} stopOpacity={0.2} />
               <stop offset="95%" stopColor={color2} stopOpacity={0}   />
+            </linearGradient>
+            <linearGradient id="strokeGrad1" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%"   stopColor={color}  stopOpacity={0.8} />
+              <stop offset="100%" stopColor={color}  stopOpacity={1}   />
+            </linearGradient>
+            <linearGradient id="strokeGrad2" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%"   stopColor={color2} stopOpacity={0.8} />
+              <stop offset="100%" stopColor={color2} stopOpacity={1}   />
             </linearGradient>
           </defs>
           <CartesianGrid 
@@ -111,13 +119,15 @@ export function ActivityLineChart({
             type="monotone"
             dataKey="value"
             name={label}
-            stroke={color}
+            stroke="url(#strokeGrad1)"
             fill="url(#grad1)"
             strokeWidth={2.5}
             dot={false}
+            isAnimationActive={true}
+            animationDuration={800}
             activeDot={{ 
-              r: 5, 
-              strokeWidth: 2, 
+              r: 6, 
+              strokeWidth: 3, 
               stroke: "var(--background)",
               fill: color
             }}
@@ -127,13 +137,15 @@ export function ActivityLineChart({
               type="monotone"
               dataKey="value2"
               name={label2}
-              stroke={color2}
+              stroke="url(#strokeGrad2)"
               fill="url(#grad2)"
               strokeWidth={2.5}
               dot={false}
+              isAnimationActive={true}
+              animationDuration={800}
               activeDot={{ 
-                r: 5, 
-                strokeWidth: 2, 
+                r: 6, 
+                strokeWidth: 3, 
                 stroke: "var(--background)",
                 fill: color2
               }}

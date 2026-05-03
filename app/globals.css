@@ -73,6 +73,12 @@
   --glass-bg: rgba(255, 255, 255, 0.7);
   --glass-border: rgba(255, 255, 255, 0.12);
   --glass-backdrop: blur(12px);
+
+  /* ── Premium SaaS refinements ────────────────────────────────────────── */
+  --card-radius-lg: 16px;
+  --card-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.04);
+  --card-shadow-hover: 0 10px 15px -3px rgb(0 0 0 / 0.06), 0 4px 6px -4px rgb(0 0 0 / 0.04);
+  --card-border-opacity: 0.06;
 }
 
 :root {
@@ -126,7 +132,7 @@
   /* ── Card System ─────────────────────────────────────────────────────── */
   --card-radius: 1rem;
   --card-padding: 1.25rem;
-  --card-border: 1px solid rgba(255, 255, 255, 0.05);
+  --card-border: 1px solid rgba(0, 0, 0, 0.06);
   /* Sidebar: always dark (black) */
   --sidebar: oklch(0.10 0 0);
   --sidebar-foreground: oklch(0.92 0 0);
@@ -214,6 +220,7 @@
   }
   html {
     @apply font-sans;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   }
 
   /* ── Headings: semi-bold, tight ───────────────────────────────────────── */
@@ -316,4 +323,89 @@
 @keyframes slideUp {
   from { opacity: 0; transform: translateY(16px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Skeleton shimmer animation ─────────────────────────────────────────────── */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--muted) 25%,
+    color-mix(in oklch, var(--muted-foreground) 6%, var(--muted)) 37%,
+    var(--muted) 63%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* ── Premium card base ──────────────────────────────────────────────────────── */
+.card-premium-v2 {
+  border-radius: var(--card-radius-lg);
+  border: 1px solid rgb(0 0 0 / var(--card-border-opacity));
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.card-premium-v2:hover {
+  box-shadow: var(--card-shadow-hover);
+}
+
+.dark .card-premium-v2 {
+  --card-border-opacity: 0.08;
+}
+
+/* ── Premium Button Styles ─────────────────────────────────────────────────── */
+@layer components {
+  .btn-primary {
+    @apply px-4 py-2.5 rounded-lg bg-primary text-primary-foreground font-semibold text-sm;
+    transition: all 0.2s ease;
+  }
+  
+  .btn-primary:hover {
+    @apply bg-primary/90 shadow-lg;
+    transform: translateY(-1px);
+  }
+  
+  .btn-primary:active {
+    transform: translateY(0);
+  }
+  
+  .btn-secondary {
+    @apply px-4 py-2.5 rounded-lg border border-border bg-card text-foreground font-semibold text-sm;
+    transition: all 0.2s ease;
+  }
+  
+  .btn-secondary:hover {
+    @apply border-primary bg-muted;
+  }
+  
+  /* ── Premium Input Styles ──────────────────────────────────────────────── */
+  .input-premium {
+    @apply px-4 py-2.5 rounded-lg border border-border bg-card text-foreground text-sm;
+    transition: all 0.2s ease;
+  }
+  
+  .input-premium:focus {
+    @apply border-primary outline-none ring-1 ring-primary/20;
+  }
+  
+  .input-premium::placeholder {
+    @apply text-muted-foreground;
+  }
+}
+
+/* ── Enhanced transitions for charts and interactions ─────────────────────── */
+@layer utilities {
+  .transition-chart {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .transition-duration-chart {
+    transition-duration: 400ms;
+  }
 }

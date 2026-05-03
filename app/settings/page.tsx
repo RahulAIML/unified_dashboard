@@ -207,7 +207,7 @@ export default function SettingsPage() {
       <div className="px-4 sm:px-6 py-6 max-w-2xl space-y-6">
 
         {/* ── Logo ─────────────────────────────────────────────────────────── */}
-        <section className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+        <section className="rounded-[16px] border border-border/60 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)] overflow-hidden">
           <div className="h-[3px] bg-gradient-to-r from-primary to-accent" />
           <div className="p-5">
             <h2 className="text-sm font-semibold mb-4">Logo</h2>
@@ -257,7 +257,7 @@ export default function SettingsPage() {
         </section>
 
         {/* ── Theme presets ─────────────────────────────────────────────────── */}
-        <section className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+        <section className="rounded-[16px] border border-border/60 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)] overflow-hidden">
           <div className="h-[3px] bg-gradient-to-r from-primary to-accent" />
           <div className="p-5">
             <div className="flex items-center gap-2 mb-4">
@@ -300,7 +300,7 @@ export default function SettingsPage() {
         </section>
 
         {/* ── Advanced: custom colors ───────────────────────────────────────── */}
-        <section className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+        <section className="rounded-[16px] border border-border/60 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)] overflow-hidden">
           <button
             onClick={() => setShowAdvanced(!showAdvanced)}
             className="w-full px-5 py-4 flex items-center justify-between hover:bg-muted/30 transition-colors"
@@ -383,7 +383,7 @@ export default function SettingsPage() {
         </section>
 
         {/* ── Live preview ──────────────────────────────────────────────────── */}
-        <section className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+        <section className="rounded-[16px] border border-border/60 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)] overflow-hidden">
           <div className="h-[3px]" style={{ background: `linear-gradient(90deg, ${current.primary_color}, ${current.accent_color})` }} />
           <div className="p-5">
             <h2 className="text-sm font-semibold mb-4">Live Preview</h2>

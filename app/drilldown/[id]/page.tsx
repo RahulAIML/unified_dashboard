@@ -1,11 +1,11 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
 import {
   ArrowLeft, BarChart2, BadgeCheck, XCircle, Hash, CalendarDays,
   Layers, Globe, ChevronDown, ChevronUp, FileText, Target, Award,
-  TrendingUp, MessageSquare, AlertCircle
+  TrendingUp, MessageSquare, AlertCircle, Languages
 } from "lucide-react"
 import { useApi }                              from "@/lib/hooks/useApi"
 import { useTranslation }                      from "@/lib/hooks/useTranslation"
@@ -14,6 +14,7 @@ import { SCORE_FIELD_KEYS, RESULT_FIELD_KEYS } from "@/lib/field-map"
 import { formatFieldLabel }                    from "@/lib/field-labels"
 import { cn }                                  from "@/lib/utils"
 import { useDashboardStore }                   from "@/lib/store"
+import { useLangStore }                        from "@/lib/lang-store"
 import { ExportButton }                        from "@/components/ExportButton"
 import { csvFilename }                         from "@/lib/csv-export"
 
@@ -125,7 +126,7 @@ function ScoreCard({
     :                  "bg-destructive"
 
   return (
-    <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+    <div className="rounded-[16px] border border-border/60 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)] overflow-hidden">
       <div className="h-[3px] w-full bg-gradient-to-r from-primary to-accent" />
       <div className="px-4 pt-4 pb-4">
         <div className="flex items-start justify-between mb-3">
@@ -167,7 +168,7 @@ function LongTextCard({
   const needsTruncation = value.length > 240
 
   return (
-    <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+    <div className="rounded-[16px] border border-border/60 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)] overflow-hidden">
       <div className="h-[2px] w-full bg-muted" />
       <div className="px-5 py-4">
         <div className="flex items-start gap-2 mb-2">
@@ -206,7 +207,7 @@ function MetaChip({
   value: string
 }) {
   return (
-    <div className="flex items-center gap-2.5 rounded-xl border border-border bg-card px-4 py-3 shadow-sm">
+    <div className="flex items-center gap-2.5 rounded-[16px] border border-border/60 bg-card px-4 py-3 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)]">
       <span className="shrink-0 text-muted-foreground">{icon}</span>
       <div className="min-w-0">
         <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide truncate">
@@ -226,10 +227,23 @@ export default function DrilldownPage() {
   const refreshKey = useDashboardStore((s) => s.refreshKey)
   const id         = params?.id as string | undefined
 
-  // Translation
-  const { language, toggleLanguage, translateTexts, translating } = useTranslation()
+  // Translation — sync with global lang store
+  const globalLang = useLangStore((s) => s.lang)
+  const { language, setLanguage, translateTexts, translating } = useTranslation()
   const [translatedLabels, setTranslatedLabels] = useState<Record<string, string>>({})
+  const [translatedValues, setTranslatedValues] = useState<Record<string, string>>({})
   const [showRawKeys, setShowRawKeys] = useState(false)
+
+  // Sync drilldown language with global lang on mount & change
+  useEffect(() => {
+    setLanguage(globalLang)
+  }, [globalLang, setLanguage])
+
+  const toggleLanguage = useCallback(() => {
+    const next = language === 'en' ? 'es' : 'en'
+    setLanguage(next)
+    useLangStore.getState().setLang(next)
+  }, [language, setLanguage])
 
   // Validate ID
   const idNum   = id ? parseInt(id, 10) : NaN
@@ -288,9 +302,45 @@ export default function DrilldownPage() {
     run()
   }, [language, uniqueDisplayLabels, translateTexts])
 
+  // ── Translate long text values (feedback, strengths, improvements) ──────
+  const longTextValues = useMemo(() => {
+    if (!allFields.length) return []
+    return [...new Set(
+      allFields
+        .map(f => resolveDisplay(f))
+        .filter(v => v !== "—" && isLongText(v))
+    )]
+  }, [allFields])
+
+  useEffect(() => {
+    const run = async () => {
+      if (language === 'en' || !longTextValues.length) {
+        setTranslatedValues({})
+        return
+      }
+      try {
+        const translated = await translateTexts(longTextValues, language)
+        const map: Record<string, string> = {}
+        longTextValues.forEach((val, i) => {
+          if (translated[i]) map[val] = translated[i]
+        })
+        setTranslatedValues(map)
+      } catch {
+        setTranslatedValues({})
+      }
+    }
+    run()
+  }, [language, longTextValues, translateTexts])
+
   const getLabel = (field: DrilldownField) => {
     const base = getBestLabel(field)
     return translatedLabels[base] ?? base
+  }
+
+  const getValue = (field: DrilldownField) => {
+    const display = resolveDisplay(field)
+    if (display === "—" || !isLongText(display)) return display
+    return translatedValues[display] ?? display
   }
 
   // ── Export rows ───────────────────────────────────────────────────────────
@@ -352,36 +402,42 @@ export default function DrilldownPage() {
           </h1>
 
           <div className="ml-auto flex items-center gap-2 flex-wrap">
-            {/* Raw keys toggle */}
+            {/* Raw keys toggle — hidden by default, opt-in */}
             <button
               onClick={() => setShowRawKeys(!showRawKeys)}
               className={cn(
-                "hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors",
+                "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors",
                 showRawKeys
                   ? "border-primary/40 bg-primary/10 text-primary"
                   : "border-border bg-muted text-muted-foreground hover:text-foreground"
               )}
-              title="Toggle technical field keys"
+              title={showRawKeys ? 'Hide technical field keys' : 'Show technical field keys'}
             >
               <Hash className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">Technical keys</span>
+              <span className="hidden sm:inline">{showRawKeys ? 'Hide Keys' : 'Show Keys'}</span>
             </button>
 
-            {/* Language toggle */}
+            {/* Language toggle: [EN | Original] */}
             <button
               onClick={toggleLanguage}
               disabled={translating}
-              title={language === 'en' ? 'Translate to Spanish' : 'Switch to English'}
+              title={language === 'en' ? 'Translate to Spanish' : 'Show original text'}
               className={cn(
                 "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors",
-                language === 'es'
+                language !== 'en'
                   ? "border-primary/40 bg-primary/10 text-primary"
                   : "border-border bg-muted text-muted-foreground hover:text-foreground",
                 "disabled:opacity-40 disabled:cursor-not-allowed"
               )}
             >
-              <Globe className="w-3.5 h-3.5" />
-              <span>{translating ? "Translating…" : language === 'en' ? 'ES' : 'EN'}</span>
+              {translating ? (
+                <span className="flex items-center gap-1"><span className="w-3 h-3 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />Translating…</span>
+              ) : (
+                <>
+                  <Languages className="w-3.5 h-3.5" />
+                  <span>{language === 'en' ? 'EN | Original' : 'ES | Traducido'}</span>
+                </>
+              )}
             </button>
 
             <ExportButton
@@ -436,7 +492,7 @@ export default function DrilldownPage() {
 
             {/* ── Hero: Score + Result ──────────────────────────────────────── */}
             {(scoreFields.length > 0 || resultFields.length > 0) && (
-              <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+              <div className="rounded-[16px] border border-border/60 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)] overflow-hidden">
                 <div
                   className="h-1 w-full"
                   style={{ background: "linear-gradient(90deg, hsl(var(--primary)), hsl(var(--accent)))" }}
@@ -555,7 +611,7 @@ export default function DrilldownPage() {
                       return (
                         <div
                           key={field.fieldKey}
-                          className="rounded-xl border border-border bg-card px-4 py-3 shadow-sm"
+                          className="rounded-[16px] border border-border/60 bg-card px-4 py-3 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)]"
                         >
                           <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1 truncate">
                             {getLabel(field)}
@@ -587,7 +643,7 @@ export default function DrilldownPage() {
                     <LongTextCard
                       key={field.fieldKey}
                       label={getLabel(field)}
-                      value={resolveDisplay(field)}
+                      value={getValue(field)}
                     />
                   ))}
                 </div>
@@ -640,7 +696,7 @@ function AllFieldsTable({
   const visible    = filtered.slice(page * PAGE, (page + 1) * PAGE)
 
   return (
-    <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+    <div className="rounded-[16px] border border-border/60 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)] overflow-hidden">
       <button
         onClick={() => setOpen(!open)}
         className="w-full px-5 py-4 flex items-center justify-between text-left hover:bg-muted/30 transition-colors"
@@ -812,7 +868,7 @@ function ClosingJsonSection({ json }: { json: Record<string, unknown> }) {
   if (entries.length === 0) return null
 
   return (
-    <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+    <div className="rounded-[16px] border border-border/60 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)] overflow-hidden">
       <button
         onClick={() => setOpen(!open)}
         className="w-full px-5 py-4 flex items-center justify-between text-left hover:bg-muted/30 transition-colors"

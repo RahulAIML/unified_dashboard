@@ -31,6 +31,9 @@ export async function middleware(request: NextRequest) {
   // Landing page — always accessible, page handles auth client-side
   if (pathname === '/') return NextResponse.next()
 
+  // Public legal pages — no auth required
+  if (pathname === '/privacy' || pathname === '/terms') return NextResponse.next()
+
   const token = request.cookies.get('accessToken')?.value ?? null
   const isAuthed = token ? Boolean(await verifyAccessToken(token)) : false
 

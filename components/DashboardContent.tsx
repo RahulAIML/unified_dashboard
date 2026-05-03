@@ -58,20 +58,20 @@ const kpiIcons = [
   <BadgeCheck key="b"  className="w-4 h-4" />,
 ]
 
-// ── Skeleton shimmer ──────────────────────────────────────────────────────────
+// ── KPI skeleton ──────────────────────────────────────────────────────────────────
 function KpiSkeleton() {
   return (
-    <div className="rounded-2xl border border-border/60 bg-card overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)]">
-      <div className="h-[3px] bg-primary" />
-      <div className="p-5 sm:p-6 space-y-4 animate-pulse">
+    <div className="rounded-[16px] border border-border/60 bg-card overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)] animate-pulse">
+      <div className="h-[3px] bg-gradient-to-r from-primary to-accent" />
+      <div className="p-5 sm:p-6 space-y-4">
         <div className="flex items-center justify-between">
-          <div className="h-3 w-24 rounded bg-muted" />
-          <div className="w-9 h-9 rounded-xl bg-muted" />
+          <div className="h-3 w-24 rounded bg-muted skeleton-shimmer" />
+          <div className="w-9 h-9 rounded-xl bg-muted skeleton-shimmer" />
         </div>
-        <div className="h-9 w-28 rounded bg-muted" />
+        <div className="h-9 w-28 rounded bg-muted skeleton-shimmer" />
         <div className="flex items-center gap-2">
-          <div className="h-6 w-16 rounded-lg bg-muted" />
-          <div className="h-3 w-12 rounded bg-muted/50" />
+          <div className="h-6 w-16 rounded-lg bg-muted skeleton-shimmer" />
+          <div className="h-3 w-12 rounded bg-muted/50 skeleton-shimmer" />
         </div>
       </div>
     </div>
@@ -81,8 +81,13 @@ function KpiSkeleton() {
 // ── Chart skeleton ────────────────────────────────────────────────────────────
 function ChartSkeleton() {
   return (
-    <div className="h-72 sm:h-80 animate-pulse">
-      <div className="h-full bg-muted/50 rounded-xl" />
+    <div className="space-y-4 animate-pulse">
+      <div className="h-[300px] sm:h-[320px] bg-gradient-to-r from-muted via-muted/80 to-muted rounded-xl skeleton-shimmer" />
+      <div className="flex flex-wrap gap-2">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="h-6 w-20 rounded-lg bg-muted skeleton-shimmer" />
+        ))}
+      </div>
     </div>
   )
 }
@@ -93,20 +98,20 @@ function TableSkeleton({ rows = 5 }: { rows?: number }) {
     <div className="space-y-3 animate-pulse">
       {/* Header */}
       <div className="flex gap-3 pb-3 border-b border-border/50">
-        <div className="h-4 w-20 rounded bg-muted" />
-        <div className="h-4 w-24 rounded bg-muted" />
-        <div className="h-4 w-20 rounded bg-muted" />
-        <div className="h-4 w-16 rounded bg-muted" />
-        <div className="h-4 w-24 rounded bg-muted" />
+        <div className="h-4 w-20 rounded bg-muted skeleton-shimmer" />
+        <div className="h-4 w-24 rounded bg-muted skeleton-shimmer" />
+        <div className="h-4 w-20 rounded bg-muted skeleton-shimmer" />
+        <div className="h-4 w-16 rounded bg-muted skeleton-shimmer" />
+        <div className="h-4 w-24 rounded bg-muted skeleton-shimmer" />
       </div>
       {/* Rows */}
       {Array.from({ length: rows }).map((_, i) => (
         <div key={i} className="flex gap-3 py-3">
-          <div className="h-4 w-20 rounded bg-muted/70" />
-          <div className="h-4 w-24 rounded bg-muted/70" />
-          <div className="h-4 w-20 rounded bg-muted/70" />
-          <div className="h-4 w-16 rounded bg-muted/70" />
-          <div className="h-4 w-24 rounded bg-muted/70" />
+          <div className="h-4 w-20 rounded bg-muted/70 skeleton-shimmer" />
+          <div className="h-4 w-24 rounded bg-muted/70 skeleton-shimmer" />
+          <div className="h-4 w-20 rounded bg-muted/70 skeleton-shimmer" />
+          <div className="h-4 w-16 rounded bg-muted/70 skeleton-shimmer" />
+          <div className="h-4 w-24 rounded bg-muted/70 skeleton-shimmer" />
         </div>
       ))}
     </div>
@@ -482,7 +487,7 @@ export function DashboardContent() {
                   )}
             </div>
 
-            <div className="rounded-2xl border border-border/60 bg-card p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)] hover:shadow-[0_10px_15px_-3px_rgba(0,0,0,0.06),0_4px_6px_-4px_rgba(0,0,0,0.04)] transition-all duration-200">
+            <div className="rounded-[16px] border border-border/60 bg-card p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)] hover:shadow-[0_10px_15px_-3px_rgba(0,0,0,0.06),0_4px_6px_-4px_rgba(0,0,0,0.04)] transition-all duration-200">
               <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div>
                   <h3 className="text-base sm:text-lg font-semibold">{t.sbTitle}</h3>
@@ -557,7 +562,7 @@ export function DashboardContent() {
               : Array.from({ length: 4 }).map((_, i) => (
                   <div
                     key={i}
-                    className="rounded-2xl border border-border/60 bg-card overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)]"
+                    className="rounded-[16px] border border-border/60 bg-card overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)]"
                   >
                     <div className="h-[3px] bg-primary" />
                     <div className="p-5 sm:p-6 text-center text-sm text-muted-foreground py-10">
@@ -610,7 +615,7 @@ export function DashboardContent() {
 
         {/* Best Performers section — shown when data exists */}
         {(bestLoading || (bestPerformers?.data?.length ?? 0) > 0) && (
-          <div className="rounded-2xl border border-border/60 bg-card p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)] hover:shadow-[0_10px_15px_-3px_rgba(0,0,0,0.06),0_4px_6px_-4px_rgba(0,0,0,0.04)] transition-all duration-200">
+          <div className="rounded-[16px] border border-border/60 bg-card p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)] hover:shadow-[0_10px_15px_-3px_rgba(0,0,0,0.06),0_4px_6px_-4px_rgba(0,0,0,0.04)] transition-all duration-200">
             <div className="mb-5">
               <h3 className="text-base sm:text-lg font-semibold flex items-center gap-2">
                 <div 
@@ -698,7 +703,7 @@ export function DashboardContent() {
         )}
 
         {/* Recent evaluations table */}
-        <div className="rounded-2xl border border-border/60 bg-card p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)] hover:shadow-[0_10px_15px_-3px_rgba(0,0,0,0.06),0_4px_6px_-4px_rgba(0,0,0,0.04)] transition-all duration-200">
+        <div className="rounded-[16px] border border-border/60 bg-card p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)] hover:shadow-[0_10px_15px_-3px_rgba(0,0,0,0.06),0_4px_6px_-4px_rgba(0,0,0,0.04)] transition-all duration-200">
           <div className="mb-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div>
               <h3 className="text-base sm:text-lg font-semibold">{t.evaluationResults}</h3>

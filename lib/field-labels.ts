@@ -200,6 +200,34 @@ const FIELD_LABEL_MAP: Record<string, string> = {
   certification_status:       "Certification Status",
   badge_awarded:              "Badge Awarded",
 
+  // ── Question / Item scores (q1_score, q2_score, etc.) ──────────────────────
+  q1_score:                   "Question 1 Score",
+  q2_score:                   "Question 2 Score",
+  q3_score:                   "Question 3 Score",
+  q4_score:                   "Question 4 Score",
+  q5_score:                   "Question 5 Score",
+  q6_score:                   "Question 6 Score",
+  q7_score:                   "Question 7 Score",
+  q8_score:                   "Question 8 Score",
+  q9_score:                   "Question 9 Score",
+  q10_score:                  "Question 10 Score",
+  q1_result:                  "Question 1 Result",
+  q2_result:                  "Question 2 Result",
+  q3_result:                  "Question 3 Result",
+  q1:                         "Question 1",
+  q2:                         "Question 2",
+  q3:                         "Question 3",
+  q4:                         "Question 4",
+  q5:                         "Question 5",
+  q6:                         "Question 6",
+  q7:                         "Question 7",
+  q8:                         "Question 8",
+  q9:                         "Question 9",
+  q10:                        "Question 10",
+  overall_assessment:          "Overall Assessment",
+  assessment:                 "Assessment",
+  evaluation_assessment:       "Evaluation Assessment",
+
   // ── Miscellaneous ────────────────────────────────────────────────────────────
   notes:                      "Notes",
   raw_transcript:             "Conversation Transcript",
@@ -251,6 +279,16 @@ const PREFIX_PATTERNS: Array<{ prefix: string; suffix: (rest: string) => string 
   { prefix: 'initial_',        suffix: rest => `Initial ${titleCase(rest)}`   },
   { prefix: 'pre_',            suffix: rest => `Pre-${titleCase(rest)}`       },
   { prefix: 'post_',           suffix: rest => `Post-${titleCase(rest)}`      },
+  // qN patterns: q11_score → "Question 11 Score", q3_comment → "Question 3 Comment"
+  { prefix: 'q',               suffix: rest => {
+    const match = rest.match(/^(\d+)_?(.*)$/)
+    if (match) {
+      const num = match[1]
+      const sub = match[2]
+      return sub ? `Question ${num} ${titleCase(sub)}` : `Question ${num}`
+    }
+    return `Q ${titleCase(rest)}`
+  }},
 ]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

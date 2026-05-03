@@ -20,7 +20,7 @@ export function MetricCard({ label, value, unit, icon, hint, className }: Props)
       transition={{ duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
       whileHover={{ y: -3, transition: { duration: 0.2 } }}
       className={cn(
-        "relative w-full overflow-hidden rounded-2xl border border-border/60 bg-card",
+        "relative w-full overflow-hidden rounded-[16px] border border-border/60 bg-card",
         "shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)]",
         "hover:shadow-[0_10px_15px_-3px_rgba(0,0,0,0.06),0_4px_6px_-4px_rgba(0,0,0,0.04)]",
         "transition-all duration-200",
