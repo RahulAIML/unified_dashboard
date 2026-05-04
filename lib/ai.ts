@@ -109,12 +109,6 @@ export async function getAIResponse(
   prompt: string,
   context: string
 ): Promise<string> {
-  const apiKey = process.env.GEMINI_API_KEY
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is not set")
-  }
-
-
   const expandedQuestion = expandQuery(prompt)
 
   // Quick deterministic fallbacks for simple validation inputs to guarantee
@@ -131,6 +125,11 @@ export async function getAIResponse(
     )
   }
 
+  const apiKey = process.env.GEMINI_API_KEY
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY is not set")
+  }
+
   // Only pass context and the user question as the user content. The strict
   // system instruction above is the single source of behavior rules.
   const userContent = `DASHBOARD DATA:\n${context}\n\nUSER QUESTION:\n${expandedQuestion}`
@@ -140,7 +139,7 @@ export async function getAIResponse(
   // Retry once if response is suspiciously short (< 80 chars)
   if (answer.length < 80) {
     console.warn("[ai] Response too short, retrying once...")
-    answer = await callGemini(fullPrompt, apiKey)
+    answer = await callGemini(userContent, apiKey)
   }
 
   if (!answer) {
