@@ -118,7 +118,8 @@ export function AIAssistant() {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
-      content: "Hi! Ask me about performance, pass rate, score trends, or type \"summary\" for a full overview.",
+      content:
+        "Bonjour — I can help with French translations, meanings, and grammar. Ask a question or type a phrase to translate.",
     },
   ])
   const [input, setInput]   = useState("")
