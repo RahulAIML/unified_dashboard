@@ -163,6 +163,17 @@ export const translations = {
     lmsNoDataSub:     'LMS modules, completions, and quiz scores are stored in the rolplay.pro database — a separate schema from coach_app. A dedicated schema audit and backend endpoint are required before this view can show real data.',
     lmsAuditNeeded:   'Schema audit required',
 
+    // ── Banco KPI labels ─────────────────────────────────────
+    navBanco:                'Banco Analytics',
+    bancoTotalSessions:      'Total Sessions',
+    bancoActiveEmployees:    'Active Employees',
+    bancoAvgRounds:          'Avg Rounds / Session',
+    bancoTotalUsers:         'Banco Users',
+    bancoTopPerformers:      'Top Performers',
+    bancoRecentSessions:     'Recent Sessions',
+    bancoByPosition:         'Sessions by Position',
+    bancoHierarchy:          'Employee Hierarchy',
+
     // ── Second Brain KPI labels ──────────────────────────────
     sbTotalInteractions:   'Total Interactions',
     sbActiveMembers:       'Active Members',
@@ -422,6 +433,17 @@ export const translations = {
     lmsNoData:        'Datos de LMS no disponibles',
     lmsNoDataSub:     'Los módulos LMS, completaciones y puntuaciones de cuestionarios están almacenados en la base de datos de rolplay.pro — un esquema separado de coach_app. Se requiere una auditoría de esquema dedicada antes de que esta vista pueda mostrar datos reales.',
     lmsAuditNeeded:   'Auditoría de esquema requerida',
+
+    // ── Banco KPI labels ─────────────────────────────────────
+    navBanco:                'Banco Analytics',
+    bancoTotalSessions:      'Total de Sesiones',
+    bancoActiveEmployees:    'Empleados Activos',
+    bancoAvgRounds:          'Rondas Promedio / Sesión',
+    bancoTotalUsers:         'Usuarios Banco',
+    bancoTopPerformers:      'Mejores Desempeños',
+    bancoRecentSessions:     'Sesiones Recientes',
+    bancoByPosition:         'Sesiones por Posición',
+    bancoHierarchy:          'Jerarquía de Empleados',
 
     // ── Second Brain KPI labels ──────────────────────────────
     sbTotalInteractions:   'Interacciones Totales',

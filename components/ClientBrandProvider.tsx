@@ -110,11 +110,40 @@ const BrandContext = createContext<BrandContextValue>({
   saveBranding: async () => undefined,
 })
 
+// ── User-specific localStorage helpers (keyed by email) ──────────────────────
+
+const SETTINGS_KEY = (email: string) => `dashboard_settings_${email}`
+
+function loadLocalSettings(email: string): BrandingSettings | null {
+  if (typeof window === 'undefined' || !email) return null
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY(email))
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<BrandingSettings>
+    // Validate minimum required fields
+    if (!parsed.primary_color || !parsed.secondary_color || !parsed.accent_color) return null
+    return parsed as BrandingSettings
+  } catch {
+    return null
+  }
+}
+
+function saveLocalSettings(email: string, settings: BrandingSettings) {
+  if (typeof window === 'undefined' || !email) return
+  try {
+    localStorage.setItem(SETTINGS_KEY(email), JSON.stringify(settings))
+  } catch {
+    // localStorage may be blocked — silently ignore
+  }
+}
+
 export function ClientBrandProvider({ children }: ClientBrandProviderProps) {
   const { theme } = useTheme()
-  const { isAuthenticated, isLoading: authLoading } = useAuthContext()
+  const { isAuthenticated, isLoading: authLoading, user } = useAuthContext()
   const [brand, setBrand] = useState(defaultBrand)
   const [isLoading, setIsLoading] = useState(true)
+
+  const userEmail = user?.email ?? ''
 
   const refreshBranding = useCallback(async () => {
     if (!isAuthenticated) {
@@ -123,18 +152,32 @@ export function ClientBrandProvider({ children }: ClientBrandProviderProps) {
       return
     }
 
+    // Fast path: apply user-specific localStorage settings instantly
+    // while DB fetch completes (eliminates flash of default branding)
+    const localSettings = loadLocalSettings(userEmail)
+    if (localSettings) {
+      setBrand(resolveClientBrand(localSettings))
+    }
+
     setIsLoading(true)
     try {
       const response = await fetch("/api/branding", { credentials: "include", cache: "no-store" })
       const json = await response.json().catch(() => null) as BrandingApiEnvelope | null
-      setBrand(resolveClientBrand(json?.data?.settings))
+      const dbSettings = json?.data?.settings ?? null
+      if (dbSettings) {
+        // DB settings are authoritative — update localStorage cache
+        saveLocalSettings(userEmail, dbSettings)
+        setBrand(resolveClientBrand(dbSettings))
+      } else if (!localSettings) {
+        setBrand(defaultBrand)
+      }
     } catch (error) {
       console.warn("[ClientBrandProvider] failed to load branding", error)
-      setBrand(defaultBrand)
+      if (!localSettings) setBrand(defaultBrand)
     } finally {
       setIsLoading(false)
     }
-  }, [isAuthenticated])
+  }, [isAuthenticated, userEmail])
 
   const saveBranding = useCallback(async (payload: BrandingSettings) => {
     const response = await fetch("/api/branding", {
@@ -149,8 +192,11 @@ export function ClientBrandProvider({ children }: ClientBrandProviderProps) {
       throw new Error(json?.data?.message ?? "Failed to save branding")
     }
 
-    setBrand(resolveClientBrand(json?.data?.settings))
-  }, [])
+    const saved = json?.data?.settings ?? payload
+    // Persist to user-specific localStorage so settings survive page refresh
+    saveLocalSettings(userEmail, saved)
+    setBrand(resolveClientBrand(saved))
+  }, [userEmail])
 
   useEffect(() => {
     if (authLoading) return

@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import {
   LayoutDashboard, BookOpen, BrainCircuit, Gamepad2,
-  BadgeCheck, Database, Sun, Moon, Settings, LogOut
+  BadgeCheck, Database, Sun, Moon, Settings, LogOut, Building2
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useTheme } from "./ThemeProvider"
@@ -97,6 +97,7 @@ export function Sidebar() {
     { href: "/simulator",     label: t.navSimulator,     icon: Gamepad2        },
     { href: "/certification", label: t.navCertification, icon: BadgeCheck      },
     { href: "/second-brain",  label: t.navSecondBrain,   icon: Database        },
+    { href: "/banco",         label: t.navBanco,         icon: Building2       },
     { href: "/settings",      label: t.navSettings,      icon: Settings        },
   ]
 
