@@ -101,7 +101,7 @@ async function callGemini(
   return text
 }
 
-export function forceDirectAnswer(input: string) {
+export async function forceDirectAnswer(input: string) {
   return `Here is the answer:\n\n${input}`
 }
 
