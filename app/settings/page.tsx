@@ -7,6 +7,7 @@ import { useClientBrand } from '@/lib/hooks/useClientBrand'
 import { usePlatformName } from '@/lib/hooks/usePlatformName'
 import { cn } from '@/lib/utils'
 import { DEFAULT_BRANDING_SETTINGS, type BrandingSettings } from '@/lib/branding'
+import { useT } from '@/lib/lang-store'
 
 // ── Theme presets ─────────────────────────────────────────────────────────────
 
@@ -93,6 +94,7 @@ function useDebounced<T>(value: T, delay: number): T {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
+  const t           = useT()
   const brand       = useClientBrand()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { platformName, setPlatformName, isLoaded: platformNameLoaded } = usePlatformName()
@@ -213,7 +215,7 @@ export default function SettingsPage() {
   if (brand.isLoading) {
     return (
       <div className="min-h-screen">
-        <DashboardHeader title="Settings" subtitle="Customize your dashboard branding" />
+        <DashboardHeader title={t.settingsTitle} subtitle={t.settingsBrandingSub} />
         <div className="p-6 animate-pulse space-y-4 max-w-2xl">
           <div className="h-32 bg-muted rounded-xl" />
           <div className="h-48 bg-muted rounded-xl" />
@@ -224,7 +226,7 @@ export default function SettingsPage() {
 
   return (
     <div className="min-h-screen">
-      <DashboardHeader title="Settings" subtitle="Customize your dashboard branding" />
+      <DashboardHeader title={t.settingsTitle} subtitle={t.settingsBrandingSub} />
 
       <div className="px-4 sm:px-6 py-6 max-w-2xl space-y-6">
 
@@ -232,8 +234,8 @@ export default function SettingsPage() {
         <section className="rounded-[16px] border border-border/60 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)] overflow-hidden">
           <div className="h-[3px] bg-gradient-to-r from-primary to-accent" />
           <div className="p-5">
-            <h2 className="text-sm font-semibold mb-3">Platform Name</h2>
-            <p className="text-xs text-muted-foreground mb-4">Customize the name displayed in the header and navigation</p>
+            <h2 className="text-sm font-semibold mb-3">{t.settingsPlatformName}</h2>
+            <p className="text-xs text-muted-foreground mb-4">{t.settingsPlatformNameDesc}</p>
             <div className="flex flex-col sm:flex-row gap-3">
               <input
                 type="text"
@@ -245,7 +247,7 @@ export default function SettingsPage() {
               />
               <span className="text-xs text-muted-foreground self-center sm:self-auto">{platformNameDraft.length}/50</span>
             </div>
-            <p className="text-xs text-muted-foreground mt-2">Changes are saved when you click "Save Changes" button</p>
+            <p className="text-xs text-muted-foreground mt-2">{t.settingsPlatformNameHint}</p>
           </div>
         </section>
 
@@ -253,7 +255,7 @@ export default function SettingsPage() {
         <section className="rounded-[16px] border border-border/60 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)] overflow-hidden">
           <div className="h-[3px] bg-gradient-to-r from-primary to-accent" />
           <div className="p-5">
-            <h2 className="text-sm font-semibold mb-4">Logo</h2>
+            <h2 className="text-sm font-semibold mb-4">{t.settingsLogo}</h2>
             <div className="flex items-center gap-5 flex-wrap">
               {/* Preview */}
               <div className="shrink-0 w-36 h-16 rounded-xl border border-border bg-muted/40 flex items-center justify-center overflow-hidden p-2">
@@ -265,7 +267,7 @@ export default function SettingsPage() {
                     className="max-h-10 max-w-[120px] w-auto h-auto object-contain"
                   />
                 ) : (
-                  <span className="text-xs text-muted-foreground">No logo</span>
+                  <span className="text-xs text-muted-foreground">{t.settingsLogoNoLogo}</span>
                 )}
               </div>
 
@@ -283,15 +285,15 @@ export default function SettingsPage() {
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 disabled:opacity-60 transition-opacity"
                 >
                   <Upload className="w-4 h-4" />
-                  {saving ? 'Uploading…' : 'Upload Logo'}
+                  {saving ? t.settingsUploading : t.settingsUploadLogo}
                 </button>
-                <p className="text-xs text-muted-foreground">PNG, JPG, or WebP recommended</p>
+                <p className="text-xs text-muted-foreground">{t.settingsLogoHint}</p>
                 {current.logo_url && (
                   <button
                     onClick={() => setDraft({ ...current, logo_url: null })}
                     className="text-xs text-destructive hover:underline"
                   >
-                    Remove logo
+                    {t.settingsLogoRemove}
                   </button>
                 )}
               </div>
@@ -305,7 +307,7 @@ export default function SettingsPage() {
           <div className="p-5">
             <div className="flex items-center gap-2 mb-4">
               <Sparkles className="w-4 h-4 text-muted-foreground" />
-              <h2 className="text-sm font-semibold">Theme Presets</h2>
+              <h2 className="text-sm font-semibold">{t.settingsThemePresets}</h2>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {PRESETS.map(preset => (
@@ -351,8 +353,8 @@ export default function SettingsPage() {
             <div className="flex items-center gap-2">
               <Palette className="w-4 h-4 text-muted-foreground" />
               <div className="text-left">
-                <p className="text-sm font-semibold">Advanced: Custom Colors</p>
-                <p className="text-xs text-muted-foreground">Fine-tune individual color values</p>
+                <p className="text-sm font-semibold">{t.settingsAdvColors}</p>
+                <p className="text-xs text-muted-foreground">{t.settingsAdvColorsSub}</p>
               </div>
             </div>
             {showAdvanced
@@ -429,13 +431,13 @@ export default function SettingsPage() {
         <section className="rounded-[16px] border border-border/60 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)] overflow-hidden">
           <div className="h-[3px]" style={{ background: `linear-gradient(90deg, ${current.primary_color}, ${current.accent_color})` }} />
           <div className="p-5">
-            <h2 className="text-sm font-semibold mb-4">Live Preview</h2>
+            <h2 className="text-sm font-semibold mb-4">{t.settingsLivePreview}</h2>
             <div className="space-y-3">
               <button
                 style={{ background: current.primary_color }}
                 className="w-full py-2.5 rounded-xl text-white font-semibold text-sm hover:opacity-90 transition-opacity"
               >
-                Primary Button
+                {t.settingsPrimaryBtn}
               </button>
               <div className="grid grid-cols-2 gap-3">
                 <div
@@ -464,18 +466,18 @@ export default function SettingsPage() {
             className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-border bg-muted hover:bg-muted/70 text-sm font-semibold disabled:opacity-60 transition-colors"
           >
             <RotateCcw className="w-4 h-4" />
-            Reset to Default
+            {t.settingsResetDefault}
           </button>
 
           <div className="flex items-center gap-3">
             {hasUnsaved && !saving && !saved && (
               <p className="text-xs text-amber-500 font-medium animate-pulse">
-                Unsaved changes
+                {t.settingsUnsaved}
               </p>
             )}
             {saved && (
               <p className="text-xs text-emerald-500 font-medium flex items-center gap-1">
-                <Check className="w-3 h-3" /> Saved!
+                <Check className="w-3 h-3" /> {t.settingsSaved}
               </p>
             )}
             <button
@@ -490,7 +492,7 @@ export default function SettingsPage() {
               )}
             >
               <Save className="w-4 h-4" />
-              {saving ? 'Saving…' : 'Save Changes'}
+              {saving ? t.settingsSaving : t.settingsSaveChanges}
             </button>
           </div>
         </div>

@@ -109,17 +109,22 @@ function trendDirection(trend?: { value: number }[]): string {
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-const QUICK_PROMPTS = ["Summary", "Pass rate", "Score trend", "Top insights"]
-
 export function AIAssistant() {
   const { dateRange } = useDashboardStore()
   const t = useT()
+
+  const QUICK_PROMPTS = [
+    t.aiQuickSummary,
+    t.aiQuickPassRate,
+    t.aiQuickScoreTrend,
+    t.aiQuickTopInsights,
+  ]
+
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
-      content:
-        "Bonjour — I can help with French translations, meanings, and grammar. Ask a question or type a phrase to translate.",
+      content: t.aiWelcome,
     },
   ])
   const [input, setInput]   = useState("")
@@ -216,7 +221,7 @@ export function AIAssistant() {
         {
           role: "assistant",
           content:
-            "I couldn't reach the AI service right now. Please check the KPI cards and charts directly for the latest metrics.",
+            t.aiErrorFallback,
         },
       ])
     } finally {
@@ -258,8 +263,8 @@ export function AIAssistant() {
                   <Bot className="h-4 w-4" />
                 </span>
                 <div>
-                  <p className="text-sm font-semibold">AI Assistant</p>
-                  <p className="text-xs text-muted-foreground">Last {dateLabel}</p>
+                  <p className="text-sm font-semibold">{t.aiAssistant}</p>
+                  <p className="text-xs text-muted-foreground">{t.aiLast} {dateLabel}</p>
                 </div>
               </div>
               <button
@@ -294,7 +299,7 @@ export function AIAssistant() {
               {loading && (
                 <div className="mr-6 flex items-center gap-2 rounded-xl bg-muted px-3 py-2.5 text-sm text-muted-foreground">
                   <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
-                  <span>Analyzing dashboard data...</span>
+                  <span>{t.aiAnalyzing}</span>
                 </div>
               )}
 
@@ -307,7 +312,7 @@ export function AIAssistant() {
             {messages.length <= 1 && !loading && (
               <div className="border-t border-border px-4 py-2 shrink-0">
                 <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                  Quick questions
+                  {t.aiQuickQuestions}
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {QUICK_PROMPTS.map(q => (
@@ -330,7 +335,7 @@ export function AIAssistant() {
                   value={input}
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) handleSend() }}
-                  placeholder="Ask about KPIs, pass rate, trends…"
+                  placeholder={t.aiPlaceholder}
                   disabled={loading}
                   className="h-10 flex-1 rounded-lg border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50"
                 />

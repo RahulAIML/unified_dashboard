@@ -110,18 +110,17 @@ const BrandContext = createContext<BrandContextValue>({
   saveBranding: async () => undefined,
 })
 
-// ── Organisation-level localStorage cache (keyed by customer_id) ─────────────
-// All users in the same organisation share the same branding.
-// Keying by customer_id ensures User A and User B from the same org
-// always read/write the same cache entry, matching the DB contract.
+// ── User-level localStorage cache (keyed by email) ───────────────────────────
+// Personalization is stored per user email so each user's dashboard settings
+// are independent, matching the email-based identity contract in the spec.
 
-const ORG_CACHE_KEY = (customerId: number) =>
-  `dashboard_settings_org_${customerId}`
+const USER_CACHE_KEY = (email: string) =>
+  `dashboard_settings_${email}`
 
-function loadLocalSettings(customerId: number): BrandingSettings | null {
-  if (typeof window === 'undefined' || customerId < 0) return null
+function loadLocalSettings(email: string): BrandingSettings | null {
+  if (typeof window === 'undefined' || !email) return null
   try {
-    const raw = localStorage.getItem(ORG_CACHE_KEY(customerId))
+    const raw = localStorage.getItem(USER_CACHE_KEY(email))
     if (!raw) return null
     const parsed = JSON.parse(raw) as Partial<BrandingSettings>
     if (!parsed.primary_color || !parsed.secondary_color || !parsed.accent_color) return null
@@ -131,10 +130,10 @@ function loadLocalSettings(customerId: number): BrandingSettings | null {
   }
 }
 
-function saveLocalSettings(customerId: number, settings: BrandingSettings) {
-  if (typeof window === 'undefined' || customerId < 0) return
+function saveLocalSettings(email: string, settings: BrandingSettings) {
+  if (typeof window === 'undefined' || !email) return
   try {
-    localStorage.setItem(ORG_CACHE_KEY(customerId), JSON.stringify(settings))
+    localStorage.setItem(USER_CACHE_KEY(email), JSON.stringify(settings))
   } catch {
     // localStorage may be blocked — silently ignore
   }
@@ -146,9 +145,9 @@ export function ClientBrandProvider({ children }: ClientBrandProviderProps) {
   const [brand, setBrand] = useState(defaultBrand)
   const [isLoading, setIsLoading] = useState(true)
 
-  // Org ID from the authenticated user — 0 when not linked to an organisation yet.
-  // All users with the same customer_id share the same branding (org-level).
-  const orgId = user?.customer_id ?? -1
+  // Email from the authenticated user — empty string when not yet loaded.
+  // Personalization is user-specific, keyed by email.
+  const userEmail = user?.email ?? ''
 
   const refreshBranding = useCallback(async () => {
     if (!isAuthenticated) {
@@ -157,8 +156,8 @@ export function ClientBrandProvider({ children }: ClientBrandProviderProps) {
       return
     }
 
-    // Fast path: apply org-level cached settings instantly while DB fetch completes
-    const localSettings = loadLocalSettings(orgId)
+    // Fast path: apply user-level cached settings instantly while DB fetch completes
+    const localSettings = loadLocalSettings(userEmail)
     if (localSettings) {
       setBrand(resolveClientBrand(localSettings))
     }
@@ -169,8 +168,8 @@ export function ClientBrandProvider({ children }: ClientBrandProviderProps) {
       const json = await response.json().catch(() => null) as BrandingApiEnvelope | null
       const dbSettings = json?.data?.settings ?? null
       if (dbSettings) {
-        // DB is authoritative — sync the org-level cache
-        saveLocalSettings(orgId, dbSettings)
+        // DB is authoritative — sync the user-level cache
+        saveLocalSettings(userEmail, dbSettings)
         setBrand(resolveClientBrand(dbSettings))
       } else if (!localSettings) {
         setBrand(defaultBrand)
@@ -181,7 +180,7 @@ export function ClientBrandProvider({ children }: ClientBrandProviderProps) {
     } finally {
       setIsLoading(false)
     }
-  }, [isAuthenticated, orgId])
+  }, [isAuthenticated, userEmail])
 
   const saveBranding = useCallback(async (payload: BrandingSettings) => {
     const response = await fetch("/api/branding", {
@@ -197,10 +196,10 @@ export function ClientBrandProvider({ children }: ClientBrandProviderProps) {
     }
 
     const saved = json?.data?.settings ?? payload
-    // Sync the org-level cache so all users in this org see the change on next load
-    saveLocalSettings(orgId, saved)
+    // Sync the user-level cache
+    saveLocalSettings(userEmail, saved)
     setBrand(resolveClientBrand(saved))
-  }, [orgId])
+  }, [userEmail])
 
   useEffect(() => {
     if (authLoading) return

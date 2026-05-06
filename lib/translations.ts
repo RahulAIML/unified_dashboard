@@ -13,13 +13,14 @@ export const translations = {
     navLms:          'LMS',
     navCoach:        'Master Coach',
     navSimulator:    'Simulator',
-    navCertification:'Certification',
+    navCertification:'Certifier Coach',
     navSecondBrain:  'Second Brain',
     navSettings:     'Settings',
     lightMode:       'Light mode',
     darkMode:        'Dark mode',
     logout:          'Sign out',
     phaseLabel:      'v1.0 · Analytics Platform',
+    sidebarSubtitle: 'Analytics Dashboard',
 
     // ── Global filter bar ────────────────────────────────────
     filterSolutions: 'Solutions',
@@ -29,7 +30,7 @@ export const translations = {
 
     // ── Page titles / subtitles ──────────────────────────────
     overviewTitle:   'Global Overview',
-    overviewSub:     'Platform-wide analytics across all solutions',
+    overviewSub:     'Comprehensive analytics of your Rolplay services',
     lmsTitle:        'LMS',
     lmsSub:          'Learning module assignments and completions',
     coachTitle:      'Master Coach',
@@ -265,21 +266,57 @@ export const translations = {
     sbMembersByRoleSub:     'Breakdown of member roles',
     sbMessageTypes:         'Message Types',
     sbMessageTypesSub:      'Distribution of conversation types',
+
+    // ── Settings page ─────────────────────────────────────────
+    settingsBrandingSub:      'Customize your dashboard branding',
+    settingsPlatformName:     'Platform Name',
+    settingsPlatformNameDesc: 'Customize the name displayed in the header and navigation',
+    settingsPlatformNameHint: 'Changes are saved when you click "Save Changes"',
+    settingsLogo:             'Logo',
+    settingsLogoHint:         'PNG, JPG, or WebP recommended',
+    settingsLogoNoLogo:       'No logo',
+    settingsLogoRemove:       'Remove logo',
+    settingsUploadLogo:       'Upload Logo',
+    settingsUploading:        'Uploading…',
+    settingsThemePresets:     'Theme Presets',
+    settingsAdvColors:        'Advanced: Custom Colors',
+    settingsAdvColorsSub:     'Fine-tune individual color values',
+    settingsLivePreview:      'Live Preview',
+    settingsResetDefault:     'Reset to Default',
+    settingsUnsaved:          'Unsaved changes',
+    settingsSaved:            'Saved!',
+    settingsSaving:           'Saving…',
+    settingsSaveChanges:      'Save Changes',
+    settingsPrimaryBtn:       'Primary Button',
+
+    // ── AI Assistant ──────────────────────────────────────────
+    aiAssistant:        'AI Assistant',
+    aiWelcome:          'Hello! I can help you analyze your dashboard data. Ask me about evaluations, scores, pass rates, or trends.',
+    aiQuickQuestions:   'Quick questions',
+    aiAnalyzing:        'Analyzing dashboard data...',
+    aiPlaceholder:      'Ask about KPIs, pass rate, trends…',
+    aiErrorFallback:    "I couldn't reach the AI service right now. Please check the KPI cards and charts directly for the latest metrics.",
+    aiLast:             'Last',
+    aiQuickSummary:     'Summary',
+    aiQuickPassRate:    'Pass rate',
+    aiQuickScoreTrend:  'Score trend',
+    aiQuickTopInsights: 'Top insights',
   },
 
   es: {
     // ── Navigation ───────────────────────────────────────────
     navOverview:     'Resumen',
     navLms:          'LMS',
-    navCoach:        'Coach Experto',
+    navCoach:        'Coach Maestro',
     navSimulator:    'Simulador',
-    navCertification:'Certificación',
+    navCertification:'Coach Certificador',
     navSecondBrain:  'Second Brain',   // brand name — never translate
     navSettings:     'Ajustes',
     lightMode:       'Modo claro',
     darkMode:        'Modo oscuro',
     logout:          'Cerrar sesión',
     phaseLabel:      'v1.0 · Plataforma Analytics',
+    sidebarSubtitle: 'Panel de Analítica',
 
     // ── Global filter bar ────────────────────────────────────
     filterSolutions: 'Soluciones',
@@ -289,7 +326,7 @@ export const translations = {
 
     // ── Page titles / subtitles ──────────────────────────────
     overviewTitle:   'Resumen Global',
-    overviewSub:     'Analítica de toda la plataforma en todas las soluciones',
+    overviewSub:     'Analítica integral de tus servicios con Rolplay',
     lmsTitle:        'LMS',
     lmsSub:          'Asignaciones y completaciones de módulos de aprendizaje',
     coachTitle:      'Coach Experto',
@@ -525,6 +562,41 @@ export const translations = {
     sbMembersByRoleSub:     'Distribución de roles de miembros',
     sbMessageTypes:         'Tipos de Mensaje',
     sbMessageTypesSub:      'Distribución de tipos de conversación',
+
+    // ── Settings page ─────────────────────────────────────────
+    settingsBrandingSub:      'Personaliza el diseño de tu panel',
+    settingsPlatformName:     'Nombre de Plataforma',
+    settingsPlatformNameDesc: 'Personaliza el nombre que se muestra en el encabezado y navegación',
+    settingsPlatformNameHint: 'Los cambios se guardan al hacer clic en "Guardar cambios"',
+    settingsLogo:             'Logo',
+    settingsLogoHint:         'PNG, JPG, o WebP recomendado',
+    settingsLogoNoLogo:       'Sin logo',
+    settingsLogoRemove:       'Eliminar logo',
+    settingsUploadLogo:       'Subir Logo',
+    settingsUploading:        'Subiendo…',
+    settingsThemePresets:     'Temas Predefinidos',
+    settingsAdvColors:        'Avanzado: Colores Personalizados',
+    settingsAdvColorsSub:     'Ajusta los valores de color individualmente',
+    settingsLivePreview:      'Vista Previa en Vivo',
+    settingsResetDefault:     'Restablecer por defecto',
+    settingsUnsaved:          'Cambios sin guardar',
+    settingsSaved:            '¡Guardado!',
+    settingsSaving:           'Guardando…',
+    settingsSaveChanges:      'Guardar Cambios',
+    settingsPrimaryBtn:       'Botón Primario',
+
+    // ── AI Assistant ──────────────────────────────────────────
+    aiAssistant:        'Asistente IA',
+    aiWelcome:          '¡Hola! Puedo ayudarte a analizar los datos de tu panel. Pregúntame sobre evaluaciones, puntuaciones, tasas de aprobación o tendencias.',
+    aiQuickQuestions:   'Preguntas rápidas',
+    aiAnalyzing:        'Analizando datos del panel...',
+    aiPlaceholder:      'Pregunta sobre KPIs, tasas de aprobación, tendencias…',
+    aiErrorFallback:    'No pude conectar con el servicio de IA. Por favor revisa directamente las tarjetas KPI y gráficas.',
+    aiLast:             'Últimos',
+    aiQuickSummary:     'Resumen',
+    aiQuickPassRate:    'Tasa de aprobación',
+    aiQuickScoreTrend:  'Tendencia de puntuación',
+    aiQuickTopInsights: 'Mejores insights',
   },
 } as const
 
