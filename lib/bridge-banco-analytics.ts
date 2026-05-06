@@ -1,31 +1,32 @@
 /**
  * bridge-banco-analytics.ts
  *
- * Banco data adapter — queries coach_app.banco_users / saved_reports /
- * saved_reports_options DIRECTLY via mysql2 (no PHP bridge).
+ * Banco data adapter — queries the real schema that exists in coach_app.sql:
+ *   saved_reports   (coach_user_id, closingretro, date_created, usecase_id)
+ *   coach_users     (id, customer_id, user_email, user_name)
  *
- * Env vars (Banco-specific, fall back to DB_* if not set):
- *   BANCO_DB_HOST     | DB_HOST
- *   BANCO_DB_USER     | DB_USER
- *   BANCO_DB_PASSWORD | DB_PASSWORD
- *   BANCO_DB_NAME     | DB_NAME      (default: coach_app)
- *   BANCO_DB_PORT     | DB_PORT      (default: 3306)
+ * NO banco_users table exists — Banco users ARE coach_users identified by
+ * email domain (BANCO_EMAIL_DOMAINS env var).
  *
- * Score extraction — MySQL 5.7+ compatible SUBSTRING_INDEX chain:
- *   retro sample: "<strong>Total score:</strong> 65<br/>..."
- *   Step 1: SUBSTRING_INDEX(retro, 'Total score:</strong> ', -1) → "65<br/>..."
- *   Step 2: SUBSTRING_INDEX(..., '<', 1)                         → "65"
- *   Step 3: CAST(TRIM(...) AS UNSIGNED)                          → 65
+ * Score extraction:
+ *   saved_reports.closingretro contains HTML like:
+ *     "<b> Score Global de la Sesion</b>: 7.5/10. La sesión..."
+ *   Scores vary in scale (/10, /20, bare number).  We normalise to 0-100:
+ *     score_pct = (numerator / denominator) * 100
+ *     denominator = number after '/' if present, else 10 (default scale).
  *
- * Pass threshold: session avg score >= 60
+ * Pass threshold: session_score_pct >= 60 (i.e. ≥ 6/10)
+ *
+ * Data access: uses query() from lib/db.ts — bridge if BRIDGE_URL is set,
+ * direct mysql2 otherwise.  Same mechanism as the standard analytics pipeline.
  *
  * ISOLATION RULES:
- *   ✅ Only touches coach_app.banco_users, saved_reports, saved_reports_options
- *   ❌ Never references customer_id (Banco uses banco_user_id hierarchy)
+ *   ✅ Only touches saved_reports + coach_users (filtered by email domain)
+ *   ❌ Never references customer_id in queries (Banco = email-domain filter)
  *   ❌ Never imports from bridge-client.ts or data-provider.ts
  */
 
-import mysql from 'mysql2/promise'
+import { query } from '@/lib/db'
 import type {
   OverviewApiResponse,
   TrendsApiResponse,
@@ -38,41 +39,23 @@ import type {
   EvaluationApiRow,
 } from '@/lib/types'
 
-// ── Direct MySQL pool (lazy init) ─────────────────────────────────────────────
+// ── Domain filter ─────────────────────────────────────────────────────────────
 
-let bancoPool: mysql.Pool | null = null
-
-function getBancoPool(): mysql.Pool {
-  if (bancoPool) return bancoPool
-
-  const host     = process.env.BANCO_DB_HOST     ?? process.env.DB_HOST
-  const user     = process.env.BANCO_DB_USER     ?? process.env.DB_USER
-  const password = process.env.BANCO_DB_PASSWORD ?? process.env.DB_PASSWORD ?? ''
-  const database = process.env.BANCO_DB_NAME     ?? process.env.DB_NAME ?? 'coach_app'
-  const port     = Number(process.env.BANCO_DB_PORT ?? process.env.DB_PORT ?? 3306)
-
-  if (!host || !user) {
-    throw new Error(
-      'Banco DB not configured. Set BANCO_DB_HOST + BANCO_DB_USER ' +
-      '(or DB_HOST + DB_USER as fallback).'
-    )
+/**
+ * Build a SQL WHERE fragment that restricts rows to Banco email domains.
+ * BANCO_EMAIL_DOMAINS = "bancoppel.com,coppel.com"
+ *
+ * Returns { cond, params } where params are positional ? bindings.
+ * If no domains are configured, returns 1=0 (returns no rows — safe fallback).
+ */
+function bancoDomains(): { cond: string; params: string[] } {
+  const raw     = process.env.BANCO_EMAIL_DOMAINS ?? ''
+  const domains = raw.split(',').map(d => d.trim().toLowerCase()).filter(Boolean)
+  if (!domains.length) return { cond: '1=0', params: [] }
+  return {
+    cond:   `(${domains.map(() => 'cu.user_email LIKE ?').join(' OR ')})`,
+    params: domains.map(d => `%@${d}`),
   }
-
-  bancoPool = mysql.createPool({
-    host, user, password, database, port,
-    waitForConnections: true,
-    connectionLimit:    5,
-    queueLimit:         0,
-    timezone:           'Z',
-  })
-
-  return bancoPool
-}
-
-async function bancoQuery<T>(sql: string, params: unknown[] = []): Promise<T[]> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [rows] = await getBancoPool().execute(sql, params as any)
-  return rows as T[]
 }
 
 /** ISO-8601 → MySQL DATETIME string (UTC) */
@@ -80,33 +63,72 @@ function isoToMysql(iso: string): string {
   return iso.replace('T', ' ').replace(/\.\d+Z$/, '').replace('Z', '')
 }
 
-// ── Shared subquery (reused across all 5 adapters) ────────────────────────────
+// ── Score extraction expression (MySQL, reused in all 5 adapters) ─────────────
+//
+// closingretro sample:
+//   "<b> Score Global de la Sesion</b>: 7.5/10. La sesión muestra..."
+//   "<b> Score Global de la Sesion</b>: 8.5. La sesión..."
+//   "<b> Score Global de la Sesion</b>: 10/20. Se otorga..."
+//
+// Step 1 — suffix after the label:
+//   SUBSTRING_INDEX(closingretro, 'Score Global de la Sesion</b>: ', -1)
+//   → "7.5/10. La sesión..."
+//
+// Step 2 — numerator (before '/'):
+//   CAST(SUBSTRING_INDEX(suffix, '/', 1) AS DECIMAL(5,2))
+//   → 7.5
+//
+// Step 3 — denominator (after '/', or 10 if no '/'):
+//   IF(LOCATE('/', suffix) > 0,
+//     GREATEST(1, CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(suffix,'/',-1),' ',1) AS DECIMAL(5,2))),
+//     10)
+//   → 10
+//
+// Step 4 — percentage:
+//   ROUND((numerator / denominator) * 100, 2)
+//   → 75.00
 
-const SESSION_SCORES_SUBQUERY = `
-  SELECT
-    sr.id            AS session_id,
-    sr.usecase_id,
-    sr.banco_user_id,
-    sr.date_created,
-    AVG(
-      CAST(
-        TRIM(
-          SUBSTRING_INDEX(
-            SUBSTRING_INDEX(sro.retro, 'Total score:</strong> ', -1),
-            '<', 1
-          )
-        ) AS UNSIGNED
-      )
-    ) AS session_avg
-  FROM coach_app.saved_reports sr
-  JOIN coach_app.saved_reports_options sro
-    ON sro.saved_report_id = sr.id
-  WHERE sr.banco_user_id > 0
-    AND sr.date_created BETWEEN ? AND ?
-    AND sro.retro LIKE '%Total score:</strong>%'
-  GROUP BY sr.id, sr.usecase_id, sr.banco_user_id, sr.date_created
-  HAVING session_avg IS NOT NULL
-`
+const SCORE_EXPR = `
+  ROUND(
+    CAST(SUBSTRING_INDEX(
+      SUBSTRING_INDEX(sr.closingretro, 'Score Global de la Sesion</b>: ', -1),
+      '/', 1
+    ) AS DECIMAL(5,2))
+    /
+    IF(
+      LOCATE('/', SUBSTRING_INDEX(sr.closingretro, 'Score Global de la Sesion</b>: ', -1)) > 0,
+      GREATEST(1, CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(
+        SUBSTRING_INDEX(sr.closingretro, 'Score Global de la Sesion</b>: ', -1),
+        '/', -1
+      ), ' ', 1) AS DECIMAL(5,2))),
+      10
+    ) * 100,
+    2
+  )
+`.trim()
+
+/**
+ * Inner subquery: one row per saved_report with computed score_pct.
+ * Caller must append [domainParams..., fromStr, toStr] to their params array.
+ */
+function sessionSubquery(domainCond: string): string {
+  return `
+    SELECT
+      sr.id           AS session_id,
+      sr.usecase_id,
+      sr.coach_user_id,
+      cu.user_name,
+      cu.user_email,
+      sr.date_created,
+      ${SCORE_EXPR}   AS score_pct
+    FROM saved_reports sr
+    JOIN coach_users cu ON cu.id = sr.coach_user_id
+    WHERE ${domainCond}
+      AND sr.date_created BETWEEN ? AND ?
+      AND sr.closingretro LIKE '%Score Global de la Sesion%'
+    HAVING score_pct IS NOT NULL AND score_pct > 0
+  `
+}
 
 // ── 1. Overview ───────────────────────────────────────────────────────────────
 
@@ -116,34 +138,36 @@ export async function bancoDashboardOverview(params: {
   prevFromIso: string
   prevToIso:   string
 }): Promise<OverviewApiResponse> {
+  const { cond, params: domainParams } = bancoDomains()
+
   const curFrom  = isoToMysql(params.fromIso)
   const curTo    = isoToMysql(params.toIso)
   const prevFrom = isoToMysql(params.prevFromIso)
   const prevTo   = isoToMysql(params.prevToIso)
 
-  const periodQuery = `
+  const sql = `
     SELECT
-      COUNT(*)                                                        AS totalEvaluations,
-      ROUND(AVG(s.session_avg), 2)                                    AS avgScore,
-      SUM(CASE WHEN s.session_avg >= 60 THEN 1 ELSE 0 END)           AS passedEvaluations,
+      COUNT(*)                                                     AS totalEvaluations,
+      ROUND(AVG(s.score_pct), 2)                                   AS avgScore,
+      SUM(CASE WHEN s.score_pct >= 60 THEN 1 ELSE 0 END)          AS passedEvaluations,
       ROUND(
-        100.0 * SUM(CASE WHEN s.session_avg >= 60 THEN 1 ELSE 0 END)
+        100.0 * SUM(CASE WHEN s.score_pct >= 60 THEN 1 ELSE 0 END)
         / NULLIF(COUNT(*), 0),
         2
-      )                                                               AS passRate
-    FROM (${SESSION_SCORES_SUBQUERY}) s
+      )                                                            AS passRate
+    FROM (${sessionSubquery(cond)}) s
   `
 
   type PeriodRow = {
-    totalEvaluations:  number | string
-    avgScore:          number | string | null
-    passedEvaluations: number | string
-    passRate:          number | string | null
+    totalEvaluations:  string | number
+    avgScore:          string | number | null
+    passedEvaluations: string | number
+    passRate:          string | number | null
   }
 
   const [curRows, prevRows] = await Promise.all([
-    bancoQuery<PeriodRow>(periodQuery, [curFrom, curTo]),
-    bancoQuery<PeriodRow>(periodQuery, [prevFrom, prevTo]),
+    query<PeriodRow>(sql, [...domainParams, curFrom,  curTo]),
+    query<PeriodRow>(sql, [...domainParams, prevFrom, prevTo]),
   ])
 
   const cur  = curRows[0]
@@ -166,28 +190,29 @@ export async function bancoDashboardTrends(params: {
   fromIso: string
   toIso:   string
 }): Promise<TrendsApiResponse> {
+  const { cond, params: domainParams } = bancoDomains()
   const from = isoToMysql(params.fromIso)
   const to   = isoToMysql(params.toIso)
 
   type TrendRow = {
-    date:      string
-    avg_score: number | string | null
-    passed:    number | string
-    failed:    number | string
-    total:     number | string
+    date:       string
+    avg_score:  string | number | null
+    passed:     string | number
+    failed:     string | number
+    total:      string | number
   }
 
-  const rows = await bancoQuery<TrendRow>(
+  const rows = await query<TrendRow>(
     `SELECT
-       DATE(s.date_created)                                           AS date,
-       ROUND(AVG(s.session_avg), 2)                                   AS avg_score,
-       SUM(CASE WHEN s.session_avg >= 60 THEN 1 ELSE 0 END)          AS passed,
-       SUM(CASE WHEN s.session_avg <  60 THEN 1 ELSE 0 END)          AS failed,
-       COUNT(*)                                                        AS total
-     FROM (${SESSION_SCORES_SUBQUERY}) s
+       DATE(s.date_created)                                          AS date,
+       ROUND(AVG(s.score_pct), 2)                                    AS avg_score,
+       SUM(CASE WHEN s.score_pct >= 60 THEN 1 ELSE 0 END)           AS passed,
+       SUM(CASE WHEN s.score_pct <  60 THEN 1 ELSE 0 END)           AS failed,
+       COUNT(*)                                                       AS total
+     FROM (${sessionSubquery(cond)}) s
      GROUP BY DATE(s.date_created)
      ORDER BY date ASC`,
-    [from, to],
+    [...domainParams, from, to],
   )
 
   const scoreTrend:     ApiTrendPoint[] = []
@@ -210,36 +235,37 @@ export async function bancoDashboardUsecaseBreakdown(params: {
   fromIso: string
   toIso:   string
 }): Promise<UsecaseBreakdownApiResponse> {
+  const { cond, params: domainParams } = bancoDomains()
   const from = isoToMysql(params.fromIso)
   const to   = isoToMysql(params.toIso)
 
   type BreakdownRow = {
-    usecaseId:        number | string | null
-    totalEvaluations: number | string
-    avgScore:         number | string | null
-    passRate:         number | string | null
-    passed:           number | string
+    usecaseId:        string | number | null
+    totalEvaluations: string | number
+    avgScore:         string | number | null
+    passRate:         string | number | null
+    passed:           string | number
   }
 
-  const rows = await bancoQuery<BreakdownRow>(
+  const rows = await query<BreakdownRow>(
     `SELECT
-       s.usecase_id                                                    AS usecaseId,
-       COUNT(*)                                                        AS totalEvaluations,
-       ROUND(AVG(s.session_avg), 2)                                    AS avgScore,
+       s.usecase_id                                                   AS usecaseId,
+       COUNT(*)                                                       AS totalEvaluations,
+       ROUND(AVG(s.score_pct), 2)                                    AS avgScore,
        ROUND(
-         100.0 * SUM(CASE WHEN s.session_avg >= 60 THEN 1 ELSE 0 END)
+         100.0 * SUM(CASE WHEN s.score_pct >= 60 THEN 1 ELSE 0 END)
          / NULLIF(COUNT(*), 0),
          2
-       )                                                               AS passRate,
-       SUM(CASE WHEN s.session_avg >= 60 THEN 1 ELSE 0 END)           AS passed
-     FROM (${SESSION_SCORES_SUBQUERY}) s
+       )                                                             AS passRate,
+       SUM(CASE WHEN s.score_pct >= 60 THEN 1 ELSE 0 END)           AS passed
+     FROM (${sessionSubquery(cond)}) s
      GROUP BY s.usecase_id
      ORDER BY totalEvaluations DESC`,
-    [from, to],
+    [...domainParams, from, to],
   )
 
   const data: UsecaseApiRow[] = rows.map(r => ({
-    usecaseId:        Number(r.usecaseId ?? 0),
+    usecaseId:        r.usecaseId != null ? Number(r.usecaseId) : null,
     usecase_name:     null,
     totalEvaluations: Number(r.totalEvaluations),
     avgScore:         r.avgScore != null ? Number(r.avgScore) : null,
@@ -257,38 +283,40 @@ export async function bancoDashboardBestPerformers(params: {
   toIso:   string
   limit:   number
 }): Promise<BestPerformersApiResponse> {
+  const { cond, params: domainParams } = bancoDomains()
   const from  = isoToMysql(params.fromIso)
   const to    = isoToMysql(params.toIso)
   const limit = Math.min(Math.max(1, params.limit), 20)
 
   type PerformerRow = {
-    user_name: string
-    sessions:  number | string
-    avg_score: number | string | null
-    pass_rate: number | string | null
+    user_name:  string | null
+    user_email: string
+    sessions:   string | number
+    avg_score:  string | number | null
+    pass_rate:  string | number | null
   }
 
-  const rows = await bancoQuery<PerformerRow>(
+  const rows = await query<PerformerRow>(
     `SELECT
-       bu.name                                                         AS user_name,
-       COUNT(*)                                                        AS sessions,
-       ROUND(AVG(s.session_avg), 2)                                    AS avg_score,
+       s.user_name,
+       s.user_email,
+       COUNT(*)                                                       AS sessions,
+       ROUND(AVG(s.score_pct), 2)                                    AS avg_score,
        ROUND(
-         100.0 * SUM(CASE WHEN s.session_avg >= 60 THEN 1 ELSE 0 END)
+         100.0 * SUM(CASE WHEN s.score_pct >= 60 THEN 1 ELSE 0 END)
          / NULLIF(COUNT(*), 0),
          2
-       )                                                               AS pass_rate
-     FROM (${SESSION_SCORES_SUBQUERY}) s
-     JOIN coach_app.banco_users bu ON bu.ID = s.banco_user_id
-     GROUP BY s.banco_user_id, bu.name
+       )                                                             AS pass_rate
+     FROM (${sessionSubquery(cond)}) s
+     GROUP BY s.coach_user_id, s.user_name, s.user_email
      ORDER BY avg_score DESC, sessions DESC
      LIMIT ?`,
-    [from, to, limit],
+    [...domainParams, from, to, limit],
   )
 
   const data: BestPerformerRow[] = rows.map(r => ({
-    user_email: '',
-    user_name:  r.user_name ?? null,
+    user_email: r.user_email ?? '',
+    user_name:  r.user_name  ?? null,
     sessions:   Number(r.sessions),
     avg_score:  r.avg_score != null ? Number(r.avg_score) : 0,
     pass_rate:  r.pass_rate != null ? Number(r.pass_rate) : 0,
@@ -304,29 +332,30 @@ export async function bancoDashboardResults(params: {
   toIso:   string
   limit:   number
 }): Promise<ResultsApiResponse> {
+  const { cond, params: domainParams } = bancoDomains()
   const from  = isoToMysql(params.fromIso)
   const to    = isoToMysql(params.toIso)
   const limit = Math.min(Math.max(1, params.limit), 200)
 
   type ResultRow = {
-    savedReportId: number | string
-    usecaseId:     number | string | null
-    score:         number | string | null
-    passed:        number | string
+    savedReportId: string | number
+    usecaseId:     string | number | null
+    score:         string | number | null
+    passed:        string | number
     date:          string
   }
 
-  const rows = await bancoQuery<ResultRow>(
+  const rows = await query<ResultRow>(
     `SELECT
-       s.session_id                                                    AS savedReportId,
-       s.usecase_id                                                    AS usecaseId,
-       ROUND(s.session_avg, 0)                                        AS score,
-       (s.session_avg >= 60)                                          AS passed,
-       DATE(s.date_created)                                           AS date
-     FROM (${SESSION_SCORES_SUBQUERY}) s
+       s.session_id                                                   AS savedReportId,
+       s.usecase_id                                                   AS usecaseId,
+       ROUND(s.score_pct, 0)                                         AS score,
+       (s.score_pct >= 60)                                           AS passed,
+       DATE(s.date_created)                                          AS date
+     FROM (${sessionSubquery(cond)}) s
      ORDER BY s.date_created DESC
      LIMIT ?`,
-    [from, to, limit],
+    [...domainParams, from, to, limit],
   )
 
   const data: EvaluationApiRow[] = rows.map(r => {

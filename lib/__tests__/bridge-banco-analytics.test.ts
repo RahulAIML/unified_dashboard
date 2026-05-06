@@ -1,24 +1,23 @@
 /**
  * Tests for bridge-banco-analytics.ts
  *
- * Strategy: mock mysql2/promise so no real DB connections are made.
+ * Strategy: mock @/lib/db so no real DB connections are made.
  * Verifies that:
  *   1. Each function returns the correct shape (OverviewApiResponse, etc.)
  *   2. Numeric fields are properly cast from DB strings
  *   3. Edge cases (no rows, null scores) are handled gracefully
- *   4. Errors from execute() propagate correctly
+ *   4. Errors from query() propagate correctly
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// ── Mock mysql2/promise before module import ──────────────────────────────────
+// ── Mock lib/db before module import ─────────────────────────────────────────
+// vi.mock is hoisted by vitest, so mockQuery must also be hoisted via vi.hoisted()
 
-const mockExecute = vi.fn()
+const { mockQuery } = vi.hoisted(() => ({ mockQuery: vi.fn() }))
 
-vi.mock('mysql2/promise', () => ({
-  default: {
-    createPool: vi.fn(() => ({ execute: mockExecute })),
-  },
+vi.mock('@/lib/db', () => ({
+  query: mockQuery,
 }))
 
 import {
@@ -31,21 +30,19 @@ import {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Make execute() resolve with these rows (mysql2 returns [rows, fields]) */
+/** Make query() resolve with these rows for the next call */
 function dbRows(rows: unknown[]) {
-  mockExecute.mockResolvedValue([rows, []])
+  mockQuery.mockResolvedValue(rows)
 }
 
-/** Make every execute() call in the test resolve with the same rows */
+/** Make every query() call in the test resolve with the same rows */
 function dbRowsAlways(rows: unknown[]) {
-  mockExecute.mockResolvedValue([rows, []])
+  mockQuery.mockResolvedValue(rows)
 }
 
 beforeEach(() => {
-  // Provide minimal env so getBancoPool() doesn't throw
-  process.env.BANCO_DB_HOST = 'localhost'
-  process.env.BANCO_DB_USER = 'test_user'
-  process.env.BANCO_DB_PASSWORD = ''
+  // Set BANCO_EMAIL_DOMAINS so bancoDomains() produces a real filter
+  process.env.BANCO_EMAIL_DOMAINS = 'bancoppel.com,coppel.com'
   vi.clearAllMocks()
 })
 
@@ -54,8 +51,8 @@ beforeEach(() => {
 describe('bancoDashboardOverview', () => {
   it('returns correct shape with numeric values from DB strings', async () => {
     const row = { totalEvaluations: '42', avgScore: '73.5', passedEvaluations: '30', passRate: '71.4' }
-    // overview makes 2 execute calls (current + previous period)
-    mockExecute.mockResolvedValue([[row], []])
+    // overview makes 2 query() calls (current + previous period)
+    mockQuery.mockResolvedValue([row])
 
     const result = await bancoDashboardOverview({
       fromIso:     '2026-04-01T00:00:00.000Z',
@@ -71,7 +68,7 @@ describe('bancoDashboardOverview', () => {
   })
 
   it('returns zeros and nulls when DB returns empty rows', async () => {
-    mockExecute.mockResolvedValue([[], []])
+    mockQuery.mockResolvedValue([])
 
     const result = await bancoDashboardOverview({
       fromIso:     '2026-04-01T00:00:00.000Z',
@@ -89,7 +86,7 @@ describe('bancoDashboardOverview', () => {
 
   it('handles null avgScore and passRate from DB', async () => {
     const row = { totalEvaluations: '5', avgScore: null, passedEvaluations: '0', passRate: null }
-    mockExecute.mockResolvedValue([[row], []])
+    mockQuery.mockResolvedValue([row])
 
     const result = await bancoDashboardOverview({
       fromIso:     '2026-04-01T00:00:00.000Z',
@@ -102,8 +99,8 @@ describe('bancoDashboardOverview', () => {
     expect(result.passRate).toBeNull()
   })
 
-  it('throws when DB execute throws', async () => {
-    mockExecute.mockRejectedValue(new Error('MySQL syntax error'))
+  it('throws when DB query throws', async () => {
+    mockQuery.mockRejectedValue(new Error('MySQL syntax error'))
 
     await expect(
       bancoDashboardOverview({
