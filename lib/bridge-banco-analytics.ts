@@ -70,6 +70,13 @@ function isoToMysql(iso: string): string {
 //
 // Computes per-session avg score from retro HTML, filtered to banco sessions
 // in a date range.  Callers embed this as an inner query or CTE.
+//
+// Score extraction uses SUBSTRING_INDEX (works on MySQL 5.7+) rather than
+// REGEXP_SUBSTR capture groups (MySQL 8.0.17+) for broader compatibility.
+//   retro sample: "<strong>Total score:</strong> 65<br/><br/>..."
+//   Step 1: SUBSTRING_INDEX(..., 'Total score:</strong> ', -1)  → "65<br/>..."
+//   Step 2: SUBSTRING_INDEX(..., '<', 1)                        → "65"
+//   Step 3: CAST(TRIM(...) AS UNSIGNED)                         → 65
 
 const SESSION_SCORES_SUBQUERY = `
   SELECT
@@ -79,8 +86,12 @@ const SESSION_SCORES_SUBQUERY = `
     sr.date_created,
     AVG(
       CAST(
-        REGEXP_SUBSTR(sro.retro, 'Total score:</strong> ([0-9]+)', 1, 1, 'c', 1)
-        AS UNSIGNED
+        TRIM(
+          SUBSTRING_INDEX(
+            SUBSTRING_INDEX(sro.retro, 'Total score:</strong> ', -1),
+            '<', 1
+          )
+        ) AS UNSIGNED
       )
     ) AS session_avg
   FROM coach_app.saved_reports sr
