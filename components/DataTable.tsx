@@ -18,12 +18,14 @@ interface Props<T extends object> {
   data: T[]
   columns: Column<T>[]
   pageSize?: number
+  emptyMessage?: string
 }
 
 export function DataTable<T extends object>({
   data,
   columns,
   pageSize = 10,
+  emptyMessage,
 }: Props<T>) {
   const t = useT()
   const [search,  setSearch]  = useState("")
@@ -127,7 +129,7 @@ export function DataTable<T extends object>({
               {paged.length === 0 && (
                 <tr>
                   <td colSpan={columns.length} className="px-4 py-12 text-center">
-                    <p className="text-sm text-muted-foreground">No results found.</p>
+                    <p className="text-sm text-muted-foreground">{emptyMessage ?? "No results found."}</p>
                   </td>
                 </tr>
               )}
