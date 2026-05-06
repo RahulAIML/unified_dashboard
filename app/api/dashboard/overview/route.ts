@@ -3,56 +3,66 @@ import { getDashboardOverview } from '@/lib/data-provider'
 import { buildSuccess, buildApiError, parseDateRange } from '@/lib/api-utils'
 import { getAuthContextFromRequest } from '@/lib/server-auth'
 import { resolveDynamicUsecaseIds } from '@/lib/dynamic-usecase-resolver'
+import { resolveOrgType } from '@/lib/org-type'
+import { bancoDashboardOverview } from '@/lib/bridge-banco-analytics'
 
 export const runtime = 'nodejs'
+
+const EMPTY = {
+  totalEvaluations: 0, prevTotalEvaluations: 0,
+  avgScore: null,      prevAvgScore: null,
+  passRate: null,      prevPassRate: null,
+  passedEvaluations: 0,
+}
 
 export async function GET(request: NextRequest) {
   const ctx = await getAuthContextFromRequest(request)
   if (!ctx) return buildApiError('Unauthorized', 401)
 
-  // User is authenticated but not linked to any organisation → empty state
-  if (ctx.customerId === 0) {
-    return buildSuccess({
-      totalEvaluations: 0, prevTotalEvaluations: 0,
-      avgScore: null,      prevAvgScore: null,
-      passRate: null,      prevPassRate: null,
-      passedEvaluations: 0,
-    })
-  }
+  const orgType = resolveOrgType(ctx.email, ctx.customerId)
+  if (orgType === 'none') return buildSuccess(EMPTY)
 
   try {
     const sp = request.nextUrl.searchParams
     const range = parseDateRange(sp)
     if (!range) {
       return buildApiError('Invalid date range — provide ?from= and ?to= as ISO strings', 400, {
-        from: sp.get('from'),
-        to:   sp.get('to'),
+        from: sp.get('from'), to: sp.get('to'),
       })
     }
 
-    // ── Dynamic usecase resolution (Step 1-5 of spec) ────────────────────────
-    // solution=second-brain returns [] → we short-circuit to empty (API-only)
-    const solution    = sp.get('solution')
-    const idsParam    = sp.get('usecaseIds')
-    const usecaseIds  = idsParam
+    const solution = sp.get('solution')
+
+    if (solution === 'second-brain') {
+      return buildSuccess(EMPTY, { solution, source: 'second-brain-api-only' })
+    }
+
+    // ── Banco pipeline ────────────────────────────────────────────────────────
+    if (orgType === 'banco') {
+      const spanMs   = Math.max(0, range.to.getTime() - range.from.getTime())
+      const prevTo   = new Date(range.from.getTime() - 1)
+      const prevFrom = new Date(prevTo.getTime() - spanMs)
+
+      const data = await bancoDashboardOverview({
+        fromIso:     range.from.toISOString(),
+        toIso:       range.to.toISOString(),
+        prevFromIso: prevFrom.toISOString(),
+        prevToIso:   prevTo.toISOString(),
+      })
+      return buildSuccess(data, {
+        from: range.from.toISOString(), to: range.to.toISOString(),
+        source: 'banco',
+      })
+    }
+
+    // ── Standard analytics pipeline ───────────────────────────────────────────
+    const idsParam   = sp.get('usecaseIds')
+    const usecaseIds = idsParam
       ? idsParam.split(',').map(Number).filter(n => !isNaN(n))
       : await resolveDynamicUsecaseIds(ctx.customerId, solution)
 
-    // Second Brain requested on a DB route → return empty (it's API-only)
-    if (solution === 'second-brain') {
-      return buildSuccess({
-        totalEvaluations: 0, prevTotalEvaluations: 0,
-        avgScore: null,      prevAvgScore: null,
-        passRate: null,      prevPassRate: null,
-        passedEvaluations: 0,
-      }, { solution, source: 'second-brain-api-only' })
-    }
-
     const data = await getDashboardOverview({
-      from:        range.from,
-      to:          range.to,
-      usecaseIds,
-      customerId:  ctx.customerId,
+      from: range.from, to: range.to, usecaseIds, customerId: ctx.customerId,
     })
 
     return buildSuccess(data, {

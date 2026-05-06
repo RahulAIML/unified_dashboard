@@ -1,7 +1,6 @@
 "use client"
 
 import { useMemo, useEffect, useReducer, useRef } from "react"
-import { useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import { Target, PlayCircle, TrendingUp, BadgeCheck, BarChart2, AlertTriangle, Trophy, MessageSquare, Users, Search, FileText } from "lucide-react"
 import { DashboardHeader }    from "@/components/DashboardHeader"
@@ -146,7 +145,6 @@ function ErrorBanner({ message }: { message: string }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export function DashboardContent() {
-  const router      = useRouter()
   const { dateRange, selectedSolution, refreshKey } = useDashboardStore()
   const t           = useT()
   const brand       = useClientBrand()
@@ -180,7 +178,12 @@ export function DashboardContent() {
   // ── API URLs — null until access confirmed, null for wrong module ──────────
   // This prevents unnecessary DB queries and avoids firing requests before we
   // know whether the user has DB access.
-  const dbReady = accessStatus?.hasCoachData === true && !isSecondBrain
+  // Banco users have hasCoachData=false (not in coach_users) but still get
+  // analytics data from the banco pipeline — include hasBancoAccess here.
+  const dbReady = (
+    accessStatus?.hasCoachData === true ||
+    accessStatus?.hasBancoAccess === true
+  ) && !isSecondBrain
 
   const overviewUrl = dbReady
     ? buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to, { solution: selectedSolution, rk: refreshKey })
@@ -412,12 +415,6 @@ export function DashboardContent() {
   }
 
   if (user !== null && accessStatus !== null) {
-    // Banco org users belong on the Banco page, not the analytics overview
-    if (accessStatus.hasBancoAccess) {
-      router.replace("/banco")
-      return null
-    }
-
     // No access to any module
     if (!accessStatus.hasAnyAccess) {
       return (

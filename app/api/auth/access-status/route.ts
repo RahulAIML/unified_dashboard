@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContextFromRequest } from "@/lib/server-auth"
 import { getTenantIntegration } from "@/lib/db-tenant-integrations"
+import { isBancoOrg } from "@/lib/org-type"
 
 export const dynamic = "force-dynamic"
 
@@ -89,19 +90,6 @@ async function probeSecondBrainAccess(
   }
 }
 
-// ── Banco org detection ───────────────────────────────────────────────────────
-// Banco employees are NOT in coach_users/admin_user — they're in banco_users.
-// Identify them by email domain via BANCO_EMAIL_DOMAINS (comma-separated env var).
-// Example: BANCO_EMAIL_DOMAINS=bancoppel.com,coppel.com
-
-function isBancoUser(email: string): boolean {
-  const raw = process.env.BANCO_EMAIL_DOMAINS ?? ""
-  if (!raw.trim()) return false
-  const domains = raw.split(",").map(d => d.trim().toLowerCase()).filter(Boolean)
-  const userDomain = email.toLowerCase().split("@")[1] ?? ""
-  return domains.includes(userDomain)
-}
-
 // ── Handler ───────────────────────────────────────────────────────────────────
 
 export async function GET(request: NextRequest) {
@@ -115,7 +103,7 @@ export async function GET(request: NextRequest) {
 
   const hasCoachData       = auth.customerId > 0
   const hasSecondBrainData = await probeSecondBrainAccess(auth.customerId, auth.email)
-  const hasBancoAccess     = isBancoUser(auth.email)
+  const hasBancoAccess     = isBancoOrg(auth.email)
   const hasAnyAccess       = hasCoachData || hasSecondBrainData || hasBancoAccess
 
   return NextResponse.json({

@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import {
   LayoutDashboard, BookOpen, BrainCircuit, Gamepad2,
-  BadgeCheck, Database, Sun, Moon, Settings, LogOut, Building2
+  BadgeCheck, Database, Sun, Moon, Settings, LogOut,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useTheme } from "./ThemeProvider"
@@ -14,7 +14,6 @@ import { useT } from "@/lib/lang-store"
 import { useClientBrand } from "@/lib/hooks/useClientBrand"
 import { usePlatformName } from "@/lib/hooks/usePlatformName"
 import { useAuthContext } from "./AuthProvider"
-import { useApi } from "@/lib/hooks/useApi"
 
 function LogoImage() {
   const brand = useClientBrand()
@@ -56,14 +55,9 @@ export function Sidebar() {
   const t     = useT()
   const brand = useClientBrand()
   const { platformName } = usePlatformName()
-  const { clearAuth, isAuthenticated } = useAuthContext()
+  const { clearAuth } = useAuthContext()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
-
-  const { data: accessStatus } = useApi<{ hasBancoAccess: boolean; hasCoachData: boolean; hasSecondBrainData: boolean }>(
-    isAuthenticated ? "/api/auth/access-status" : null
-  )
-  const isBanco = accessStatus?.hasBancoAccess === true
 
   // Close on Escape + prevent background scroll when open (mobile)
   useEffect(() => {
@@ -96,22 +90,16 @@ export function Sidebar() {
     }
   }, [loggingOut, clearAuth, router])
 
-  // Banco org sees only their pipeline + settings.
-  // All other orgs see the standard analytics suite — never Banco.
-  const nav = isBanco
-    ? [
-        { href: "/banco",    label: t.navBanco,    icon: Building2 },
-        { href: "/settings", label: t.navSettings, icon: Settings  },
-      ]
-    : [
-        { href: "/",              label: t.navOverview,      icon: LayoutDashboard },
-        { href: "/lms",           label: t.navLms,           icon: BookOpen        },
-        { href: "/coach",         label: t.navCoach,         icon: BrainCircuit    },
-        { href: "/simulator",     label: t.navSimulator,     icon: Gamepad2        },
-        { href: "/certification", label: t.navCertification, icon: BadgeCheck      },
-        { href: "/second-brain",  label: t.navSecondBrain,   icon: Database        },
-        { href: "/settings",      label: t.navSettings,      icon: Settings        },
-      ]
+  // Same nav for every organisation — data source is resolved server-side.
+  const nav = [
+    { href: "/",              label: t.navOverview,      icon: LayoutDashboard },
+    { href: "/lms",           label: t.navLms,           icon: BookOpen        },
+    { href: "/coach",         label: t.navCoach,         icon: BrainCircuit    },
+    { href: "/simulator",     label: t.navSimulator,     icon: Gamepad2        },
+    { href: "/certification", label: t.navCertification, icon: BadgeCheck      },
+    { href: "/second-brain",  label: t.navSecondBrain,   icon: Database        },
+    { href: "/settings",      label: t.navSettings,      icon: Settings        },
+  ]
 
   // Close sidebar on route change (mobile)
   useEffect(() => {
