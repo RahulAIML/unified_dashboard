@@ -38,6 +38,7 @@ import type { Module } from "@/lib/types"
 interface AccessStatus {
   hasCoachData:       boolean
   hasSecondBrainData: boolean
+  hasBancoAccess:     boolean
   hasAnyAccess:       boolean
 }
 
@@ -145,6 +146,7 @@ function ErrorBanner({ message }: { message: string }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export function DashboardContent() {
+  const router      = useRouter()
   const { dateRange, selectedSolution, refreshKey } = useDashboardStore()
   const t           = useT()
   const brand       = useClientBrand()
@@ -410,6 +412,12 @@ export function DashboardContent() {
   }
 
   if (user !== null && accessStatus !== null) {
+    // Banco org users belong on the Banco page, not the analytics overview
+    if (accessStatus.hasBancoAccess) {
+      router.replace("/banco")
+      return null
+    }
+
     // No access to any module
     if (!accessStatus.hasAnyAccess) {
       return (
