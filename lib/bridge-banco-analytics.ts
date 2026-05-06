@@ -2,16 +2,20 @@
  * bridge-banco-analytics.ts
  *
  * Banco data adapter — queries coach_app.banco_users / saved_reports /
- * saved_reports_options and returns the SAME shapes as the standard analytics
- * pipeline (OverviewApiResponse, TrendsApiResponse, etc.).
+ * saved_reports_options DIRECTLY via mysql2 (no PHP bridge).
  *
- * This lets all 5 dashboard API routes stay shape-agnostic: they call the
- * right adapter based on org type and return the same JSON to the client.
+ * Env vars (Banco-specific, fall back to DB_* if not set):
+ *   BANCO_DB_HOST     | DB_HOST
+ *   BANCO_DB_USER     | DB_USER
+ *   BANCO_DB_PASSWORD | DB_PASSWORD
+ *   BANCO_DB_NAME     | DB_NAME      (default: coach_app)
+ *   BANCO_DB_PORT     | DB_PORT      (default: 3306)
  *
- * Score extraction:
- *   saved_reports_options.retro contains HTML like:
- *     "<strong>Total score:</strong> 65<br/>..."
- *   Extracted with MySQL: REGEXP_SUBSTR(retro, 'Total score:</strong> ([0-9]+)', 1, 1, 'c', 1)
+ * Score extraction — MySQL 5.7+ compatible SUBSTRING_INDEX chain:
+ *   retro sample: "<strong>Total score:</strong> 65<br/>..."
+ *   Step 1: SUBSTRING_INDEX(retro, 'Total score:</strong> ', -1) → "65<br/>..."
+ *   Step 2: SUBSTRING_INDEX(..., '<', 1)                         → "65"
+ *   Step 3: CAST(TRIM(...) AS UNSIGNED)                          → 65
  *
  * Pass threshold: session avg score >= 60
  *
@@ -21,6 +25,7 @@
  *   ❌ Never imports from bridge-client.ts or data-provider.ts
  */
 
+import mysql from 'mysql2/promise'
 import type {
   OverviewApiResponse,
   TrendsApiResponse,
@@ -33,32 +38,41 @@ import type {
   EvaluationApiRow,
 } from '@/lib/types'
 
-// ── Bridge config ─────────────────────────────────────────────────────────────
+// ── Direct MySQL pool (lazy init) ─────────────────────────────────────────────
 
-function requireBridgeConfig() {
-  const url    = process.env.BRIDGE_URL
-  const secret = process.env.BRIDGE_SECRET
-  if (!url)    throw new Error('BRIDGE_URL is not set')
-  if (!secret) throw new Error('BRIDGE_SECRET is not set')
-  return { url, secret }
+let bancoPool: mysql.Pool | null = null
+
+function getBancoPool(): mysql.Pool {
+  if (bancoPool) return bancoPool
+
+  const host     = process.env.BANCO_DB_HOST     ?? process.env.DB_HOST
+  const user     = process.env.BANCO_DB_USER     ?? process.env.DB_USER
+  const password = process.env.BANCO_DB_PASSWORD ?? process.env.DB_PASSWORD ?? ''
+  const database = process.env.BANCO_DB_NAME     ?? process.env.DB_NAME ?? 'coach_app'
+  const port     = Number(process.env.BANCO_DB_PORT ?? process.env.DB_PORT ?? 3306)
+
+  if (!host || !user) {
+    throw new Error(
+      'Banco DB not configured. Set BANCO_DB_HOST + BANCO_DB_USER ' +
+      '(or DB_HOST + DB_USER as fallback).'
+    )
+  }
+
+  bancoPool = mysql.createPool({
+    host, user, password, database, port,
+    waitForConnections: true,
+    connectionLimit:    5,
+    queueLimit:         0,
+    timezone:           'Z',
+  })
+
+  return bancoPool
 }
 
-async function bancoPost<T>(
-  sql:    string,
-  params: (string | number | null)[] = [],
-): Promise<T[]> {
-  const { url, secret } = requireBridgeConfig()
-  const res = await fetch(url, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Bridge-Key': secret },
-    body:    JSON.stringify({ sql, params }),
-    cache:   'no-store',
-    signal:  AbortSignal.timeout(15_000),
-  })
-  if (!res.ok) throw new Error(`Banco bridge HTTP ${res.status}`)
-  const json = (await res.json()) as { success: boolean; data: T[]; error: string | null }
-  if (!json.success) throw new Error(json.error ?? 'Banco bridge error')
-  return Array.isArray(json.data) ? json.data : []
+async function bancoQuery<T>(sql: string, params: unknown[] = []): Promise<T[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [rows] = await getBancoPool().execute(sql, params as any)
+  return rows as T[]
 }
 
 /** ISO-8601 → MySQL DATETIME string (UTC) */
@@ -67,16 +81,6 @@ function isoToMysql(iso: string): string {
 }
 
 // ── Shared subquery (reused across all 5 adapters) ────────────────────────────
-//
-// Computes per-session avg score from retro HTML, filtered to banco sessions
-// in a date range.  Callers embed this as an inner query or CTE.
-//
-// Score extraction uses SUBSTRING_INDEX (works on MySQL 5.7+) rather than
-// REGEXP_SUBSTR capture groups (MySQL 8.0.17+) for broader compatibility.
-//   retro sample: "<strong>Total score:</strong> 65<br/><br/>..."
-//   Step 1: SUBSTRING_INDEX(..., 'Total score:</strong> ', -1)  → "65<br/>..."
-//   Step 2: SUBSTRING_INDEX(..., '<', 1)                        → "65"
-//   Step 3: CAST(TRIM(...) AS UNSIGNED)                         → 65
 
 const SESSION_SCORES_SUBQUERY = `
   SELECT
@@ -130,20 +134,16 @@ export async function bancoDashboardOverview(params: {
     FROM (${SESSION_SCORES_SUBQUERY}) s
   `
 
-  const [curRows, prevRows] = await Promise.all([
-    bancoPost<{
-      totalEvaluations: number | string
-      avgScore:         number | string | null
-      passedEvaluations: number | string
-      passRate:         number | string | null
-    }>(periodQuery, [curFrom, curTo]),
+  type PeriodRow = {
+    totalEvaluations:  number | string
+    avgScore:          number | string | null
+    passedEvaluations: number | string
+    passRate:          number | string | null
+  }
 
-    bancoPost<{
-      totalEvaluations: number | string
-      avgScore:         number | string | null
-      passedEvaluations: number | string
-      passRate:         number | string | null
-    }>(periodQuery, [prevFrom, prevTo]),
+  const [curRows, prevRows] = await Promise.all([
+    bancoQuery<PeriodRow>(periodQuery, [curFrom, curTo]),
+    bancoQuery<PeriodRow>(periodQuery, [prevFrom, prevTo]),
   ])
 
   const cur  = curRows[0]
@@ -169,13 +169,15 @@ export async function bancoDashboardTrends(params: {
   const from = isoToMysql(params.fromIso)
   const to   = isoToMysql(params.toIso)
 
-  const rows = await bancoPost<{
-    date:       string
-    avg_score:  number | string | null
-    passed:     number | string
-    failed:     number | string
-    total:      number | string
-  }>(
+  type TrendRow = {
+    date:      string
+    avg_score: number | string | null
+    passed:    number | string
+    failed:    number | string
+    total:     number | string
+  }
+
+  const rows = await bancoQuery<TrendRow>(
     `SELECT
        DATE(s.date_created)                                           AS date,
        ROUND(AVG(s.session_avg), 2)                                   AS avg_score,
@@ -194,19 +196,9 @@ export async function bancoDashboardTrends(params: {
 
   for (const r of rows) {
     const date = String(r.date).slice(0, 10)
-    scoreTrend.push({
-      date,
-      value: r.avg_score != null ? Number(r.avg_score) : 0,
-    })
-    passFailTrend.push({
-      date,
-      value:  Number(r.passed),
-      value2: Number(r.failed),
-    })
-    evalCountTrend.push({
-      date,
-      value: Number(r.total),
-    })
+    scoreTrend.push({ date, value: r.avg_score != null ? Number(r.avg_score) : 0 })
+    passFailTrend.push({ date, value: Number(r.passed), value2: Number(r.failed) })
+    evalCountTrend.push({ date, value: Number(r.total) })
   }
 
   return { scoreTrend, passFailTrend, evalCountTrend }
@@ -221,13 +213,15 @@ export async function bancoDashboardUsecaseBreakdown(params: {
   const from = isoToMysql(params.fromIso)
   const to   = isoToMysql(params.toIso)
 
-  const rows = await bancoPost<{
+  type BreakdownRow = {
     usecaseId:        number | string | null
     totalEvaluations: number | string
     avgScore:         number | string | null
     passRate:         number | string | null
     passed:           number | string
-  }>(
+  }
+
+  const rows = await bancoQuery<BreakdownRow>(
     `SELECT
        s.usecase_id                                                    AS usecaseId,
        COUNT(*)                                                        AS totalEvaluations,
@@ -267,12 +261,14 @@ export async function bancoDashboardBestPerformers(params: {
   const to    = isoToMysql(params.toIso)
   const limit = Math.min(Math.max(1, params.limit), 20)
 
-  const rows = await bancoPost<{
+  type PerformerRow = {
     user_name: string
     sessions:  number | string
     avg_score: number | string | null
     pass_rate: number | string | null
-  }>(
+  }
+
+  const rows = await bancoQuery<PerformerRow>(
     `SELECT
        bu.name                                                         AS user_name,
        COUNT(*)                                                        AS sessions,
@@ -312,13 +308,15 @@ export async function bancoDashboardResults(params: {
   const to    = isoToMysql(params.toIso)
   const limit = Math.min(Math.max(1, params.limit), 200)
 
-  const rows = await bancoPost<{
+  type ResultRow = {
     savedReportId: number | string
     usecaseId:     number | string | null
     score:         number | string | null
     passed:        number | string
     date:          string
-  }>(
+  }
+
+  const rows = await bancoQuery<ResultRow>(
     `SELECT
        s.session_id                                                    AS savedReportId,
        s.usecase_id                                                    AS usecaseId,

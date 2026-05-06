@@ -1,15 +1,26 @@
 /**
  * Tests for bridge-banco-analytics.ts
  *
- * Strategy: mock global fetch so no real bridge calls are made.
+ * Strategy: mock mysql2/promise so no real DB connections are made.
  * Verifies that:
  *   1. Each function returns the correct shape (OverviewApiResponse, etc.)
  *   2. Numeric fields are properly cast from DB strings
  *   3. Edge cases (no rows, null scores) are handled gracefully
- *   4. SUBSTRING_INDEX score extraction logic is correctly represented
+ *   4. Errors from execute() propagate correctly
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+// ── Mock mysql2/promise before module import ──────────────────────────────────
+
+const mockExecute = vi.fn()
+
+vi.mock('mysql2/promise', () => ({
+  default: {
+    createPool: vi.fn(() => ({ execute: mockExecute })),
+  },
+}))
+
 import {
   bancoDashboardOverview,
   bancoDashboardTrends,
@@ -18,26 +29,24 @@ import {
   bancoDashboardResults,
 } from '../bridge-banco-analytics'
 
-// ── Bridge mock helpers ───────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-function mockBridgeResponse(data: unknown) {
-  return vi.fn().mockResolvedValue({
-    ok: true,
-    json: () => Promise.resolve({ success: true, data, error: null }),
-  })
+/** Make execute() resolve with these rows (mysql2 returns [rows, fields]) */
+function dbRows(rows: unknown[]) {
+  mockExecute.mockResolvedValue([rows, []])
 }
 
-function mockBridgeError(message: string) {
-  return vi.fn().mockResolvedValue({
-    ok: true,
-    json: () => Promise.resolve({ success: false, data: [], error: message }),
-  })
+/** Make every execute() call in the test resolve with the same rows */
+function dbRowsAlways(rows: unknown[]) {
+  mockExecute.mockResolvedValue([rows, []])
 }
 
 beforeEach(() => {
-  process.env.BRIDGE_URL    = 'http://bridge.test'
-  process.env.BRIDGE_SECRET = 'test-secret'
-  vi.unstubAllGlobals()
+  // Provide minimal env so getBancoPool() doesn't throw
+  process.env.BANCO_DB_HOST = 'localhost'
+  process.env.BANCO_DB_USER = 'test_user'
+  process.env.BANCO_DB_PASSWORD = ''
+  vi.clearAllMocks()
 })
 
 // ── Overview ──────────────────────────────────────────────────────────────────
@@ -45,11 +54,12 @@ beforeEach(() => {
 describe('bancoDashboardOverview', () => {
   it('returns correct shape with numeric values from DB strings', async () => {
     const row = { totalEvaluations: '42', avgScore: '73.5', passedEvaluations: '30', passRate: '71.4' }
-    vi.stubGlobal('fetch', mockBridgeResponse([row]))
+    // overview makes 2 execute calls (current + previous period)
+    mockExecute.mockResolvedValue([[row], []])
 
     const result = await bancoDashboardOverview({
-      fromIso: '2026-04-01T00:00:00.000Z',
-      toIso:   '2026-05-01T00:00:00.000Z',
+      fromIso:     '2026-04-01T00:00:00.000Z',
+      toIso:       '2026-05-01T00:00:00.000Z',
       prevFromIso: '2026-03-01T00:00:00.000Z',
       prevToIso:   '2026-03-31T00:00:00.000Z',
     })
@@ -60,12 +70,12 @@ describe('bancoDashboardOverview', () => {
     expect(result.passRate).toBe(71.4)
   })
 
-  it('returns zeros and nulls when bridge returns empty rows', async () => {
-    vi.stubGlobal('fetch', mockBridgeResponse([]))
+  it('returns zeros and nulls when DB returns empty rows', async () => {
+    mockExecute.mockResolvedValue([[], []])
 
     const result = await bancoDashboardOverview({
-      fromIso: '2026-04-01T00:00:00.000Z',
-      toIso:   '2026-05-01T00:00:00.000Z',
+      fromIso:     '2026-04-01T00:00:00.000Z',
+      toIso:       '2026-05-01T00:00:00.000Z',
       prevFromIso: '2026-03-01T00:00:00.000Z',
       prevToIso:   '2026-03-31T00:00:00.000Z',
     })
@@ -79,11 +89,11 @@ describe('bancoDashboardOverview', () => {
 
   it('handles null avgScore and passRate from DB', async () => {
     const row = { totalEvaluations: '5', avgScore: null, passedEvaluations: '0', passRate: null }
-    vi.stubGlobal('fetch', mockBridgeResponse([row]))
+    mockExecute.mockResolvedValue([[row], []])
 
     const result = await bancoDashboardOverview({
-      fromIso: '2026-04-01T00:00:00.000Z',
-      toIso:   '2026-05-01T00:00:00.000Z',
+      fromIso:     '2026-04-01T00:00:00.000Z',
+      toIso:       '2026-05-01T00:00:00.000Z',
       prevFromIso: '2026-03-01T00:00:00.000Z',
       prevToIso:   '2026-03-31T00:00:00.000Z',
     })
@@ -92,12 +102,13 @@ describe('bancoDashboardOverview', () => {
     expect(result.passRate).toBeNull()
   })
 
-  it('throws when bridge returns success=false', async () => {
-    vi.stubGlobal('fetch', mockBridgeError('MySQL syntax error'))
+  it('throws when DB execute throws', async () => {
+    mockExecute.mockRejectedValue(new Error('MySQL syntax error'))
+
     await expect(
       bancoDashboardOverview({
-        fromIso: '2026-04-01T00:00:00.000Z',
-        toIso:   '2026-05-01T00:00:00.000Z',
+        fromIso:     '2026-04-01T00:00:00.000Z',
+        toIso:       '2026-05-01T00:00:00.000Z',
         prevFromIso: '2026-03-01T00:00:00.000Z',
         prevToIso:   '2026-03-31T00:00:00.000Z',
       })
@@ -113,7 +124,7 @@ describe('bancoDashboardTrends', () => {
       { date: '2026-04-10', avg_score: '65.0', passed: '3', failed: '1', total: '4' },
       { date: '2026-04-11', avg_score: '70.5', passed: '5', failed: '0', total: '5' },
     ]
-    vi.stubGlobal('fetch', mockBridgeResponse(rows))
+    dbRows(rows)
 
     const result = await bancoDashboardTrends({
       fromIso: '2026-04-01T00:00:00.000Z',
@@ -130,7 +141,7 @@ describe('bancoDashboardTrends', () => {
   })
 
   it('returns empty arrays when no data', async () => {
-    vi.stubGlobal('fetch', mockBridgeResponse([]))
+    dbRows([])
 
     const result = await bancoDashboardTrends({
       fromIso: '2026-04-01T00:00:00.000Z',
@@ -143,8 +154,7 @@ describe('bancoDashboardTrends', () => {
   })
 
   it('defaults null avg_score to 0 in scoreTrend', async () => {
-    const rows = [{ date: '2026-04-10', avg_score: null, passed: '0', failed: '2', total: '2' }]
-    vi.stubGlobal('fetch', mockBridgeResponse(rows))
+    dbRows([{ date: '2026-04-10', avg_score: null, passed: '0', failed: '2', total: '2' }])
 
     const result = await bancoDashboardTrends({
       fromIso: '2026-04-01T00:00:00.000Z',
@@ -159,10 +169,9 @@ describe('bancoDashboardTrends', () => {
 
 describe('bancoDashboardUsecaseBreakdown', () => {
   it('returns correct UsecaseApiRow shape', async () => {
-    const rows = [
+    dbRows([
       { usecaseId: '11', totalEvaluations: '20', avgScore: '68.0', passRate: '75.0', passed: '15' },
-    ]
-    vi.stubGlobal('fetch', mockBridgeResponse(rows))
+    ])
 
     const result = await bancoDashboardUsecaseBreakdown({
       fromIso: '2026-04-01T00:00:00.000Z',
@@ -180,12 +189,14 @@ describe('bancoDashboardUsecaseBreakdown', () => {
     })
   })
 
-  it('returns empty data array when bridge returns no rows', async () => {
-    vi.stubGlobal('fetch', mockBridgeResponse([]))
+  it('returns empty data array when DB returns no rows', async () => {
+    dbRows([])
+
     const result = await bancoDashboardUsecaseBreakdown({
       fromIso: '2026-04-01T00:00:00.000Z',
       toIso:   '2026-05-01T00:00:00.000Z',
     })
+
     expect(result.data).toEqual([])
   })
 })
@@ -194,11 +205,10 @@ describe('bancoDashboardUsecaseBreakdown', () => {
 
 describe('bancoDashboardBestPerformers', () => {
   it('returns correct BestPerformerRow shape with empty user_email', async () => {
-    const rows = [
+    dbRows([
       { user_name: 'Maria Lopez', sessions: '10', avg_score: '82.5', pass_rate: '90.0' },
       { user_name: 'Carlos Ruiz', sessions: '7',  avg_score: '61.0', pass_rate: '57.1' },
-    ]
-    vi.stubGlobal('fetch', mockBridgeResponse(rows))
+    ])
 
     const result = await bancoDashboardBestPerformers({
       fromIso: '2026-04-01T00:00:00.000Z',
@@ -215,14 +225,14 @@ describe('bancoDashboardBestPerformers', () => {
   })
 
   it('caps limit at 20', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ success: true, data: [], error: null }),
-    }))
+    dbRowsAlways([])
 
-    // Should not throw even with limit > 20
     await expect(
-      bancoDashboardBestPerformers({ fromIso: '2026-04-01T00:00:00.000Z', toIso: '2026-05-01T00:00:00.000Z', limit: 100 })
+      bancoDashboardBestPerformers({
+        fromIso: '2026-04-01T00:00:00.000Z',
+        toIso:   '2026-05-01T00:00:00.000Z',
+        limit:   100,
+      })
     ).resolves.toBeDefined()
   })
 })
@@ -231,11 +241,10 @@ describe('bancoDashboardBestPerformers', () => {
 
 describe('bancoDashboardResults', () => {
   it('returns correct EvaluationApiRow shape', async () => {
-    const rows = [
+    dbRows([
       { savedReportId: '101', usecaseId: '11', score: '75', passed: '1', date: '2026-04-15' },
       { savedReportId: '102', usecaseId: '11', score: '45', passed: '0', date: '2026-04-14' },
-    ]
-    vi.stubGlobal('fetch', mockBridgeResponse(rows))
+    ])
 
     const result = await bancoDashboardResults({
       fromIso: '2026-04-01T00:00:00.000Z',
@@ -252,17 +261,13 @@ describe('bancoDashboardResults', () => {
       passed:        true,
       date:          '2026-04-15',
     })
-    expect(result.data[1]).toMatchObject({
-      result: 'failed',
-      passed: false,
-    })
+    expect(result.data[1]).toMatchObject({ result: 'failed', passed: false })
   })
 
   it('handles null usecaseId', async () => {
-    const rows = [
+    dbRows([
       { savedReportId: '200', usecaseId: null, score: '60', passed: '1', date: '2026-04-20' },
-    ]
-    vi.stubGlobal('fetch', mockBridgeResponse(rows))
+    ])
 
     const result = await bancoDashboardResults({
       fromIso: '2026-04-01T00:00:00.000Z',
