@@ -202,11 +202,11 @@ export default function LmsPage() {
                 : <EmptyState />
             }
           </ChartCard>
-          <ChartCard title={t.scoreTrend ?? "Score Trend"} subtitle={`${t.last} ${days} ${t.days}`}>
+          <ChartCard title={t.scoreTrend} subtitle={`${t.last} ${days} ${t.days}`}>
             {trendsLoading
               ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
               : scoreTrend.length > 0
-                ? <ActivityLineChart data={scoreTrend} label="Avg Score" color={brand.chartColors[1] ?? brand.chartColors[0]} />
+                ? <ActivityLineChart data={scoreTrend} label={t.avgScore} color={brand.chartColors[1] ?? brand.chartColors[0]} />
                 : <EmptyState />
             }
           </ChartCard>

@@ -195,15 +195,15 @@ export default function CoachPage() {
         {/* Charts row: score trend + activity count */}
         {trendsError && <ErrorBanner message={`${t.errorLoading}: ${trendsError}`} />}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-          <ChartCard title={t.scoreTrend ?? "Score Trend"} subtitle={`${t.last} ${days} ${t.days}`}>
+          <ChartCard title={t.scoreTrend} subtitle={`${t.last} ${days} ${t.days}`}>
             {trendsLoading
               ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
               : scoreTrend.length > 0
-                ? <ActivityLineChart data={scoreTrend} label="Avg Score" color={brand.chartColors[0]} />
+                ? <ActivityLineChart data={scoreTrend} label={t.avgScore} color={brand.chartColors[0]} />
                 : <EmptyState />
             }
           </ChartCard>
-          <ChartCard title={t.useCaseDeployment ?? "Session Activity"} subtitle={`${t.last} ${days} ${t.days}`}>
+          <ChartCard title={t.useCaseDeployment} subtitle={`${t.last} ${days} ${t.days}`}>
             {trendsLoading
               ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
               : activityData.length > 0

@@ -265,7 +265,7 @@ export async function bancoDashboardUsecaseBreakdown(params: {
   )
 
   const data: UsecaseApiRow[] = rows.map(r => ({
-    usecaseId:        r.usecaseId != null ? Number(r.usecaseId) : null,
+    usecaseId:        r.usecaseId != null ? Number(r.usecaseId) : 0,
     usecase_name:     null,
     totalEvaluations: Number(r.totalEvaluations),
     avgScore:         r.avgScore != null ? Number(r.avgScore) : null,

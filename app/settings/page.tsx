@@ -242,7 +242,7 @@ export default function SettingsPage() {
                 value={platformNameDraft}
                 onChange={(e) => setPlatformNameDraft(e.target.value)}
                 maxLength={50}
-                placeholder="Rolplay Analytics"
+                placeholder={t.settingsPlatformName}
                 className="flex-1 px-3 py-2.5 text-sm rounded-lg border border-border bg-muted focus:outline-none focus:ring-1 focus:ring-primary"
               />
               <span className="text-xs text-muted-foreground self-center sm:self-auto">{platformNameDraft.length}/50</span>
@@ -368,10 +368,10 @@ export default function SettingsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mt-5">
                 {(
                   [
-                    { field: 'primary_color'   as const, label: 'Primary',   desc: 'Buttons, active states, badges'    },
-                    { field: 'secondary_color' as const, label: 'Secondary', desc: 'Charts, supporting elements'        },
-                    { field: 'accent_color'    as const, label: 'Accent',    desc: 'Highlights, gradient end color'     },
-                  ] as const
+                    { field: 'primary_color'   as const, label: t.settingsPrimaryColor,   desc: t.settingsPrimaryDesc   },
+                    { field: 'secondary_color' as const, label: t.settingsSecondaryColor, desc: t.settingsSecondaryDesc },
+                    { field: 'accent_color'    as const, label: t.settingsAccentColor,    desc: t.settingsAccentDesc    },
+                  ]
                 ).map(({ field, label, desc }) => {
                   const value = current[field] as string
                   return (
@@ -416,7 +416,7 @@ export default function SettingsPage() {
                               : 'border-border bg-muted hover:bg-muted/70 text-muted-foreground'
                           )}
                         >
-                          {copied === field ? <Check className="w-3 h-3" /> : 'Copy'}
+                          {copied === field ? <Check className="w-3 h-3" /> : t.settingsCopy}
                         </button>
                       </div>
                     </div>
@@ -444,9 +444,9 @@ export default function SettingsPage() {
                   className="rounded-xl border p-4"
                   style={{ borderTopColor: current.primary_color, borderTopWidth: 3, borderTopStyle: 'solid' }}
                 >
-                  <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">KPI Metric</p>
+                  <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">{t.settingsKpiLabel}</p>
                   <p className="text-2xl font-extrabold" style={{ color: current.primary_color }}>1,234</p>
-                  <p className="text-xs text-muted-foreground mt-1">↑ 12% vs last period</p>
+                  <p className="text-xs text-muted-foreground mt-1">{t.settingsKpiExample}</p>
                 </div>
                 <div className="rounded-xl overflow-hidden flex gap-2 p-2 bg-muted/30 border border-border">
                   <div className="flex-1 rounded-lg" style={{ background: current.primary_color, opacity: 0.85 }} />

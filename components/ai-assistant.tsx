@@ -97,14 +97,17 @@ function renderMarkdown(content: string): React.ReactNode[] {
 
 // ── Context builder ──────────────────────────────────────────────────────────
 
-function trendDirection(trend?: { value: number }[]): string {
-  if (!trend || trend.length < 2) return "insufficient data"
+function trendDirection(
+  trend: { value: number }[] | undefined,
+  t: { aiTrendIncreasing: string; aiTrendDecreasing: string; aiTrendStable: string; aiTrendInsufficient: string }
+): string {
+  if (!trend || trend.length < 2) return t.aiTrendInsufficient
   const first = trend[0].value
   const last  = trend[trend.length - 1].value
   const pct   = first > 0 ? Math.round(((last - first) / first) * 100) : 0
-  if (last > first) return `increasing (+${pct}%)`
-  if (last < first) return `decreasing (${pct}%)`
-  return "stable (0%)"
+  if (last > first) return `${t.aiTrendIncreasing} (+${pct}%)`
+  if (last < first) return `${t.aiTrendDecreasing} (${pct}%)`
+  return `${t.aiTrendStable} (0%)`
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -136,8 +139,8 @@ export function AIAssistant() {
     const days = Math.round(
       (dateRange.to.getTime() - dateRange.from.getTime()) / 86_400_000
     )
-    return `${days} days`
-  }, [dateRange])
+    return `${days} ${t.days}`
+  }, [dateRange, t.days])
 
   // Build rich context string from live API data
   async function buildContext(): Promise<string> {
@@ -170,8 +173,8 @@ export function AIAssistant() {
         `Prior period evaluations: ${ov.prevTotalEvaluations ?? "N/A"}`,
         `Prior period avg score: ${ov.prevAvgScore != null ? `${ov.prevAvgScore} pts` : "N/A"}`,
         `Prior period pass rate: ${ov.prevPassRate != null ? `${ov.prevPassRate}%` : "N/A"}`,
-        `Score trend: ${trendDirection(tr?.scoreTrend)}`,
-        `Evaluation count trend: ${trendDirection(tr?.evalCountTrend)}`,
+        `Score trend: ${trendDirection(tr?.scoreTrend, t)}`,
+        `Evaluation count trend: ${trendDirection(tr?.evalCountTrend, t)}`,
       ]
 
       // Pass/fail summary

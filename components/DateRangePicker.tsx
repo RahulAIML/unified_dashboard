@@ -49,11 +49,11 @@ export function DateRangePicker({ onApply, initialFrom, initialTo, className }: 
     to.setHours(23, 59, 59, 999)
 
     if (isNaN(from.getTime()) || isNaN(to.getTime())) {
-      setError("Please select valid dates.")
+      setError(t.dateInvalid)
       return
     }
     if (from > to) {
-      setError("Start date must be before end date.")
+      setError(t.dateOrderError)
       return
     }
 
@@ -72,7 +72,7 @@ export function DateRangePicker({ onApply, initialFrom, initialTo, className }: 
             ? "bg-primary text-primary-foreground border-transparent"
             : "border-border text-muted-foreground hover:text-foreground bg-muted"
         )}
-        aria-label="Custom date range"
+        aria-label={t.custom}
       >
         <CalendarRange className="w-3.5 h-3.5" />
         {t.custom}
@@ -98,7 +98,7 @@ export function DateRangePicker({ onApply, initialFrom, initialTo, className }: 
             {/* From */}
             <div>
               <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide block mb-1">
-                From
+                {t.dateFrom}
               </label>
               <input
                 type="date"
@@ -112,7 +112,7 @@ export function DateRangePicker({ onApply, initialFrom, initialTo, className }: 
             {/* To */}
             <div>
               <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide block mb-1">
-                To
+                {t.dateTo}
               </label>
               <input
                 type="date"

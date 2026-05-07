@@ -37,7 +37,7 @@ export const translations = {
     coachSub:        'Use case configurations and user assignments',
     simTitle:        'Practice Simulator',
     simSub:          'Scenario sessions, scores, and pass rates',
-    certTitle:       'Expert Certification',
+    certTitle:       'Certifier Coach',
     certSub:         'Evaluation results, pass rates, and score distributions',
     sbTitle:         'Second Brain',
     sbSub:           'Knowledge base content inventory and document tracking',
@@ -213,6 +213,7 @@ export const translations = {
     custom:           'Custom',
     exportAll:        'Export All Solutions',
     exportCurrent:    'Export Current',
+    exportCsv:        'Export CSV',
     exporting:        'Exporting…',
     liveLabel:        'Live',
     askAi:            'Ask AI',
@@ -301,6 +302,34 @@ export const translations = {
     aiQuickPassRate:    'Pass rate',
     aiQuickScoreTrend:  'Score trend',
     aiQuickTopInsights: 'Top insights',
+    aiTrendIncreasing:  'increasing',
+    aiTrendDecreasing:  'decreasing',
+    aiTrendStable:      'stable',
+    aiTrendInsufficient:'insufficient data',
+
+    // ── Module filter pill labels ─────────────────────────────
+    moduleLms:           'LMS',
+    moduleCoach:         'Master Coach',
+    moduleSimulator:     'Simulator',
+    moduleCertification: 'Certifier Coach',
+    moduleSecondBrain:   'Second Brain',
+
+    // ── Settings — advanced color fields ─────────────────────
+    settingsPrimaryColor:   'Primary',
+    settingsSecondaryColor: 'Secondary',
+    settingsAccentColor:    'Accent',
+    settingsPrimaryDesc:    'Buttons, active states, badges',
+    settingsSecondaryDesc:  'Charts, supporting elements',
+    settingsAccentDesc:     'Highlights, gradient end color',
+    settingsCopy:           'Copy',
+    settingsCopied:         'Copied!',
+
+    // ── Settings — live preview sample text ──────────────────
+    settingsKpiLabel:   'KPI Metric',
+    settingsKpiExample: '↑ 12% vs last period',
+
+    // ── Loading states ────────────────────────────────────────
+    loadingAccess:      'Loading access information…',
   },
 
   es: {
@@ -329,11 +358,11 @@ export const translations = {
     overviewSub:     'Analítica integral de tus servicios con Rolplay',
     lmsTitle:        'LMS',
     lmsSub:          'Asignaciones y completaciones de módulos de aprendizaje',
-    coachTitle:      'Coach Experto',
+    coachTitle:      'Coach Maestro',
     coachSub:        'Configuraciones de casos de uso y asignaciones de usuarios',
     simTitle:        'Simulador de Práctica',
     simSub:          'Sesiones de escenarios, puntuaciones y tasas de aprobación',
-    certTitle:       'Certificación Experta',
+    certTitle:       'Coach Certificador',
     certSub:         'Resultados de evaluaciones, tasas de aprobación y distribución de puntuaciones',
     sbTitle:         'Second Brain',   // brand name — never translate
     sbSub:           'Inventario de base de conocimiento y seguimiento de documentos',
@@ -509,6 +538,7 @@ export const translations = {
     custom:           'Personalizado',
     exportAll:        'Exportar Todas las Soluciones',
     exportCurrent:    'Exportar Actual',
+    exportCsv:        'Exportar CSV',
     exporting:        'Exportando…',
     liveLabel:        'En vivo',
     askAi:            'Preguntar a la IA',
@@ -597,6 +627,34 @@ export const translations = {
     aiQuickPassRate:    'Tasa de aprobación',
     aiQuickScoreTrend:  'Tendencia de puntuación',
     aiQuickTopInsights: 'Mejores insights',
+    aiTrendIncreasing:  'aumentando',
+    aiTrendDecreasing:  'disminuyendo',
+    aiTrendStable:      'estable',
+    aiTrendInsufficient:'datos insuficientes',
+
+    // ── Module filter pill labels ─────────────────────────────
+    moduleLms:           'LMS',
+    moduleCoach:         'Coach Maestro',
+    moduleSimulator:     'Simulador',
+    moduleCertification: 'Coach Certificador',
+    moduleSecondBrain:   'Second Brain',
+
+    // ── Settings — advanced color fields ─────────────────────
+    settingsPrimaryColor:   'Primario',
+    settingsSecondaryColor: 'Secundario',
+    settingsAccentColor:    'Acento',
+    settingsPrimaryDesc:    'Botones, estados activos, insignias',
+    settingsSecondaryDesc:  'Gráficos, elementos de apoyo',
+    settingsAccentDesc:     'Resaltes, color final de gradiente',
+    settingsCopy:           'Copiar',
+    settingsCopied:         '¡Copiado!',
+
+    // ── Settings — live preview sample text ──────────────────
+    settingsKpiLabel:   'Métrica KPI',
+    settingsKpiExample: '↑ 12% vs período anterior',
+
+    // ── Loading states ────────────────────────────────────────
+    loadingAccess:      'Cargando información de acceso…',
   },
 } as const
 

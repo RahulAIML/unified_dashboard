@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { Download } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useT } from "@/lib/lang-store"
 
 interface Props<T> {
   /** Rows to export */
@@ -13,8 +14,10 @@ interface Props<T> {
   filename: string
   /** Optional extra CSS classes */
   className?: string
-  /** Label shown on the button (default: "Export CSV") */
+  /** Label shown on the button (defaults to t.exportCsv) */
   label?: string
+  /** Override min-width (default "min-w-[110px]") for equal-width button pairs */
+  minWidth?: string
 }
 
 /**
@@ -26,8 +29,11 @@ export function ExportButton<T>({
   columns,
   filename,
   className,
-  label = "Export CSV",
+  label,
+  minWidth = "min-w-[110px]",
 }: Props<T>) {
+  const t = useT()
+  const displayLabel = label ?? t.exportCsv
   const [busy, setBusy] = useState(false)
 
   async function handleClick() {
@@ -51,16 +57,17 @@ export function ExportButton<T>({
       disabled={busy}
       title={isEmpty ? `Download empty export (${filename})` : `Download ${filename}`}
       className={cn(
-        "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold",
-        "border transition-all select-none",
+        "inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold",
+        "border transition-all select-none whitespace-nowrap",
+        minWidth,
         isEmpty
           ? "border-border text-muted-foreground hover:bg-muted/50"
           : "bg-primary text-primary-foreground border-transparent hover:bg-primary/90 active:scale-[0.97]",
         className
       )}
     >
-      <Download className={cn("w-3.5 h-3.5", busy && "animate-bounce")} />
-      {busy ? "Exporting…" : label}
+      <Download className={cn("w-3.5 h-3.5 shrink-0", busy && "animate-bounce")} />
+      {busy ? t.exporting : displayLabel}
     </button>
   )
 }

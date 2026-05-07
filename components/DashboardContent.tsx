@@ -396,8 +396,8 @@ export function DashboardContent() {
 
   const isLoading = overviewLoading || shimmer
 
-  const exportAllLabel = (t as Record<string, string>).exportAll ?? "Export All Solutions"
-  const exportingLabel = (t as Record<string, string>).exporting ?? "Exporting…"
+  const exportAllLabel = t.exportAll
+  const exportingLabel = t.exporting
 
   // ── Early returns (all hooks above — no more hooks below this line) ────────
 
@@ -408,7 +408,7 @@ export function DashboardContent() {
         <DashboardHeader title={t.overviewTitle} subtitle={t.overviewSub} showModuleFilter />
         <div className="flex flex-col items-center justify-center min-h-[60vh] px-6">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
-          <p className="mt-4 text-sm text-muted-foreground">Loading access information...</p>
+          <p className="mt-4 text-sm text-muted-foreground">{t.loadingAccess}</p>
         </div>
       </div>
     )
@@ -574,22 +574,22 @@ export function DashboardContent() {
           </>
         ) : (
           <>
-            {/* KPI export row */}
+            {/* KPI export row — both buttons share the same min-width for visual consistency */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:justify-end">
               <button
                 onClick={() => exportAllSolutions()}
                 disabled={exportLoading}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed shadow-[0_1px_3px_rgba(0,0,0,0.1)]"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold min-w-[160px] whitespace-nowrap bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed shadow-[0_1px_3px_rgba(0,0,0,0.1)]"
                 title={exportAllLabel}
               >
                 {exportLoading ? (
                   <>
-                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0" />
                     {exportingLabel}
                   </>
                 ) : (
                   <>
-                    <BarChart2 className="w-4 h-4" />
+                    <BarChart2 className="w-4 h-4 shrink-0" />
                     {exportAllLabel}
                   </>
                 )}
@@ -598,6 +598,7 @@ export function DashboardContent() {
                 data={kpiExportRows}
                 filename={csvFilename(`kpi-summary-${selectedSolution ?? "all"}`)}
                 label={t.exportCurrent}
+                minWidth="min-w-[160px]"
                 columns={[
                   { header: "Solution",              value: (r) => r.solution },
                   { header: "From",                  value: (r) => r.from },

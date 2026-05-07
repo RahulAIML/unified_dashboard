@@ -198,11 +198,11 @@ export default function SimulatorPage() {
             {trendsLoading
               ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
               : scoreTrendData.length > 0
-                ? <ActivityLineChart data={scoreTrendData} label="Avg Score" color={brand.chartColors[0]} />
+                ? <ActivityLineChart data={scoreTrendData} label={t.avgScore} color={brand.chartColors[0]} />
                 : <EmptyState />
             }
           </ChartCard>
-          <ChartCard title={t.activityTrend ?? "Session Activity"} subtitle={`${t.last} ${days} ${t.days}`}>
+          <ChartCard title={t.activityTrend} subtitle={`${t.last} ${days} ${t.days}`}>
             {trendsLoading
               ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
               : activityData.length > 0

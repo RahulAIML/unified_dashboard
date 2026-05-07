@@ -10,13 +10,8 @@ import { DateRangePicker } from "@/components/DateRangePicker"
 import { cn } from "@/lib/utils"
 import type { Module } from "@/lib/types"
 
-const MODULES: { id: Module; label: string }[] = [
-  { id: "lms", label: "LMS" },
-  { id: "coach", label: "Coach" },
-  { id: "simulator", label: "Simulator" },
-  { id: "certification", label: "Certification" },
-  { id: "second-brain", label: "Second Brain" },
-]
+// Static module IDs — used for URL param validation (never changes with language)
+const MODULE_IDS: Module[] = ["lms", "coach", "simulator", "certification", "second-brain"]
 
 const DATE_PRESETS = [
   { label: "7d", days: 7 },
@@ -35,6 +30,14 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
   const { lang, toggle: toggleLang } = useLangStore()
   const t = useT()
   const brand = useClientBrand()
+
+  const MODULES: { id: Module; label: string }[] = [
+    { id: "lms",           label: t.moduleLms           },
+    { id: "coach",         label: t.moduleCoach         },
+    { id: "simulator",     label: t.moduleSimulator     },
+    { id: "certification", label: t.moduleCertification },
+    { id: "second-brain",  label: t.moduleSecondBrain   },
+  ]
 
   const [activeDays, setActiveDays] = useState<number | "custom">(30)
   const [refreshing, setRefreshing] = useState(false)
@@ -60,7 +63,7 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
 
       if (params.has("solution")) {
         const solution = params.get("solution")
-        const valid = MODULES.some((module) => module.id === solution)
+        const valid = MODULE_IDS.includes(solution as Module)
         setSolutionDirect(valid ? (solution as Module) : null)
       }
 
