@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     const sol   = sp.get('solution')
     if (sol === 'second-brain') return buildSuccess({ data: [] }, { source: 'demo' })
     const lim   = Math.min(5, Math.max(1, Number(sp.get('limit')) || 5))
-    return buildSuccess(demoBestPerformers(range.from, range.to, lim), { source: 'demo' })
+    return buildSuccess(demoBestPerformers(range.from, range.to, lim, sol), { source: 'demo' })
   }
 
   const orgType = resolveOrgType(ctx.email, ctx.customerId)

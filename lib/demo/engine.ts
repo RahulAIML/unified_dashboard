@@ -28,13 +28,23 @@ function seededRng(seed: number) {
   }
 }
 
-function dateToSeed(from: Date, to: Date): number {
+function dateToSeed(from: Date, to: Date, salt = 0): number {
   return (
-    from.getFullYear() * 1_000_000 +
+    (from.getFullYear() * 1_000_000 +
     (from.getMonth() + 1) * 10_000 +
     from.getDate() * 100 +
-    to.getDate()
+    to.getDate()) ^ salt
   )
+}
+
+function solutionSalt(solution: string | null): number {
+  if (!solution) return 0
+  let hash = 0
+  for (let i = 0; i < solution.length; i++) {
+    hash = ((hash << 5) - hash) + solution.charCodeAt(i)
+    hash = hash & hash // Convert to 32bit integer
+  }
+  return Math.abs(hash)
 }
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
@@ -85,25 +95,38 @@ const DEMO_USERS = [
 ]
 
 // ── Overview KPIs ─────────────────────────────────────────────────────────────
-export function demoOverview(from: Date, to: Date) {
+export function demoOverview(from: Date, to: Date, solution: string | null = null) {
   const days = daysBetween(from, to)
-  const rng  = seededRng(dateToSeed(from, to))
+  const salt = solutionSalt(solution)
+  const rng  = seededRng(dateToSeed(from, to, salt))
 
-  // Base rate: ~94 sessions/day with mild variance
-  const dailyRate   = 90 + rng() * 8
+  // Solution-specific base rates
+  const rateMap: Record<string, number> = {
+    'lms': 75, 'coach': 102, 'simulator': 88, 'certification': 65, 'second-brain': 0,
+  }
+  const baseRate = rateMap[solution || ''] || 94
+  const dailyRate   = baseRate + rng() * 15
   const totalEvals  = Math.round(dailyRate * days)
 
-  // Score: 82–88 range (healthy enterprise performance)
-  const avgScore    = Math.round((83 + rng() * 4) * 10) / 10
+  // Solution-specific score ranges
+  const scoreMap: Record<string, [number, number]> = {
+    'lms': [78, 4], 'coach': [84, 5], 'simulator': [81, 6], 'certification': [82, 4],
+  }
+  const [scoreBase, scoreVar] = scoreMap[solution || ''] || [83, 4]
+  const avgScore    = Math.round((scoreBase + rng() * scoreVar) * 10) / 10
 
-  // Pass rate: 74–82%
-  const passRate    = Math.round((74 + rng() * 7) * 10) / 10
+  // Solution-specific pass rates
+  const passMap: Record<string, [number, number]> = {
+    'lms': [72, 8], 'coach': [76, 6], 'simulator': [79, 5], 'certification': [81, 4],
+  }
+  const [passBase, passVar] = passMap[solution || ''] || [74, 7]
+  const passRate    = Math.round((passBase + rng() * passVar) * 10) / 10
   const passed      = Math.round(totalEvals * (passRate / 100))
 
   // Prior period (slightly lower to show positive growth)
-  const prevTotal   = Math.round(totalEvals * (0.82 + rng() * 0.08))
-  const prevScore   = Math.round((avgScore - 2.5 - rng() * 2) * 10) / 10
-  const prevPass    = Math.round((passRate - 3.5 - rng() * 2)  * 10) / 10
+  const prevTotal   = Math.round(totalEvals * (0.8 + rng() * 0.1))
+  const prevScore   = Math.round((avgScore - 2.2 - rng() * 1.5) * 10) / 10
+  const prevPass    = Math.round((passRate - 3.2 - rng() * 1.8)  * 10) / 10
 
   return {
     totalEvaluations:     totalEvals,
@@ -117,9 +140,10 @@ export function demoOverview(from: Date, to: Date) {
 }
 
 // ── Trends ────────────────────────────────────────────────────────────────────
-export function demoTrends(from: Date, to: Date) {
+export function demoTrends(from: Date, to: Date, solution: string | null = null) {
   const days = daysBetween(from, to)
-  const rng  = seededRng(dateToSeed(from, to) + 7)
+  const salt = solutionSalt(solution)
+  const rng  = seededRng(dateToSeed(from, to, salt) + 7)
 
   const scoreTrend:     { date: string; value: number }[]                   = []
   const passFailTrend:  { date: string; value: number; value2: number }[]   = []
@@ -155,7 +179,8 @@ export function demoTrends(from: Date, to: Date) {
 // ── Usecase Breakdown ─────────────────────────────────────────────────────────
 export function demoUsecaseBreakdown(from: Date, to: Date, solution: string | null) {
   const days      = daysBetween(from, to)
-  const rng       = seededRng(dateToSeed(from, to) + 13)
+  const salt      = solutionSalt(solution)
+  const rng       = seededRng(dateToSeed(from, to, salt) + 13)
   const totalBase = Math.round(90 * days)
 
   // Distribution weights (must sum to ~1)
@@ -190,7 +215,8 @@ export function demoUsecaseBreakdown(from: Date, to: Date, solution: string | nu
 // ── Evaluation Results Table ──────────────────────────────────────────────────
 export function demoResults(from: Date, to: Date, limit = 20, solution: string | null) {
   const days = daysBetween(from, to)
-  const rng  = seededRng(dateToSeed(from, to) + 17)
+  const salt = solutionSalt(solution)
+  const rng  = seededRng(dateToSeed(from, to, salt) + 17)
 
   const ucIds = solution
     ? ([DEMO_USECASE_IDS[0]] as number[])
@@ -217,9 +243,10 @@ export function demoResults(from: Date, to: Date, limit = 20, solution: string |
 }
 
 // ── Best Performers ───────────────────────────────────────────────────────────
-export function demoBestPerformers(from: Date, to: Date, limit = 5) {
+export function demoBestPerformers(from: Date, to: Date, limit = 5, solution: string | null = null) {
   const days = daysBetween(from, to)
-  const rng  = seededRng(dateToSeed(from, to) + 23)
+  const salt = solutionSalt(solution)
+  const rng  = seededRng(dateToSeed(from, to, salt) + 23)
 
   return {
     data: DEMO_USERS.slice(0, limit).map(u => ({
@@ -243,9 +270,34 @@ export function demoAccessStatus() {
 }
 
 // ── Second Brain Profile ──────────────────────────────────────────────────────
+const SB_MEMBER_NAMES = [
+  'María García', 'Carlos López', 'Ana Martínez', 'Diego Hernández', 'Sofia Ramírez',
+  'Luis Torres', 'Valentina Cruz', 'Andrés Flores', 'Isabella Reyes', 'Miguel Castillo',
+  'Camila Morales', 'Sebastián Jiménez', 'Lucía Vargas', 'Roberto Sánchez', 'Fernanda Ruiz',
+  'Jorge Rivera', 'Elena Delgado', 'Marcos Núñez', 'Patricia Romero', 'Alberto Méndez',
+  'Adriana Silva', 'Felipe Herrera', 'Mónica González', 'Raúl Ibáñez', 'Catalina Peña',
+  'Gustavo Rojas', 'Beatriz Acosta', 'Oscar Moreno', 'Natalia Castells', 'Eduardo Fuentes',
+  'Gabriela Ortiz', 'Manuel Blanco', 'Mariana Valdez', 'Ricardo Prado', 'Vanessa Aguirre',
+  'Javier Dominguez', 'Lorena Miranda', 'Fernando Soto', 'Rosario Díaz', 'Álvaro Vásquez',
+  'Emilia Rodríguez', 'Sergio Pacheco', 'Juliana Becerra', 'Víctor Ramírez', 'Sandra Celis',
+  'Ignacio Salazar', 'Pamela Ovando',
+]
+
+const SB_ROLES = [
+  'Sales Manager', 'Operations Lead', 'Revenue Director', 'Team Lead', 'Coordinator',
+  'Executive', 'Analyst', 'Specialist', 'Supervisor', 'Administrator',
+]
+
 export function demoSecondBrainProfile() {
-  const members = Array.from({ length: 47 }, (_, i) => ({
-    is_active: i < 39,
+  const rng = seededRng(999)
+  const activeCount = 39
+
+  const members = SB_MEMBER_NAMES.map((name, i) => ({
+    name,
+    role: SB_ROLES[Math.floor(rng() * SB_ROLES.length)],
+    email: name.toLowerCase().replace(/\s+/g, '.') + '@company.com',
+    is_active: i < activeCount,
+    last_activity: i < activeCount ? `2026-05-${Math.floor(rng() * 7) + 1}` : null,
   }))
 
   return {

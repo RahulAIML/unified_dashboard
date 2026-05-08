@@ -126,15 +126,6 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
     <div className="relative isolate z-[70] border-b border-border bg-background/80 backdrop-blur-sm overflow-visible">
       <div className="h-[3px] w-full" style={{ background: "linear-gradient(90deg, hsl(var(--primary)), hsl(var(--accent)))" }} />
 
-      {/* Demo mode indicator */}
-      {IS_DEMO && (
-        <div className="flex items-center justify-center gap-2 px-4 py-1.5 bg-gradient-to-r from-violet-600/10 via-primary/10 to-violet-600/10 border-b border-violet-500/20 text-[11px] font-semibold text-violet-700 dark:text-violet-300 tracking-wide">
-          <Sparkles className="w-3 h-3 shrink-0" />
-          LIVE DEMO — Enterprise Analytics Powered by Rolplay AI
-          <Sparkles className="w-3 h-3 shrink-0" />
-        </div>
-      )}
-
       <div className="px-4 sm:px-6 py-3 sm:py-4">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 sm:gap-4 mb-3 sm:mb-4">
           <div>

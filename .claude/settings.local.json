@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(New-Item -ItemType Directory -Path \"D:\\\\Rolplay_Dashboard_Project\\\\.claude\\\\worktrees\\\\sleepy-lamport-e82e90\\\\app\\\\api\\\\auth\\\\access-status\" -Force)",
+      "Bash(Out-Null)",
+      "Bash(Write-Output \"done\")",
+      "Bash(node ./node_modules/typescript/bin/tsc -p tsconfig.json --noEmit)",
+      "Bash(npx tsc *)",
+      "Bash(ls \"C:/Users/User/.claude/projects/D--Rolplay-Dashboard-Project/memory/\" 2>/dev/null || echo \"dir missing\")",
+      "Bash(mkdir -p \"C:/Users/User/.claude/projects/D--Rolplay-Dashboard-Project/memory\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(xargs grep -l \"jwt\\\\|JWT\")",
+      "Bash(Remove-Item -Path \"D:\\\\Rolplay_Dashboard_Project\\\\.claude\\\\worktrees\\\\sleepy-lamport-e82e90\\\\app\\\\banco\\\\page.tsx\" -Force)",
+      "PowerShell(New-Item -ItemType Directory -Path \"D:\\\\Rolplay_Dashboard_Project\\\\.claude\\\\worktrees\\\\sleepy-lamport-e82e90\\\\app\\\\api\\\\debug\" -Force)",
+      "Bash(npx vitest *)",
+      "Bash(git commit -m '@ *)",
+      "Bash(git fetch *)",
+      "Bash(cd \"D:\\\\Rolplay_Dashboard_Project\" && find . -name \"*.sql\" -type f 2>/dev/null | head -20)",
+      "Bash(Get-ChildItem -Path \"D:\\\\Rolplay_Dashboard_Project\\\\.claude\\\\worktrees\\\\sleepy-lamport-e82e90\" -Recurse -Directory)",
+      "Bash(Select-Object -First 20)",
+      "Bash(npm run *)",
+      "Bash(npx next *)",
+      "Bash(npx eslint *)",
+      "Bash(Get-ChildItem -Path \"D:\\\\Rolplay_Dashboard_Project\\\\.claude\\\\worktrees\\\\sleepy-lamport-e82e90\" -Recurse -Filter \"*.ts\" -Filter \"*.sql\")",
+      "Bash(Select-Object -First 50 FullName)",
+      "Bash(grep -n \"INSERT INTO \\\\`admin_user\\\\`\" \"D:\\\\Rolplay_Dashboard_Project\\\\.claude\\\\worktrees\\\\sleepy-lamport-e82e90/coach_app.sql\")",
+      "Bash(xargs grep -l \"GET\\\\|export\")"
+    ]
+  }
+}

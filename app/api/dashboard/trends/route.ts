@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
     if (!range) return buildApiError('Invalid date range', 400)
     const sol   = sp.get('solution')
     if (sol === 'second-brain') return buildSuccess(EMPTY, { source: 'demo' })
-    return buildSuccess(demoTrends(range.from, range.to), { source: 'demo' })
+    return buildSuccess(demoTrends(range.from, range.to, sol), { source: 'demo' })
   }
 
   const orgType = resolveOrgType(ctx.email, ctx.customerId)
