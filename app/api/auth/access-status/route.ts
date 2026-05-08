@@ -44,8 +44,9 @@ function resolveAdminEmail(
 
   const domain = lower.split("@")[1] ?? ""
   if (domain && !GENERIC_DOMAINS.has(domain)) {
-    const company = domain.split(".")[0]
-    return `admin@${company}.com`
+    // Preserve the full domain so international TLDs (.com.mx, .co.uk, etc.)
+    // are not stripped — admin@audioweb.com.mx, not admin@audioweb.com
+    return `admin@${domain}`
   }
 
   return envFallback ?? null

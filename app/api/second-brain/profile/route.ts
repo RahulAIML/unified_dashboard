@@ -81,9 +81,9 @@ export async function GET(request: NextRequest) {
             "icloud.com", "protonmail.com", "live.com", "aol.com",
           ])
           if (!genericDomains.has(domain)) {
-            // Extract company name from domain (e.g. coppel.com → coppel)
-            const companyName = domain.split(".")[0]
-            adminEmail = `admin@${companyName}.com`
+            // Preserve the full domain so international TLDs (.com.mx, .co.uk, etc.)
+            // are not stripped — admin@audioweb.com.mx, not admin@audioweb.com
+            adminEmail = `admin@${domain}`
           }
         }
       }
@@ -118,13 +118,17 @@ export async function GET(request: NextRequest) {
     if (!upstream.ok) {
       const text = await upstream.text().catch(() => "")
       console.error("[/api/second-brain/profile] upstream error", upstream.status, text)
+      // Map upstream 404 (org not found) to 503 so the frontend treats it as
+      // "service unavailable" rather than a hard "not found" error that would
+      // trigger error banners. Any other upstream status is passed as 502.
+      const clientStatus = upstream.status === 404 ? 503 : 502
       return NextResponse.json(
         {
           success: false,
-          data: { message: `Second Brain API error: ${upstream.status}` },
+          data: { message: `Second Brain profile unavailable` },
           meta: { timestamp: new Date().toISOString() },
         },
-        { status: upstream.status }
+        { status: clientStatus }
       )
     }
 

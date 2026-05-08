@@ -7,10 +7,12 @@ import { motion } from 'framer-motion'
 import { Eye, EyeOff, AlertCircle } from 'lucide-react'
 import { useAuthContext } from '@/components/AuthProvider'
 import { APP_NAME } from '@/lib/constants'
+import { useT } from '@/lib/lang-store'
 
 export default function LoginPage() {
   const router = useRouter()
   const { setAuthenticated } = useAuthContext()
+  const t = useT()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -24,13 +26,13 @@ export default function LoginPage() {
 
     // Basic validation
     if (!email || !password) {
-      setError('Email and password are required')
+      setError(t.loginErrRequired)
       setIsLoading(false)
       return
     }
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setError('Please enter a valid email address')
+      setError(t.loginErrInvalidEmail)
       setIsLoading(false)
       return
     }
@@ -48,7 +50,7 @@ export default function LoginPage() {
       const data = await response.json()
 
       if (!response.ok) {
-        setError(data.data?.message || 'Login failed. Please try again.')
+        setError(data.data?.message || t.loginErrFailed)
         setIsLoading(false)
         return
       }
@@ -60,7 +62,7 @@ export default function LoginPage() {
       // Redirect to dashboard
       router.push('/')
     } catch {
-      setError('An error occurred. Please try again.')
+      setError(t.loginErrOccurred)
       setIsLoading(false)
     }
   }
@@ -87,10 +89,8 @@ export default function LoginPage() {
         {/* Card */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
           <div className="mb-8">
-            <h1 className="text-2xl font-bold text-slate-900 mb-2">Welcome Back</h1>
-            <p className="text-sm text-slate-600">
-              Sign in to your account to access the analytics dashboard
-            </p>
+            <h1 className="text-2xl font-bold text-slate-900 mb-2">{t.loginTitle}</h1>
+            <p className="text-sm text-slate-600">{t.loginSubtitle}</p>
           </div>
 
           {/* Error Banner */}
@@ -110,13 +110,13 @@ export default function LoginPage() {
             {/* Email */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
-                Email Address
+                {t.loginEmailLabel}
               </label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@company.com"
+                placeholder={t.loginEmailPh}
                 className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-colors focus:border-transparent focus:outline-none focus:ring-2 focus:ring-red-500"
               />
             </div>
@@ -124,7 +124,7 @@ export default function LoginPage() {
             {/* Password */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
-                Password
+                {t.loginPasswordLabel}
               </label>
               <div className="relative">
                 <input
@@ -154,7 +154,7 @@ export default function LoginPage() {
               disabled={isLoading}
               className="w-full py-2.5 rounded-lg font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {isLoading ? 'Signing in...' : 'Sign In'}
+              {isLoading ? t.loginSubmitting : t.loginSubmit}
             </button>
           </form>
 
@@ -164,7 +164,7 @@ export default function LoginPage() {
               <div className="w-full border-t border-slate-300" />
             </div>
             <div className="relative flex justify-center text-xs">
-              <span className="px-2 bg-white text-slate-600">New to {APP_NAME}?</span>
+              <span className="px-2 bg-white text-slate-600">{t.loginNewTo} {APP_NAME}?</span>
             </div>
           </div>
 
@@ -173,19 +173,19 @@ export default function LoginPage() {
             href="/auth/register"
             className="block w-full py-2.5 rounded-lg font-semibold text-center border border-slate-300 text-slate-900 hover:bg-slate-50 transition-colors"
           >
-            Create Account
+            {t.loginCreateAccount}
           </Link>
         </div>
 
         {/* Footer */}
         <p className="text-center text-xs text-slate-600 mt-6">
-          By signing in, you agree to our{' '}
+          {t.loginTermsText}{' '}
           <a href="#" className="font-medium text-red-600 hover:text-red-700">
-            Terms of Service
+            {t.loginTermsService}
           </a>
-          {' '}and{' '}
+          {' '}{t.loginAnd}{' '}
           <Link href="/privacy" className="font-medium text-red-600 hover:text-red-700">
-            Privacy Policy
+            {t.loginPrivacyPolicy}
           </Link>
         </p>
       </motion.div>

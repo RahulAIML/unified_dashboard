@@ -7,8 +7,11 @@ import { motion } from 'framer-motion'
 import { Eye, EyeOff, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { useAuthContext } from '@/components/AuthProvider'
 import { APP_NAME } from '@/lib/constants'
+import { useT } from '@/lib/lang-store'
 
 function PasswordStrength({ password }: { password: string }) {
+  const t = useT()
+
   const getStrength = () => {
     if (!password) return { level: 0, label: '', color: 'bg-slate-300' }
 
@@ -18,10 +21,10 @@ function PasswordStrength({ password }: { password: string }) {
     if (/[0-9]/.test(password)) strength++
     if (/[^a-zA-Z0-9]/.test(password)) strength++
 
-    if (strength <= 1) return { level: 1, label: 'Weak', color: 'bg-red-500' }
-    if (strength === 2) return { level: 2, label: 'Fair', color: 'bg-yellow-500' }
-    if (strength === 3) return { level: 3, label: 'Good', color: 'bg-blue-500' }
-    return { level: 4, label: 'Strong', color: 'bg-green-500' }
+    if (strength <= 1) return { level: 1, label: t.registerPwWeak,   color: 'bg-red-500'    }
+    if (strength === 2) return { level: 2, label: t.registerPwFair,   color: 'bg-yellow-500' }
+    if (strength === 3) return { level: 3, label: t.registerPwGood,   color: 'bg-blue-500'   }
+    return                      { level: 4, label: t.registerPwStrong, color: 'bg-green-500'  }
   }
 
   const strength = getStrength()
@@ -40,7 +43,15 @@ function PasswordStrength({ password }: { password: string }) {
       </div>
       {strength.label && (
         <p className="text-xs font-medium text-slate-600">
-          Password strength: <span className={strength.color === 'bg-red-500' ? 'text-red-600' : strength.color === 'bg-yellow-500' ? 'text-yellow-600' : strength.color === 'bg-blue-500' ? 'text-blue-600' : 'text-green-600'}>{strength.label}</span>
+          {t.registerPwStrength}{' '}
+          <span className={
+            strength.color === 'bg-red-500'    ? 'text-red-600'    :
+            strength.color === 'bg-yellow-500' ? 'text-yellow-600' :
+            strength.color === 'bg-blue-500'   ? 'text-blue-600'   :
+            'text-green-600'
+          }>
+            {strength.label}
+          </span>
         </p>
       )}
     </div>
@@ -50,6 +61,7 @@ function PasswordStrength({ password }: { password: string }) {
 export default function RegisterPage() {
   const router = useRouter()
   const { setAuthenticated } = useAuthContext()
+  const t = useT()
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -60,18 +72,10 @@ export default function RegisterPage() {
   const [error, setError] = useState('')
 
   const validatePassword = () => {
-    if (password.length < 8) {
-      return 'Password must be at least 8 characters'
-    }
-    if (!/[A-Z]/.test(password)) {
-      return 'Password must contain at least one uppercase letter'
-    }
-    if (!/[0-9]/.test(password)) {
-      return 'Password must contain at least one number'
-    }
-    if (!/[^a-zA-Z0-9]/.test(password)) {
-      return 'Password must contain at least one special character'
-    }
+    if (password.length < 8)            return t.registerErrPwLen
+    if (!/[A-Z]/.test(password))        return t.registerErrPwUpper
+    if (!/[0-9]/.test(password))        return t.registerErrPwNum
+    if (!/[^a-zA-Z0-9]/.test(password)) return t.registerErrPwSpecial
     return null
   }
 
@@ -80,21 +84,20 @@ export default function RegisterPage() {
     setError('')
     setIsLoading(true)
 
-    // Validation
     if (!fullName.trim()) {
-      setError('Full name is required')
+      setError(t.registerErrName)
       setIsLoading(false)
       return
     }
 
     if (!email) {
-      setError('Email is required')
+      setError(t.registerErrEmail)
       setIsLoading(false)
       return
     }
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setError('Please enter a valid email address')
+      setError(t.registerErrEmailValid)
       setIsLoading(false)
       return
     }
@@ -107,7 +110,7 @@ export default function RegisterPage() {
     }
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match')
+      setError(t.registerErrPwMatch)
       setIsLoading(false)
       return
     }
@@ -129,7 +132,7 @@ export default function RegisterPage() {
       const data = await response.json()
 
       if (!response.ok) {
-        setError(data.data?.message || 'Registration failed. Please try again.')
+        setError(data.data?.message || t.registerErrFailed)
         setIsLoading(false)
         return
       }
@@ -141,7 +144,7 @@ export default function RegisterPage() {
       // Redirect to dashboard
       router.push('/')
     } catch {
-      setError('An error occurred. Please try again.')
+      setError(t.registerErrOccurred)
       setIsLoading(false)
     }
   }
@@ -168,9 +171,9 @@ export default function RegisterPage() {
         {/* Card */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
           <div className="mb-8">
-            <h1 className="text-2xl font-bold text-slate-900 mb-2">Create Account</h1>
+            <h1 className="text-2xl font-bold text-slate-900 mb-2">{t.registerTitle}</h1>
             <p className="text-sm text-slate-600">
-              Join {APP_NAME} to unlock powerful analytics for your learning platform
+              {t.registerSubtitle.replace('{APP_NAME}', APP_NAME)}
             </p>
           </div>
 
@@ -191,13 +194,13 @@ export default function RegisterPage() {
             {/* Full Name */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
-                Full Name
+                {t.registerFullName}
               </label>
               <input
                 type="text"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                placeholder="John Doe"
+                placeholder={t.registerFullNamePh}
                 className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-colors focus:border-transparent focus:outline-none focus:ring-2 focus:ring-red-500"
               />
             </div>
@@ -205,13 +208,13 @@ export default function RegisterPage() {
             {/* Email */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
-                Email Address
+                {t.registerEmailLabel}
               </label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@company.com"
+                placeholder={t.loginEmailPh}
                 className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-colors focus:border-transparent focus:outline-none focus:ring-2 focus:ring-red-500"
               />
             </div>
@@ -219,7 +222,7 @@ export default function RegisterPage() {
             {/* Password */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
-                Password
+                {t.registerPasswordLabel}
               </label>
               <div className="relative">
                 <input
@@ -247,7 +250,7 @@ export default function RegisterPage() {
             {/* Confirm Password */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
-                Confirm Password
+                {t.registerConfirmPwLabel}
               </label>
               <div className="relative">
                 <input
@@ -272,7 +275,7 @@ export default function RegisterPage() {
               {password && confirmPassword && password === confirmPassword && (
                 <p className="mt-2 flex items-center gap-1.5 text-xs text-green-600 font-medium">
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  Passwords match
+                  {t.registerPwMatch}
                 </p>
               )}
             </div>
@@ -283,7 +286,7 @@ export default function RegisterPage() {
               disabled={isLoading}
               className="w-full py-2.5 rounded-lg font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {isLoading ? 'Creating Account...' : 'Create Account'}
+              {isLoading ? t.registerSubmitting : t.registerSubmit}
             </button>
           </form>
 
@@ -293,7 +296,7 @@ export default function RegisterPage() {
               <div className="w-full border-t border-slate-300" />
             </div>
             <div className="relative flex justify-center text-xs">
-              <span className="px-2 bg-white text-slate-600">Already have an account?</span>
+              <span className="px-2 bg-white text-slate-600">{t.registerAlreadyHave}</span>
             </div>
           </div>
 
@@ -302,19 +305,19 @@ export default function RegisterPage() {
             href="/auth/login"
             className="block w-full py-2.5 rounded-lg font-semibold text-center border border-slate-300 text-slate-900 hover:bg-slate-50 transition-colors"
           >
-            Sign In
+            {t.registerSignIn}
           </Link>
         </div>
 
         {/* Footer */}
         <p className="text-center text-xs text-slate-600 mt-6">
-          By creating an account, you agree to our{' '}
+          {t.registerTermsText}{' '}
           <Link href="/terms" className="font-medium text-red-600 hover:text-red-700">
-            Terms of Service
+            {t.loginTermsService}
           </Link>
-          {' '}and{' '}
+          {' '}{t.loginAnd}{' '}
           <Link href="/privacy" className="font-medium text-red-600 hover:text-red-700">
-            Privacy Policy
+            {t.loginPrivacyPolicy}
           </Link>
         </p>
       </motion.div>

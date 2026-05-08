@@ -8,6 +8,7 @@ import {
   BrainCircuit, BadgeCheck, Database, Users
 } from 'lucide-react'
 import { APP_NAME } from '@/lib/constants'
+import { useT } from '@/lib/lang-store'
 
 // ── Animation helpers ─────────────────────────────────────────────────────────
 const fadeUp = (delay = 0) => ({
@@ -114,6 +115,69 @@ function DashboardPreview() {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export function LandingPage() {
+  const t = useT()
+
+  const features = [
+    {
+      icon: BarChart3, color: 'bg-red-50 text-red-600',
+      title: t.landingFeat1Title,
+      description: t.landingFeat1Desc,
+    },
+    {
+      icon: Zap, color: 'bg-blue-50 text-blue-600',
+      title: t.landingFeat2Title,
+      description: t.landingFeat2Desc,
+    },
+    {
+      icon: Brain, color: 'bg-violet-50 text-violet-600',
+      title: t.landingFeat3Title,
+      description: t.landingFeat3Desc,
+    },
+    {
+      icon: TrendingUp, color: 'bg-teal-50 text-teal-600',
+      title: t.landingFeat4Title,
+      description: t.landingFeat4Desc,
+    },
+    {
+      icon: FileDown, color: 'bg-amber-50 text-amber-600',
+      title: t.landingFeat5Title,
+      description: t.landingFeat5Desc,
+    },
+    {
+      icon: Palette, color: 'bg-pink-50 text-pink-600',
+      title: t.landingFeat6Title,
+      description: t.landingFeat6Desc,
+    },
+  ]
+
+  const stats = [
+    { value: t.landingStatVal1, label: t.landingStatLbl1, color: 'from-red-500 to-red-600'       },
+    { value: t.landingStatVal2, label: t.landingStatLbl2, color: 'from-blue-500 to-blue-600'     },
+    { value: t.landingStatVal3, label: t.landingStatLbl3, color: 'from-teal-500 to-teal-600'     },
+    { value: t.landingStatVal4, label: t.landingStatLbl4, color: 'from-violet-500 to-violet-600' },
+  ]
+
+  const modules = [
+    { icon: BrainCircuit, label: t.landingModAiCoach,  color: 'bg-red-100 text-red-700'       },
+    { icon: BookOpen,     label: 'LMS',                color: 'bg-blue-100 text-blue-700'     },
+    { icon: Gamepad2,     label: t.moduleSimulator,    color: 'bg-teal-100 text-teal-700'     },
+    { icon: BadgeCheck,   label: t.moduleCertification,color: 'bg-violet-100 text-violet-700' },
+    { icon: Database,     label: 'Second Brain',       color: 'bg-amber-100 text-amber-700'   },
+    { icon: Brain,        label: t.landingModCustomAi, color: 'bg-pink-100 text-pink-700'     },
+  ]
+
+  const steps = [
+    { step: '01', title: t.landingStep1Title, description: t.landingStep1Desc, color: 'from-red-500 to-red-600'   },
+    { step: '02', title: t.landingStep2Title, description: t.landingStep2Desc, color: 'from-blue-500 to-blue-600' },
+    { step: '03', title: t.landingStep3Title, description: t.landingStep3Desc, color: 'from-teal-500 to-teal-600' },
+  ]
+
+  const secBadges = [
+    t.landingSec1, t.landingSec2, t.landingSec3, t.landingSec4, t.landingSec5,
+  ]
+
+  const trustBullets = [t.landingTrust1, t.landingTrust2, t.landingTrust3]
+
   return (
     <div className="w-screen min-h-screen bg-white overflow-x-hidden">
 
@@ -130,23 +194,23 @@ export function LandingPage() {
             <span className="font-bold text-slate-900 text-[15px]">{APP_NAME} <span className="font-light text-slate-400">Analytics</span></span>
           </div>
           <nav className="hidden sm:flex items-center gap-1">
-            <a href="#features" className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-50 transition-colors">Features</a>
-            <a href="#modules" className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-50 transition-colors">Modules</a>
-            <a href="#how-it-works" className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-50 transition-colors">How it works</a>
+            <a href="#features"     className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-50 transition-colors">{t.landingNavFeatures}</a>
+            <a href="#modules"      className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-50 transition-colors">{t.landingNavModules}</a>
+            <a href="#how-it-works" className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-50 transition-colors">{t.landingNavHowItWorks}</a>
           </nav>
           <div className="flex items-center gap-2">
             <Link
               href="/auth/login"
               className="px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 rounded-lg hover:bg-slate-50 transition-colors hidden sm:block"
             >
-              Sign In
+              {t.landingNavSignIn}
             </Link>
             <Link
               href="/auth/register"
               className="px-4 py-2 text-sm font-semibold rounded-lg text-white shadow-sm transition-all hover:shadow-md hover:opacity-90"
               style={{ background: 'linear-gradient(135deg, #DC2626 0%, #3B82F6 100%)' }}
             >
-              Get Started
+              {t.landingNavGetStarted}
             </Link>
           </div>
         </div>
@@ -174,21 +238,18 @@ export function LandingPage() {
               {/* Badge */}
               <div className="inline-flex items-center gap-2 bg-gradient-to-r from-red-50 to-blue-50 border border-red-100 rounded-full px-3.5 py-1.5 mb-6">
                 <span className="w-2 h-2 rounded-full bg-gradient-to-r from-red-500 to-blue-500" />
-                <span className="text-xs font-semibold text-slate-700">AI-Powered Analytics Platform</span>
+                <span className="text-xs font-semibold text-slate-700">{t.landingBadge}</span>
               </div>
 
               <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-slate-900 mb-5 leading-[1.1]">
-                Analytics that power{' '}
-                <span
-                  className="bg-gradient-to-r from-red-600 to-blue-600 bg-clip-text text-transparent"
-                >
-                  smarter learning
+                {t.landingHeroTitle1}{' '}
+                <span className="bg-gradient-to-r from-red-600 to-blue-600 bg-clip-text text-transparent">
+                  {t.landingHeroTitle2}
                 </span>
               </h1>
 
               <p className="text-lg text-slate-600 mb-8 leading-relaxed max-w-lg">
-                Real-time dashboards for LMS, coaching, certification, and simulators.
-                Turn raw session data into clear insights — automatically.
+                {t.landingHeroPara}
               </p>
 
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-8">
@@ -197,27 +258,23 @@ export function LandingPage() {
                   className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-white shadow-sm hover:shadow-md transition-all hover:opacity-90 text-sm"
                   style={{ background: 'linear-gradient(135deg, #DC2626 0%, #3B82F6 100%)' }}
                 >
-                  Start for Free
+                  {t.landingCta1}
                   <ArrowRight className="w-4 h-4" />
                 </Link>
                 <Link
                   href="/auth/login"
                   className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-slate-700 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-all text-sm"
                 >
-                  Sign in to dashboard
+                  {t.landingCta2}
                 </Link>
               </div>
 
               {/* Trust bullets */}
               <div className="flex flex-col gap-2">
-                {[
-                  'Multi-tenant — each company sees only their data',
-                  'No setup required — works with your existing platform',
-                  'AI insights powered by Claude',
-                ].map(t => (
-                  <div key={t} className="flex items-center gap-2">
+                {trustBullets.map(bullet => (
+                  <div key={bullet} className="flex items-center gap-2">
                     <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
-                    <span className="text-sm text-slate-600">{t}</span>
+                    <span className="text-sm text-slate-600">{bullet}</span>
                   </div>
                 ))}
               </div>
@@ -242,7 +299,7 @@ export function LandingPage() {
                   <TrendingUp className="w-4 h-4 text-green-600" />
                 </div>
                 <div>
-                  <p className="text-[10px] text-slate-400">Pass Rate</p>
+                  <p className="text-[10px] text-slate-400">{t.passRate}</p>
                   <p className="text-sm font-bold text-green-600">↑ 14%</p>
                 </div>
               </motion.div>
@@ -256,7 +313,7 @@ export function LandingPage() {
                   <Users className="w-4 h-4 text-blue-600" />
                 </div>
                 <div>
-                  <p className="text-[10px] text-slate-400">Active Users</p>
+                  <p className="text-[10px] text-slate-400">{t.totalUsers}</p>
                   <p className="text-sm font-bold text-blue-600">2,847</p>
                 </div>
               </motion.div>
@@ -270,12 +327,7 @@ export function LandingPage() {
       <section className="border-y border-slate-100 bg-slate-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 sm:gap-10">
-            {[
-              { value: '100K+',    label: 'Data Points Processed', color: 'from-red-500 to-red-600'   },
-              { value: 'Real-time', label: 'Dashboard Updates',    color: 'from-blue-500 to-blue-600' },
-              { value: '7',        label: 'Learning Modules',      color: 'from-teal-500 to-teal-600' },
-              { value: '99.9%',   label: 'Uptime SLA',             color: 'from-violet-500 to-violet-600' },
-            ].map((stat, i) => (
+            {stats.map((stat, i) => (
               <motion.div key={i} {...slideUp(i * 0.08)} className="text-center">
                 <p className={`text-2xl sm:text-3xl font-extrabold bg-gradient-to-r ${stat.color} bg-clip-text text-transparent`}>
                   {stat.value}
@@ -293,49 +345,18 @@ export function LandingPage() {
           <motion.div {...fadeIn()} className="text-center mb-14">
             <div className="inline-flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-full px-3.5 py-1.5 mb-4">
               <Zap className="w-3.5 h-3.5 text-blue-600" />
-              <span className="text-xs font-semibold text-blue-700">Platform Features</span>
+              <span className="text-xs font-semibold text-blue-700">{t.landingFeatBadge}</span>
             </div>
             <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-4">
-              Everything you need to understand<br className="hidden sm:block" /> your learning platform
+              {t.landingFeatTitle}
             </h2>
             <p className="text-lg text-slate-500 max-w-2xl mx-auto">
-              From raw session data to executive-ready insights — in one unified dashboard.
+              {t.landingFeatPara}
             </p>
           </motion.div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[
-              {
-                icon: BarChart3, color: 'bg-red-50 text-red-600',
-                title: 'Real-time KPIs',
-                description: 'Live pass rates, average scores, session counts, and trend indicators — always up to date.',
-              },
-              {
-                icon: Zap, color: 'bg-blue-50 text-blue-600',
-                title: 'Multi-Module Support',
-                description: 'LMS, coaching, certification, simulators, second brain — all in one unified dashboard.',
-              },
-              {
-                icon: Brain, color: 'bg-violet-50 text-violet-600',
-                title: 'AI-Powered Insights',
-                description: 'Get intelligent recommendations powered by Claude to improve learning outcomes and identify gaps.',
-              },
-              {
-                icon: TrendingUp, color: 'bg-teal-50 text-teal-600',
-                title: 'Session Drilldown',
-                description: 'Click any session to see every field, score, and AI-generated feedback for that evaluation.',
-              },
-              {
-                icon: FileDown, color: 'bg-amber-50 text-amber-600',
-                title: 'One-click CSV Export',
-                description: 'Export any table or all solutions at once in CSV format for further analysis and reporting.',
-              },
-              {
-                icon: Palette, color: 'bg-pink-50 text-pink-600',
-                title: 'Brand Customization',
-                description: 'Upload your logo and pick from curated themes or set custom colors — white-label ready.',
-              },
-            ].map((f, i) => (
+            {features.map((f, i) => (
               <motion.div
                 key={i}
                 {...slideUp(i * 0.07)}
@@ -358,25 +379,18 @@ export function LandingPage() {
           <motion.div {...fadeIn()} className="text-center mb-14">
             <div className="inline-flex items-center gap-2 bg-red-50 border border-red-100 rounded-full px-3.5 py-1.5 mb-4">
               <BarChart3 className="w-3.5 h-3.5 text-red-600" />
-              <span className="text-xs font-semibold text-red-700">Supported Modules</span>
+              <span className="text-xs font-semibold text-red-700">{t.landingModBadge}</span>
             </div>
             <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-4">
-              One platform for all your<br className="hidden sm:block" /> learning solutions
+              {t.landingModTitle}
             </h2>
             <p className="text-lg text-slate-500 max-w-xl mx-auto">
-              Whether you run a single module or the full suite, every data source is unified.
+              {t.landingModPara}
             </p>
           </motion.div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-            {[
-              { icon: BrainCircuit, label: 'AI Coach',       color: 'bg-red-100 text-red-700'      },
-              { icon: BookOpen,     label: 'LMS',            color: 'bg-blue-100 text-blue-700'    },
-              { icon: Gamepad2,     label: 'Simulator',      color: 'bg-teal-100 text-teal-700'    },
-              { icon: BadgeCheck,   label: 'Certification',  color: 'bg-violet-100 text-violet-700'},
-              { icon: Database,     label: 'Second Brain',   color: 'bg-amber-100 text-amber-700'  },
-              { icon: Brain,        label: 'Custom AI',      color: 'bg-pink-100 text-pink-700'    },
-            ].map((m, i) => (
+            {modules.map((m, i) => (
               <motion.div
                 key={i}
                 {...slideUp(i * 0.06)}
@@ -398,13 +412,13 @@ export function LandingPage() {
           <motion.div {...fadeIn()} className="text-center mb-14">
             <div className="inline-flex items-center gap-2 bg-teal-50 border border-teal-100 rounded-full px-3.5 py-1.5 mb-4">
               <CheckCircle className="w-3.5 h-3.5 text-teal-600" />
-              <span className="text-xs font-semibold text-teal-700">Simple Setup</span>
+              <span className="text-xs font-semibold text-teal-700">{t.landingHowBadge}</span>
             </div>
             <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-4">
-              Up and running in minutes
+              {t.landingHowTitle}
             </h2>
             <p className="text-lg text-slate-500 max-w-xl mx-auto">
-              No complex integration required. Your data is already there.
+              {t.landingHowPara}
             </p>
           </motion.div>
 
@@ -412,26 +426,7 @@ export function LandingPage() {
             {/* Connector line */}
             <div className="hidden sm:block absolute top-10 left-1/3 right-1/3 h-0.5 bg-gradient-to-r from-red-200 via-blue-200 to-teal-200" />
 
-            {[
-              {
-                step: '01',
-                title: 'Create your account',
-                description: 'Register with your company email. Your organization is automatically detected from your domain — no manual setup.',
-                color: 'from-red-500 to-red-600',
-              },
-              {
-                step: '02',
-                title: 'Your data is connected',
-                description: 'We connect to your existing session database. No migration, no import — everything is already live.',
-                color: 'from-blue-500 to-blue-600',
-              },
-              {
-                step: '03',
-                title: 'Start exploring insights',
-                description: 'Browse KPIs, drill into sessions, export reports, and ask the AI assistant for recommendations.',
-                color: 'from-teal-500 to-teal-600',
-              },
-            ].map((s, i) => (
+            {steps.map((s, i) => (
               <motion.div key={i} {...slideUp(i * 0.1)} className="text-center">
                 <div className={`w-20 h-20 rounded-2xl mx-auto mb-5 flex items-center justify-center bg-gradient-to-br ${s.color} shadow-md`}>
                   <span className="text-2xl font-extrabold text-white">{s.step}</span>
@@ -448,15 +443,9 @@ export function LandingPage() {
       <section className="border-y border-slate-100 bg-slate-50 py-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-10">
-            {[
-              { icon: ShieldCheck, label: 'Multi-tenant isolation' },
-              { icon: ShieldCheck, label: 'bcrypt password hashing' },
-              { icon: ShieldCheck, label: 'JWT httpOnly cookies'    },
-              { icon: ShieldCheck, label: 'HTTPS / TLS encryption'  },
-              { icon: ShieldCheck, label: 'GDPR-ready data controls'},
-            ].map(({ icon: Icon, label }) => (
+            {secBadges.map(label => (
               <div key={label} className="flex items-center gap-2 text-sm text-slate-600">
-                <Icon className="w-4 h-4 text-green-500 shrink-0" />
+                <ShieldCheck className="w-4 h-4 text-green-500 shrink-0" />
                 <span>{label}</span>
               </div>
             ))}
@@ -480,24 +469,24 @@ export function LandingPage() {
         <div className="relative max-w-3xl mx-auto px-4 sm:px-6 text-center">
           <motion.div {...fadeIn()}>
             <h2 className="text-3xl sm:text-5xl font-extrabold text-white mb-5 leading-tight">
-              Ready to see your data<br className="hidden sm:block" /> in a new light?
+              {t.landingCtaTitle1}<br className="hidden sm:block" /> {t.landingCtaTitle2}
             </h2>
             <p className="text-lg text-red-100 mb-10 max-w-xl mx-auto">
-              Join organizations already using {APP_NAME} Analytics to drive better learning outcomes.
+              {t.landingCtaPara.replace('{APP_NAME}', APP_NAME)}
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
                 href="/auth/register"
                 className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl font-bold text-red-600 bg-white hover:bg-red-50 transition-all hover:shadow-xl text-sm"
               >
-                Create Free Account
+                {t.landingCtaBtn1}
                 <ArrowRight className="w-4 h-4" />
               </Link>
               <Link
                 href="/auth/login"
                 className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl font-semibold text-white border border-white/30 hover:bg-white/10 transition-all text-sm"
               >
-                Sign In
+                {t.landingCtaBtn2}
               </Link>
             </div>
           </motion.div>
@@ -521,7 +510,7 @@ export function LandingPage() {
                 <span className="font-bold text-slate-900">{APP_NAME}</span>
               </div>
               <p className="text-sm text-slate-500 mb-4 leading-relaxed">
-                AI-powered analytics platform for learning &amp; coaching solutions.
+                {t.landingFooterDesc}
               </p>
               <div className="flex gap-2.5">
                 <a href="https://www.linkedin.com/company/rolplay" target="_blank" rel="noopener noreferrer"
@@ -541,18 +530,18 @@ export function LandingPage() {
 
             {/* Platform links */}
             <div>
-              <h4 className="font-semibold text-slate-900 mb-4 text-sm">Platform</h4>
+              <h4 className="font-semibold text-slate-900 mb-4 text-sm">{t.landingFooterPlatform}</h4>
               <ul className="space-y-2.5">
-                <li><Link href="/auth/login"    className="text-sm text-slate-500 hover:text-slate-900 transition-colors">Sign In</Link></li>
-                <li><Link href="/auth/register" className="text-sm text-slate-500 hover:text-slate-900 transition-colors">Create Account</Link></li>
-                <li><a href="#features"         className="text-sm text-slate-500 hover:text-slate-900 transition-colors">Features</a></li>
-                <li><a href="#modules"          className="text-sm text-slate-500 hover:text-slate-900 transition-colors">Modules</a></li>
+                <li><Link href="/auth/login"    className="text-sm text-slate-500 hover:text-slate-900 transition-colors">{t.landingNavSignIn}</Link></li>
+                <li><Link href="/auth/register" className="text-sm text-slate-500 hover:text-slate-900 transition-colors">{t.landingFooterCreateAccount}</Link></li>
+                <li><a href="#features"         className="text-sm text-slate-500 hover:text-slate-900 transition-colors">{t.landingFooterFeatures}</a></li>
+                <li><a href="#modules"          className="text-sm text-slate-500 hover:text-slate-900 transition-colors">{t.landingFooterModules}</a></li>
               </ul>
             </div>
 
             {/* Contact */}
             <div>
-              <h4 className="font-semibold text-slate-900 mb-4 text-sm">Contact</h4>
+              <h4 className="font-semibold text-slate-900 mb-4 text-sm">{t.landingFooterContact}</h4>
               <ul className="space-y-2.5">
                 <li><a href="https://rolplay.ai" target="_blank" rel="noopener noreferrer" className="text-sm text-slate-500 hover:text-red-600 transition-colors">rolplay.ai</a></li>
                 <li><a href="mailto:info@rolplay.ai" className="text-sm text-slate-500 hover:text-red-600 transition-colors">info@rolplay.ai</a></li>
@@ -562,7 +551,7 @@ export function LandingPage() {
 
             {/* Locations */}
             <div>
-              <h4 className="font-semibold text-slate-900 mb-4 text-sm">Locations</h4>
+              <h4 className="font-semibold text-slate-900 mb-4 text-sm">{t.landingFooterLocations}</h4>
               <ul className="space-y-2">
                 <li className="text-sm text-slate-500">Toronto, Canada</li>
                 <li className="text-sm text-slate-500">Monterrey, Mexico</li>
@@ -573,11 +562,11 @@ export function LandingPage() {
           </div>
 
           <div className="border-t border-slate-100 pt-8 flex flex-col sm:flex-row justify-between items-center gap-4">
-            <p className="text-xs text-slate-400">© 2026 {APP_NAME}. All rights reserved.</p>
+            <p className="text-xs text-slate-400">© 2026 {APP_NAME}. {t.landingFooterRights}</p>
             <div className="flex items-center gap-5">
-              <Link href="/privacy" className="text-xs text-slate-400 hover:text-slate-600 transition-colors">Privacy Policy</Link>
-              <Link href="/terms"   className="text-xs text-slate-400 hover:text-slate-600 transition-colors">Terms of Service</Link>
-              <a href="mailto:info@rolplay.ai" className="text-xs text-slate-400 hover:text-slate-600 transition-colors">Support</a>
+              <Link href="/privacy" className="text-xs text-slate-400 hover:text-slate-600 transition-colors">{t.landingFooterPrivacy}</Link>
+              <Link href="/terms"   className="text-xs text-slate-400 hover:text-slate-600 transition-colors">{t.landingFooterTerms}</Link>
+              <a href="mailto:info@rolplay.ai" className="text-xs text-slate-400 hover:text-slate-600 transition-colors">{t.landingFooterSupport}</a>
             </div>
           </div>
         </div>
