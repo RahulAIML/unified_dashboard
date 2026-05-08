@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
 import {
   ArrowLeft, BarChart2, BadgeCheck, XCircle, Hash, CalendarDays,
-  Layers, Globe, ChevronDown, ChevronUp, FileText, Target, Award,
+  Layers, ChevronDown, ChevronUp, FileText, Target, Award,
   TrendingUp, MessageSquare, AlertCircle, Languages
 } from "lucide-react"
 import { useApi }                              from "@/lib/hooks/useApi"
@@ -14,7 +14,7 @@ import { SCORE_FIELD_KEYS, RESULT_FIELD_KEYS } from "@/lib/field-map"
 import { formatFieldLabel }                    from "@/lib/field-labels"
 import { cn }                                  from "@/lib/utils"
 import { useDashboardStore }                   from "@/lib/store"
-import { useLangStore }                        from "@/lib/lang-store"
+import { useT }                                from "@/lib/lang-store"
 import { ExportButton }                        from "@/components/ExportButton"
 import { csvFilename }                         from "@/lib/csv-export"
 
@@ -107,54 +107,6 @@ function EmptyState({ message }: { message: string }) {
   )
 }
 
-/** Score bar card with visual indicator */
-function ScoreCard({
-  label,
-  score,
-  rawValue,
-}: {
-  label: string
-  score: number | null
-  rawValue: number | null
-}) {
-  const pct = score !== null ? Math.min(100, Math.max(0, score)) : null
-  const color =
-    pct === null     ? "bg-muted"
-    : pct >= 80      ? "bg-emerald-500"
-    : pct >= 60      ? "bg-primary"
-    : pct >= 40      ? "bg-amber-500"
-    :                  "bg-destructive"
-
-  return (
-    <div className="rounded-[16px] border border-border/60 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)] overflow-hidden">
-      <div className="h-[3px] w-full bg-gradient-to-r from-primary to-accent" />
-      <div className="px-4 pt-4 pb-4">
-        <div className="flex items-start justify-between mb-3">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide leading-tight pr-2">
-            {label}
-          </p>
-          <span className="text-2xl font-extrabold tabular-nums text-foreground shrink-0">
-            {pct !== null ? `${Math.round(pct)}` : "—"}
-            {pct !== null && <span className="text-sm font-normal text-muted-foreground ml-0.5">pts</span>}
-          </span>
-        </div>
-        {/* Progress bar */}
-        <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-          <div
-            className={cn("h-full rounded-full transition-all duration-700", color)}
-            style={{ width: `${pct ?? 0}%` }}
-          />
-        </div>
-        {rawValue !== null && rawValue !== pct && (
-          <p className="text-[10px] text-muted-foreground mt-1.5">
-            Raw: {rawValue}
-          </p>
-        )}
-      </div>
-    </div>
-  )
-}
-
 /** Expandable long-text card */
 function LongTextCard({
   label,
@@ -163,6 +115,7 @@ function LongTextCard({
   label: string
   value: string
 }) {
+  const t = useT()
   const [expanded, setExpanded] = useState(false)
   const preview = value.slice(0, 240)
   const needsTruncation = value.length > 240
@@ -186,8 +139,8 @@ function LongTextCard({
             className="mt-2 flex items-center gap-1 text-xs text-primary hover:underline"
           >
             {expanded
-              ? <><ChevronUp className="w-3 h-3" /> Show less</>
-              : <><ChevronDown className="w-3 h-3" /> Show more</>
+              ? <><ChevronUp className="w-3 h-3" /> {t.drilldownShowLess}</>
+              : <><ChevronDown className="w-3 h-3" /> {t.drilldownShowMore}</>
             }
           </button>
         )}
@@ -226,15 +179,16 @@ export default function DrilldownPage() {
   const router     = useRouter()
   const refreshKey = useDashboardStore((s) => s.refreshKey)
   const id         = params?.id as string | undefined
+  const t          = useT()
 
-  // Translation — LOCAL to this page only (don't affect global lang)
+  // Translation — LOCAL to this page only (translates DB report content, not UI)
   const { translateTexts, translating } = useTranslation()
   const [language, setLanguage] = useState<'en' | 'es'>('en')
   const [translatedLabels, setTranslatedLabels] = useState<Record<string, string>>({})
   const [translatedValues, setTranslatedValues] = useState<Record<string, string>>({})
   const [showRawKeys, setShowRawKeys] = useState(false)
 
-  // Toggle language for THIS PAGE ONLY (don't change global lang)
+  // Toggle language for report CONTENT ONLY (does not affect global UI locale)
   const toggleLanguage = useCallback(() => {
     const next = language === 'en' ? 'es' : 'en'
     setLanguage(next)
@@ -356,16 +310,18 @@ export default function DrilldownPage() {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 text-center p-6">
         <AlertCircle className="w-12 h-12 opacity-20 text-muted-foreground" />
-        <p className="text-lg font-semibold">Invalid Report ID</p>
+        <p className="text-lg font-semibold">{t.drilldownInvalidId}</p>
         <p className="text-sm text-muted-foreground">
-          The ID <span className="font-mono bg-muted px-1.5 py-0.5 rounded text-xs">{id ?? "(empty)"}</span> is not valid.
+          {t.colReportId.toLowerCase()}{' '}
+          <span className="font-mono bg-muted px-1.5 py-0.5 rounded text-xs">{id ?? "(empty)"}</span>{' '}
+          {t.drilldownInvalidIdDesc}
         </p>
         <button
           onClick={() => router.back()}
           className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          Go back
+          {t.drilldownGoBack}
         </button>
       </div>
     )
@@ -386,11 +342,11 @@ export default function DrilldownPage() {
             className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors shrink-0"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back
+            {t.drilldownBack}
           </button>
           <div className="h-4 w-px bg-border hidden sm:block" />
           <h1 className="text-sm font-semibold text-foreground hidden sm:block">
-            Session Report
+            {t.drilldownSessionReport}
             <span className="ml-2 font-mono text-muted-foreground text-xs font-normal">
               #{id}
             </span>
@@ -406,17 +362,19 @@ export default function DrilldownPage() {
                   ? "border-primary/40 bg-primary/10 text-primary"
                   : "border-border bg-muted text-muted-foreground hover:text-foreground"
               )}
-              title={showRawKeys ? 'Hide technical database field keys' : 'Show technical database field keys for debugging'}
+              title={showRawKeys ? t.drilldownHideKeysTitle : t.drilldownShowKeysTitle}
             >
               <Hash className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{showRawKeys ? 'Hide Data' : 'View Data'}</span>
+              <span className="hidden sm:inline">{showRawKeys ? t.drilldownHideData : t.drilldownViewData}</span>
             </button>
 
             {/* Language toggle: EN / ES (report content only) */}
             <button
               onClick={toggleLanguage}
               disabled={translating}
-              title={language === 'en' ? 'Translate report content to Spanish (report values only)' : 'Show original English report text'}
+              title={language === 'en'
+                ? 'Translate report content to Spanish (report values only)'
+                : 'Show original English report text'}
               className={cn(
                 "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors",
                 language !== 'en'
@@ -426,11 +384,16 @@ export default function DrilldownPage() {
               )}
             >
               {translating ? (
-                <span className="flex items-center gap-1"><span className="w-3 h-3 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />Translating…</span>
+                <span className="flex items-center gap-1">
+                  <span className="w-3 h-3 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                  {t.drilldownTranslating}
+                </span>
               ) : (
                 <>
                   <Languages className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">{language === 'en' ? 'Report: English' : 'Report: Español'}</span>
+                  <span className="hidden sm:inline">
+                    {language === 'en' ? t.drilldownReportEn : t.drilldownReportEs}
+                  </span>
                   <span className="sm:hidden">{language === 'en' ? 'EN' : 'ES'}</span>
                 </>
               )}
@@ -440,12 +403,12 @@ export default function DrilldownPage() {
               data={exportRows}
               filename={csvFilename(`session-${id ?? "unknown"}`)}
               columns={[
-                { header: "Report ID",   value: r => r.savedReportId },
-                { header: "Use Case ID", value: r => r.usecaseId },
-                { header: "Date",        value: r => r.date },
-                { header: "Field Name",  value: r => r.fieldName },
-                { header: "Field Key",   value: r => r.fieldKey },
-                { header: "Value",       value: r => r.value },
+                { header: t.drilldownExportReportId, value: r => r.savedReportId },
+                { header: t.drilldownExportUcId,     value: r => r.usecaseId     },
+                { header: t.drilldownExportDate,     value: r => r.date          },
+                { header: t.drilldownExportField,    value: r => r.fieldName     },
+                { header: t.drilldownExportKey,      value: r => r.fieldKey      },
+                { header: t.drilldownExportValue,    value: r => r.value         },
               ]}
             />
           </div>
@@ -457,8 +420,12 @@ export default function DrilldownPage() {
 
         {loading && <Skeleton />}
 
-        {!loading && error && <EmptyState message={`Failed to load report: ${error}`} />}
-        {!loading && !error && !data && <EmptyState message="Report not found." />}
+        {!loading && error && (
+          <EmptyState message={`${t.drilldownFailedLoad}: ${error}`} />
+        )}
+        {!loading && !error && !data && (
+          <EmptyState message={t.drilldownNotFound} />
+        )}
 
         {!loading && !error && data && (
           <>
@@ -466,23 +433,23 @@ export default function DrilldownPage() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <MetaChip
                 icon={<Hash className="w-4 h-4" />}
-                label="Report ID"
+                label={t.drilldownMetaReportId}
                 value={`#${data.savedReportId}`}
               />
               <MetaChip
                 icon={<Layers className="w-4 h-4" />}
-                label="Use Case"
+                label={t.drilldownMetaUseCase}
                 value={data.usecaseId != null ? `UC-${data.usecaseId}` : "—"}
               />
               <MetaChip
                 icon={<CalendarDays className="w-4 h-4" />}
-                label="Date"
+                label={t.drilldownMetaDate}
                 value={data.date || "—"}
               />
               <MetaChip
                 icon={<FileText className="w-4 h-4" />}
-                label="Total Fields"
-                value={`${data.fields.length} recorded`}
+                label={t.drilldownMetaTotalFields}
+                value={`${data.fields.length} ${t.drilldownRecorded}`}
               />
             </div>
 
@@ -557,7 +524,7 @@ export default function DrilldownPage() {
                               : "bg-destructive/10 text-destructive"
                           )}
                         >
-                          {passed ? "PASS" : "FAIL"}
+                          {passed ? t.passLabel : t.failLabel}
                         </span>
                       </div>
                     )}
@@ -584,7 +551,7 @@ export default function DrilldownPage() {
 
                     {normalizedScore === null && resultText === "—" && (
                       <p className="text-sm text-muted-foreground">
-                        No score or result recorded for this session.
+                        {t.drilldownNoScoreResult}
                       </p>
                     )}
                   </div>
@@ -597,7 +564,7 @@ export default function DrilldownPage() {
               <div>
                 <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
                   <Target className="w-4 h-4 text-muted-foreground" />
-                  Evaluation Details
+                  {t.drilldownEvalDetails}
                 </h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {shortFields
@@ -632,7 +599,7 @@ export default function DrilldownPage() {
               <div>
                 <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
                   <Award className="w-4 h-4 text-muted-foreground" />
-                  Feedback &amp; Observations
+                  {t.drilldownFeedback}
                 </h2>
                 <div className="space-y-3">
                   {longFields.map((field) => (
@@ -673,6 +640,7 @@ function AllFieldsTable({
   getLabel:    (f: DrilldownField) => string
   showRawKeys: boolean
 }) {
+  const t = useT()
   const [open,   setOpen]   = useState(false)
   const [search, setSearch] = useState("")
   const [page,   setPage]   = useState(0)
@@ -700,10 +668,10 @@ function AllFieldsTable({
         <div>
           <p className="text-sm font-semibold flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-muted-foreground" />
-            All Recorded Fields
+            {t.drilldownAllFields}
           </p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {fields.length} fields — click to {open ? "collapse" : "expand"}
+            {fields.length} {t.drilldownFieldsCount} — {t.loading.toLowerCase().replace('…', '')} {open ? t.drilldownCollapse : t.drilldownExpand}
           </p>
         </div>
         {open
@@ -717,19 +685,19 @@ function AllFieldsTable({
           <div className="px-5 pb-3 pt-0 border-b border-border flex items-center gap-3">
             <input
               type="search"
-              placeholder="Search fields…"
+              placeholder={t.drilldownSearchFields}
               value={search}
               onChange={e => { setSearch(e.target.value); setPage(0) }}
               className="px-3 py-1.5 text-xs rounded-lg border border-border bg-muted/60 placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary w-56"
             />
             <span className="text-xs text-muted-foreground">
-              {filtered.length} of {fields.length}
+              {filtered.length} {t.of} {fields.length}
             </span>
           </div>
 
           {visible.length === 0 ? (
             <div className="py-12 text-center text-sm text-muted-foreground">
-              {search ? "No fields match your search." : "No fields recorded."}
+              {search ? t.drilldownNoFieldsSearch : t.drilldownNoFields}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -737,15 +705,15 @@ function AllFieldsTable({
                 <thead>
                   <tr className="border-b border-border bg-muted/40">
                     <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                      Field Name
+                      {t.drilldownColFieldName}
                     </th>
                     {showRawKeys && (
                       <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wide w-40">
-                        Key
+                        {t.drilldownColKey}
                       </th>
                     )}
                     <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                      Value
+                      {t.drilldownColValue}
                     </th>
                   </tr>
                 </thead>
@@ -770,12 +738,12 @@ function AllFieldsTable({
                             <span className="font-medium text-sm text-foreground">{label}</span>
                             {isScore && (
                               <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full bg-primary/15 text-primary">
-                                Score
+                                {t.drilldownBadgeScore}
                               </span>
                             )}
                             {isResult && (
                               <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full bg-accent/20 text-accent-foreground">
-                                Result
+                                {t.drilldownBadgeResult}
                               </span>
                             )}
                           </div>
@@ -829,21 +797,23 @@ function AllFieldsTable({
           {/* Pagination */}
           {totalPages > 1 && (
             <div className="px-5 py-3 border-t border-border flex items-center justify-between">
-              <p className="text-xs text-muted-foreground">Page {page + 1} of {totalPages}</p>
+              <p className="text-xs text-muted-foreground">
+                {t.pageLabel} {page + 1} {t.drilldownPageOf} {totalPages}
+              </p>
               <div className="flex gap-2">
                 <button
                   onClick={() => setPage(p => Math.max(0, p - 1))}
                   disabled={page === 0}
                   className="px-3 py-1 text-xs rounded-lg border border-border bg-muted hover:bg-muted/70 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  Previous
+                  {t.drilldownPrevious}
                 </button>
                 <button
                   onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
                   disabled={page >= totalPages - 1}
                   className="px-3 py-1 text-xs rounded-lg border border-border bg-muted hover:bg-muted/70 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  Next
+                  {t.drilldownNext}
                 </button>
               </div>
             </div>
@@ -857,6 +827,7 @@ function AllFieldsTable({
 // ── Closing JSON section ──────────────────────────────────────────────────────
 
 function ClosingJsonSection({ json }: { json: Record<string, unknown> }) {
+  const t = useT()
   const [open, setOpen] = useState(false)
 
   const entries = Object.entries(json).filter(([, v]) => v !== null && v !== "")
@@ -872,10 +843,10 @@ function ClosingJsonSection({ json }: { json: Record<string, unknown> }) {
         <div>
           <p className="text-sm font-semibold flex items-center gap-2">
             <FileText className="w-4 h-4 text-muted-foreground" />
-            Closing Report Data
+            {t.drilldownClosingData}
           </p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {entries.length} additional fields from closing report
+            {entries.length} {t.drilldownClosingFields}
           </p>
         </div>
         {open
