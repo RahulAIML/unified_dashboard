@@ -83,7 +83,7 @@ export default function LoginPage() {
           >
             RP
           </div>
-          <span className="ml-3 font-bold text-xl text-slate-900">{APP_NAME}</span>
+          <span className="ml-3 font-bold text-xl text-slate-900" translate="no">{APP_NAME}</span>
         </div>
 
         {/* Card */}
@@ -164,7 +164,7 @@ export default function LoginPage() {
               <div className="w-full border-t border-slate-300" />
             </div>
             <div className="relative flex justify-center text-xs">
-              <span className="px-2 bg-white text-slate-600">{t.loginNewTo} {APP_NAME}?</span>
+              <span className="px-2 bg-white text-slate-600">{t.loginNewTo} <span translate="no">{APP_NAME}</span>?</span>
             </div>
           </div>
 

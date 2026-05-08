@@ -191,7 +191,7 @@ export function LandingPage() {
             >
               RP
             </div>
-            <span className="font-bold text-slate-900 text-[15px]">{APP_NAME} <span className="font-light text-slate-400">Analytics</span></span>
+            <span className="font-bold text-slate-900 text-[15px]" translate="no">{APP_NAME} <span className="font-light text-slate-400">Analytics</span></span>
           </div>
           <nav className="hidden sm:flex items-center gap-1">
             <a href="#features"     className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-50 transition-colors">{t.landingNavFeatures}</a>
@@ -472,7 +472,9 @@ export function LandingPage() {
               {t.landingCtaTitle1}<br className="hidden sm:block" /> {t.landingCtaTitle2}
             </h2>
             <p className="text-lg text-red-100 mb-10 max-w-xl mx-auto">
-              {t.landingCtaPara.replace('{APP_NAME}', APP_NAME)}
+              {t.landingCtaPara.split('{APP_NAME}')[0]}
+              <span translate="no">{APP_NAME}</span>
+              {t.landingCtaPara.split('{APP_NAME}')[1]}
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
@@ -507,7 +509,7 @@ export function LandingPage() {
                 >
                   RP
                 </div>
-                <span className="font-bold text-slate-900">{APP_NAME}</span>
+                <span className="font-bold text-slate-900" translate="no">{APP_NAME}</span>
               </div>
               <p className="text-sm text-slate-500 mb-4 leading-relaxed">
                 {t.landingFooterDesc}
@@ -562,7 +564,7 @@ export function LandingPage() {
           </div>
 
           <div className="border-t border-slate-100 pt-8 flex flex-col sm:flex-row justify-between items-center gap-4">
-            <p className="text-xs text-slate-400">© 2026 {APP_NAME}. {t.landingFooterRights}</p>
+            <p className="text-xs text-slate-400">© 2026 <span translate="no">{APP_NAME}</span>. {t.landingFooterRights}</p>
             <div className="flex items-center gap-5">
               <Link href="/privacy" className="text-xs text-slate-400 hover:text-slate-600 transition-colors">{t.landingFooterPrivacy}</Link>
               <Link href="/terms"   className="text-xs text-slate-400 hover:text-slate-600 transition-colors">{t.landingFooterTerms}</Link>

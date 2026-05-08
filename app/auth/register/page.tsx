@@ -165,7 +165,7 @@ export default function RegisterPage() {
           >
             RP
           </div>
-          <span className="ml-3 font-bold text-xl text-slate-900">{APP_NAME}</span>
+          <span className="ml-3 font-bold text-xl text-slate-900" translate="no">{APP_NAME}</span>
         </div>
 
         {/* Card */}
@@ -173,7 +173,9 @@ export default function RegisterPage() {
           <div className="mb-8">
             <h1 className="text-2xl font-bold text-slate-900 mb-2">{t.registerTitle}</h1>
             <p className="text-sm text-slate-600">
-              {t.registerSubtitle.replace('{APP_NAME}', APP_NAME)}
+              {t.registerSubtitle.split('{APP_NAME}')[0]}
+              <span translate="no">{APP_NAME}</span>
+              {t.registerSubtitle.split('{APP_NAME}')[1]}
             </p>
           </div>
 

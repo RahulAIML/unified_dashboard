@@ -119,7 +119,7 @@ export function Sidebar() {
         <LogoImage />
 
         <div className="min-w-0">
-          <p className="text-sm font-extrabold tracking-tight leading-tight truncate text-sidebar-foreground" title={platformName}>
+          <p className="text-sm font-extrabold tracking-tight leading-tight truncate text-sidebar-foreground" title={platformName} translate="no">
             {platformName}
           </p>
           <p className="text-[10px] text-sidebar-foreground/50 leading-tight">{t.sidebarSubtitle}</p>
@@ -210,7 +210,7 @@ export function Sidebar() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <div className="text-sm font-semibold text-sidebar-foreground">{brand.name}</div>
+        <div className="text-sm font-semibold text-sidebar-foreground" translate="no">{brand.name}</div>
         <div className="w-11" />
       </div>
     </>

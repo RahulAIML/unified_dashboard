@@ -8,7 +8,7 @@ export function DashboardFooter() {
     <footer className="border-t border-border bg-background/60 px-6 py-4">
       <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-muted-foreground">
         <div className="flex items-center gap-4 flex-wrap justify-center sm:justify-start">
-          <span className="font-semibold text-foreground/70">{APP_NAME}</span>
+          <span className="font-semibold text-foreground/70" translate="no">{APP_NAME}</span>
           <a href="https://rolplay.ai" target="_blank" rel="noopener noreferrer"
             className="hover:text-foreground transition-colors">rolplay.ai</a>
           <a href="mailto:info@rolplay.ai"

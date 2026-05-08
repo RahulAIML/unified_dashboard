@@ -5,6 +5,8 @@ import { getAuthContextFromRequest } from '@/lib/server-auth'
 import { resolveDynamicUsecaseIds } from '@/lib/dynamic-usecase-resolver'
 import { resolveOrgType } from '@/lib/org-type'
 import { bancoDashboardOverview } from '@/lib/bridge-banco-analytics'
+import { isDemoMode } from '@/lib/demo'
+import { demoOverview } from '@/lib/demo/engine'
 
 export const runtime = 'nodejs'
 
@@ -18,6 +20,16 @@ const EMPTY = {
 export async function GET(request: NextRequest) {
   const ctx = await getAuthContextFromRequest(request)
   if (!ctx) return buildApiError('Unauthorized', 401)
+
+  // ── DEMO MODE ──────────────────────────────────────────────────────────────
+  if (isDemoMode()) {
+    const sp    = request.nextUrl.searchParams
+    const range = parseDateRange(sp)
+    if (!range) return buildApiError('Invalid date range', 400)
+    const sol   = sp.get('solution')
+    if (sol === 'second-brain') return buildSuccess(EMPTY, { source: 'demo' })
+    return buildSuccess(demoOverview(range.from, range.to), { source: 'demo' })
+  }
 
   const orgType = resolveOrgType(ctx.email, ctx.customerId)
   if (orgType === 'none') return buildSuccess(EMPTY)

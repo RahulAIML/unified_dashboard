@@ -2,13 +2,15 @@
 
 import { useEffect, useRef, useState } from "react"
 import { motion } from "framer-motion"
-import { Calendar, Filter, RefreshCw } from "lucide-react"
+import { Calendar, Filter, RefreshCw, Sparkles } from "lucide-react"
 import { useDashboardStore } from "@/lib/store"
 import { useLangStore, useT } from "@/lib/lang-store"
 import { useClientBrand } from "@/lib/hooks/useClientBrand"
 import { DateRangePicker } from "@/components/DateRangePicker"
 import { cn } from "@/lib/utils"
 import type { Module } from "@/lib/types"
+
+const IS_DEMO = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
 
 // Static module IDs — used for URL param validation (never changes with language)
 const MODULE_IDS: Module[] = ["lms", "coach", "simulator", "certification", "second-brain"]
@@ -123,6 +125,15 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
   return (
     <div className="relative isolate z-[70] border-b border-border bg-background/80 backdrop-blur-sm overflow-visible">
       <div className="h-[3px] w-full" style={{ background: "linear-gradient(90deg, hsl(var(--primary)), hsl(var(--accent)))" }} />
+
+      {/* Demo mode indicator */}
+      {IS_DEMO && (
+        <div className="flex items-center justify-center gap-2 px-4 py-1.5 bg-gradient-to-r from-violet-600/10 via-primary/10 to-violet-600/10 border-b border-violet-500/20 text-[11px] font-semibold text-violet-700 dark:text-violet-300 tracking-wide">
+          <Sparkles className="w-3 h-3 shrink-0" />
+          LIVE DEMO — Enterprise Analytics Powered by Rolplay AI
+          <Sparkles className="w-3 h-3 shrink-0" />
+        </div>
+      )}
 
       <div className="px-4 sm:px-6 py-3 sm:py-4">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 sm:gap-4 mb-3 sm:mb-4">

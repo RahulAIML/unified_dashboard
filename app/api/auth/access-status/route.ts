@@ -14,6 +14,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { getAuthContextFromRequest } from "@/lib/server-auth"
 import { getTenantIntegration } from "@/lib/db-tenant-integrations"
 import { isBancoOrg } from "@/lib/org-type"
+import { isDemoMode } from "@/lib/demo"
+import { demoAccessStatus } from "@/lib/demo/engine"
 
 export const dynamic = "force-dynamic"
 
@@ -100,6 +102,15 @@ export async function GET(request: NextRequest) {
       { success: false, data: { message: "Unauthorized" }, meta: {} },
       { status: 401 },
     )
+  }
+
+  // ── DEMO MODE ──────────────────────────────────────────────────────────────
+  if (isDemoMode()) {
+    return NextResponse.json({
+      success: true,
+      data: demoAccessStatus(),
+      meta: { timestamp: new Date().toISOString(), source: 'demo' },
+    })
   }
 
   const hasCoachData       = auth.customerId > 0

@@ -5,7 +5,8 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { ClientBrandProvider } from "@/components/ClientBrandProvider";
 import { AuthProvider } from "@/components/AuthProvider";
-import { LayoutContent } from "@/components/LayoutContent";
+import { LayoutContent } from "@/components/LayoutContent"
+import { HtmlLangSync } from "@/components/HtmlLangSync";
 
 // ── Inter — primary SaaS font ─────────────────────────────────────────────────
 const inter = Inter({
@@ -45,6 +46,7 @@ export default function RootLayout({
     >
       <body className="h-full antialiased">
         <ThemeProvider>
+          <HtmlLangSync />
           <AuthProvider>
             <ClientBrandProvider>
               <LayoutContent>{children}</LayoutContent>

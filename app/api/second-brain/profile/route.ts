@@ -8,6 +8,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContextFromRequest } from "@/lib/server-auth"
 import { getTenantIntegration } from "@/lib/db-tenant-integrations"
+import { isDemoMode } from "@/lib/demo"
+import { demoSecondBrainProfile } from "@/lib/demo/engine"
 
 const SECOND_BRAIN_API_URL = process.env.SECOND_BRAIN_API_URL
 const SECOND_BRAIN_ADMIN_EMAIL = process.env.SECOND_BRAIN_ADMIN_EMAIL
@@ -44,6 +46,15 @@ export async function GET(request: NextRequest) {
       { success: false, data: { message: "Unauthorized" }, meta: {} },
       { status: 401 }
     )
+  }
+
+  // ── DEMO MODE ──────────────────────────────────────────────────────────────
+  if (isDemoMode()) {
+    return NextResponse.json({
+      success: true,
+      data: demoSecondBrainProfile(),
+      meta: { timestamp: new Date().toISOString(), source: 'demo' },
+    })
   }
 
   if (!SECOND_BRAIN_API_URL) {
