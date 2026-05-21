@@ -11,7 +11,6 @@
  */
 
 import { NextResponse } from "next/server"
-import { solutionToUsecaseIds } from "./solution-map"
 
 // ── Standard response shape ───────────────────────────────────────────────────
 
@@ -92,10 +91,15 @@ export function parseDateRange(
 }
 
 /**
- * Parses solution or usecaseIds filter params.
- * ?solution=coach  → resolves to the known usecase IDs for that solution
- * ?usecaseIds=1,2  → uses those IDs directly
- * (neither)        → undefined = no filter (all usecases)
+ * Parses solution and usecaseIds filter params from the URL.
+ *
+ * This is a pure parameter extractor — it does NOT resolve solution names
+ * to usecase IDs. Callers that need IDs must call resolveDynamicUsecaseIds()
+ * from lib/dynamic-usecase-resolver with the authenticated customer ID.
+ *
+ * ?solution=coach  → { solution: "coach", usecaseIds: undefined }
+ * ?usecaseIds=1,2  → { solution: null,    usecaseIds: [1, 2] }
+ * (neither)        → { solution: null,    usecaseIds: undefined } = no filter
  */
 export function parseUsecaseFilter(searchParams: URLSearchParams): {
   solution:   string | null
@@ -103,7 +107,7 @@ export function parseUsecaseFilter(searchParams: URLSearchParams): {
 } {
   const solution = searchParams.get("solution")
   if (solution) {
-    return { solution, usecaseIds: solutionToUsecaseIds(solution) }
+    return { solution, usecaseIds: undefined }
   }
   const idsParam = searchParams.get("usecaseIds")
   const usecaseIds = idsParam
