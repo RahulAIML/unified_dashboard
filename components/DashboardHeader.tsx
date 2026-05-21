@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { motion } from "framer-motion"
-import { Calendar, Filter, RefreshCw, Sparkles } from "lucide-react"
+import { Calendar, Filter, RefreshCw } from "lucide-react"
 import { useDashboardStore } from "@/lib/store"
 import { useLangStore, useT } from "@/lib/lang-store"
 import { useClientBrand } from "@/lib/hooks/useClientBrand"
@@ -10,7 +10,6 @@ import { DateRangePicker } from "@/components/DateRangePicker"
 import { cn } from "@/lib/utils"
 import type { Module } from "@/lib/types"
 
-const IS_DEMO = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
 
 // Static module IDs — used for URL param validation (never changes with language)
 const MODULE_IDS: Module[] = ["lms", "coach", "simulator", "certification", "second-brain"]
