@@ -56,6 +56,15 @@ function resolveAdminEmail(
 
 // ── Second Brain reachability probe ──────────────────────────────────────────
 
+// The Second Brain full-profile endpoint routinely takes 10–15s (free-tier
+// hosting + heavy aggregate query), so the probe needs a generous timeout.
+// Results are cached in-memory so only the first dashboard load pays the cost.
+const PROBE_TIMEOUT_MS      = 20_000
+const PROBE_OK_TTL_MS       = 10 * 60_000 // positive result: 10 min
+const PROBE_FAIL_TTL_MS     = 60_000      // negative result: 1 min (cold starts recover)
+
+const probeCache = new Map<string, { ok: boolean; at: number }>()
+
 async function probeSecondBrainAccess(
   customerId: number,
   userEmail: string,
@@ -71,6 +80,12 @@ async function probeSecondBrainAccess(
     )
     if (!adminEmail) return false
 
+    const cached = probeCache.get(adminEmail)
+    if (cached) {
+      const ttl = cached.ok ? PROBE_OK_TTL_MS : PROBE_FAIL_TTL_MS
+      if (Date.now() - cached.at < ttl) return cached.ok
+    }
+
     const apiToken = integration?.second_brain_api_token || SECOND_BRAIN_API_TOKEN
 
     const url = new URL(`${SECOND_BRAIN_API_URL}/organizations/full-profile`)
@@ -82,11 +97,11 @@ async function probeSecondBrainAccess(
         "Content-Type": "application/json",
         ...(apiToken ? { Authorization: `Bearer ${apiToken}` } : {}),
       },
-      // Short timeout — this is just an access probe, not a full data fetch
-      signal: AbortSignal.timeout(5_000),
+      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
       cache: "no-store",
     })
 
+    probeCache.set(adminEmail, { ok: res.ok, at: Date.now() })
     return res.ok
   } catch {
     return false
