@@ -8,7 +8,9 @@ interface ApiState<T> {
   error:   string | null
 }
 
-const DEFAULT_TIMEOUT_MS = 12_000
+// Generous default: the Second Brain proxy route can take 15s+ on cold
+// upstream (free-tier hosting) — a shorter timeout aborts real responses.
+const DEFAULT_TIMEOUT_MS = 35_000
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null

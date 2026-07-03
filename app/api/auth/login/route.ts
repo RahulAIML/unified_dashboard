@@ -48,7 +48,8 @@ export async function POST(request: NextRequest) {
     let passwordHash: string | null
     try {
       user = await findUserByEmail(email)
-      if (!user) return buildApiError('No account found with this email address.', 401)
+      // Same message as wrong-password — never reveal whether an email exists
+      if (!user) return buildApiError('Invalid email or password.', 401)
       passwordHash = await getUserPasswordHash(email)
     } catch (err) {
       if (err instanceof DbError) {
@@ -63,7 +64,7 @@ export async function POST(request: NextRequest) {
     }
 
     const passwordValid = await verifyPassword(password, passwordHash)
-    if (!passwordValid) return buildApiError('Incorrect password. Please try again.', 401)
+    if (!passwordValid) return buildApiError('Invalid email or password.', 401)
 
     // Resolve tenant ONCE at login (authoritative for this session).
     // If bridge is unavailable or user has no mapping → customer_id = 0.
