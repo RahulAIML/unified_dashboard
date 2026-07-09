@@ -265,6 +265,7 @@ export function demoAccessStatus() {
     hasCoachData:       true,
     hasSecondBrainData: true,
     hasBancoAccess:     false,
+    hasPharmaAccess:    false,
     hasAnyAccess:       true,
   }
 }

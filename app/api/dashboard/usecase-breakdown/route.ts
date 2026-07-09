@@ -5,6 +5,8 @@ import { getAuthContextFromRequest } from '@/lib/server-auth'
 import { resolveDynamicUsecaseIds } from '@/lib/dynamic-usecase-resolver'
 import { resolveOrgType } from '@/lib/org-type'
 import { bancoDashboardUsecaseBreakdown } from '@/lib/bridge-banco-analytics'
+import { resolvePharmaTenant } from '@/lib/pharma-tenant'
+import { pharmaDashboardUsecaseBreakdown } from '@/lib/bridge-pharma-analytics'
 import { isDemoMode } from '@/lib/demo'
 import { demoUsecaseBreakdown } from '@/lib/demo/engine'
 
@@ -50,6 +52,20 @@ export async function GET(request: NextRequest) {
       })
       return buildSuccess(data, {
         from: range.from.toISOString(), to: range.to.toISOString(), source: 'banco',
+      })
+    }
+
+    // ── Pharma-sim pipeline (Sanfer, Apotex, …) ───────────────────────────────
+    if (orgType === 'pharma') {
+      const tenant = resolvePharmaTenant(ctx.email)
+      if (!tenant) return buildApiError('Pharma tenant could not be resolved', 500)
+
+      const data = await pharmaDashboardUsecaseBreakdown(tenant, {
+        fromIso: range.from.toISOString(),
+        toIso:   range.to.toISOString(),
+      })
+      return buildSuccess(data, {
+        from: range.from.toISOString(), to: range.to.toISOString(), source: `pharma-${tenant}`,
       })
     }
 

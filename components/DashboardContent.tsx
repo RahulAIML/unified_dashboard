@@ -38,6 +38,7 @@ interface AccessStatus {
   hasCoachData:       boolean
   hasSecondBrainData: boolean
   hasBancoAccess:     boolean
+  hasPharmaAccess:    boolean
   hasAnyAccess:       boolean
 }
 
@@ -178,11 +179,12 @@ export function DashboardContent() {
   // ── API URLs — null until access confirmed, null for wrong module ──────────
   // This prevents unnecessary DB queries and avoids firing requests before we
   // know whether the user has DB access.
-  // Banco users have hasCoachData=false (not in coach_users) but still get
-  // analytics data from the banco pipeline — include hasBancoAccess here.
+  // Banco/pharma users have hasCoachData=false (not in coach_users) but still
+  // get analytics data from their own pipeline — include both flags here.
   const dbReady = (
     accessStatus?.hasCoachData === true ||
-    accessStatus?.hasBancoAccess === true
+    accessStatus?.hasBancoAccess === true ||
+    accessStatus?.hasPharmaAccess === true
   ) && !isSecondBrain
 
   const overviewUrl = dbReady
@@ -442,7 +444,7 @@ export function DashboardContent() {
     const isCoachModule = selectedSolution &&
       ["lms", "coach", "simulator", "certification"].includes(selectedSolution)
 
-    if (isCoachModule && !accessStatus.hasCoachData) {
+    if (isCoachModule && !accessStatus.hasCoachData && !accessStatus.hasPharmaAccess) {
       return (
         <div className="min-h-screen w-full">
           <DashboardHeader title={t.overviewTitle} subtitle={t.overviewSub} showModuleFilter />

@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getAuthContextFromRequest } from "@/lib/server-auth"
 import { getTenantIntegration } from "@/lib/db-tenant-integrations"
 import { isBancoOrg } from "@/lib/org-type"
+import { resolvePharmaTenant } from "@/lib/pharma-tenant"
 import { isDemoMode } from "@/lib/demo"
 import { demoAccessStatus } from "@/lib/demo/engine"
 
@@ -131,11 +132,12 @@ export async function GET(request: NextRequest) {
   const hasCoachData       = auth.customerId > 0
   const hasSecondBrainData = await probeSecondBrainAccess(auth.customerId, auth.email)
   const hasBancoAccess     = isBancoOrg(auth.email)
-  const hasAnyAccess       = hasCoachData || hasSecondBrainData || hasBancoAccess
+  const hasPharmaAccess    = resolvePharmaTenant(auth.email) !== null
+  const hasAnyAccess       = hasCoachData || hasSecondBrainData || hasBancoAccess || hasPharmaAccess
 
   return NextResponse.json({
     success: true,
-    data: { hasCoachData, hasSecondBrainData, hasBancoAccess, hasAnyAccess },
+    data: { hasCoachData, hasSecondBrainData, hasBancoAccess, hasPharmaAccess, hasAnyAccess },
     meta: { timestamp: new Date().toISOString() },
   })
 }

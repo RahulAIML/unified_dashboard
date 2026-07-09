@@ -4,13 +4,15 @@
  * Server-side utility for resolving which analytics pipeline an authenticated
  * user belongs to. Import this in API routes — never in client components.
  *
- * Three data sources:
+ * Four data sources:
  *   'banco'     → coach_app.banco_users / saved_reports / saved_reports_options
+ *   'pharma'     → per-tenant PHP bridge (serv.aux-rolplay.com) — see pharma-tenant.ts
  *   'analytics' → rolplay_pro_analytics via PHP bridge (customer_id scoped)
  *   'none'      → authenticated but no recognized data source
  *
  * Second Brain is probed separately (API call) and does not affect org type.
  */
+import { resolvePharmaTenant } from './pharma-tenant'
 
 /**
  * Returns true when the given email belongs to the Banco organization.
@@ -34,8 +36,9 @@ export function isBancoOrg(email: string): boolean {
 export function resolveOrgType(
   email: string,
   customerId: number,
-): 'banco' | 'analytics' | 'none' {
-  if (isBancoOrg(email)) return 'banco'
-  if (customerId > 0)    return 'analytics'
+): 'banco' | 'pharma' | 'analytics' | 'none' {
+  if (isBancoOrg(email))            return 'banco'
+  if (resolvePharmaTenant(email))   return 'pharma'
+  if (customerId > 0)               return 'analytics'
   return 'none'
 }
