@@ -112,6 +112,10 @@ async function fetchSaleExercisesSessions(
   fromIso: string,
   toIso: string,
 ): Promise<SaleExercisesRow[]> {
+  if (TENANT_CONFIG[tenant].kind === 'exceltis_rest') {
+    return fetchExceltisRestSessions(tenant, fromIso, toIso)
+  }
+
   const cfg = TENANT_CONFIG[tenant]
   const date_from = isoToDate(fromIso)
   const date_to   = isoToDate(toIso)
@@ -157,6 +161,91 @@ async function fetchSaleExercisesSessions(
     date:         r.Fecha_y_Hora,
     score:        r.Calificacion,
   }))
+}
+
+// ── exceltis_rest tenants: existing Flask REST endpoints (GET, not action-dispatch) ──
+// Verified against real app.py for Heineken/M8/Lacoste/Lacoste Asistentes/
+// Chiesi/Labomed — /api/rol_play_sim_extractor takes REPEATED `id=` params
+// (not a comma-separated `ids=`) and `fecha_inicio`/`fecha_fin` (not
+// `date_from`/`date_to`). Calificacion can be the literal string "No aplica"
+// when no score has been recorded for a session yet — those rows are
+// excluded from KPI aggregation (nothing to score), not counted as a zero.
+
+interface ExceltisRestRow {
+  ID_Sim: number | string
+  ID_Caso_de_Uso: number | string
+  Usuario: string
+  Usuario_Nombre: string
+  Fecha_y_Hora: string
+  Calificacion: number | string
+  [extraField: string]: unknown // Pregunta_N/Respuesta_N/etc — client-specific, used only by drilldown
+}
+
+function buildIdQuery(ucids: number[]): string {
+  return ucids.map(id => `id=${id}`).join('&')
+}
+
+async function exceltisRestCall<T>(baseUrl: string, path: string, query: string): Promise<T> {
+  const res = await fetch(`${baseUrl}${path}?${query}`, {
+    signal: AbortSignal.timeout(30_000),
+    cache: 'no-store',
+  })
+  const json = await res.json().catch(() => null)
+  if (!res.ok || (json && typeof json === 'object' && 'error' in json)) {
+    throw new Error(`exceltis_rest [${baseUrl}${path}] failed: ${(json as { error?: string })?.error ?? res.status}`)
+  }
+  return json as T
+}
+
+/** Raw rows (untyped extra fields preserved) — used by both the aggregate path and drilldown. */
+async function fetchExceltisRestRawRows(
+  tenant: PharmaTenant, fromIso: string, toIso: string,
+): Promise<ExceltisRestRow[]> {
+  const cfg = TENANT_CONFIG[tenant]
+  const idQuery = buildIdQuery(cfg.ucids!)
+  const fecha_inicio = isoToDate(fromIso)
+  const fecha_fin = isoToDate(toIso)
+  const rows = await exceltisRestCall<ExceltisRestRow[]>(
+    cfg.url, '/api/rol_play_sim_extractor', `${idQuery}&fecha_inicio=${fecha_inicio}&fecha_fin=${fecha_fin}`,
+  )
+  return Array.isArray(rows) ? rows : []
+}
+
+async function fetchExceltisRestActivityNames(tenant: PharmaTenant): Promise<Map<number, string>> {
+  const cfg = TENANT_CONFIG[tenant]
+  try {
+    const resp = await exceltisRestCall<{ data: { ID_Caso_de_Uso: number | string; Caso_de_Uso: string }[] }>(
+      cfg.url, '/api/dim_actividades', buildIdQuery(cfg.ucids!),
+    )
+    return new Map((resp.data ?? []).map(a => [Number(a.ID_Caso_de_Uso), a.Caso_de_Uso]))
+  } catch {
+    return new Map()
+  }
+}
+
+async function fetchExceltisRestSessions(
+  tenant: PharmaTenant, fromIso: string, toIso: string,
+): Promise<SaleExercisesRow[]> {
+  const [rawRows, nameById] = await Promise.all([
+    fetchExceltisRestRawRows(tenant, fromIso, toIso),
+    fetchExceltisRestActivityNames(tenant),
+  ])
+  return rawRows
+    .map(r => {
+      const score = Number(r.Calificacion)
+      if (Number.isNaN(score)) return null // "No aplica" — session exists but has no score yet
+      const usecaseId = Number(r.ID_Caso_de_Uso)
+      return {
+        id: Number(r.ID_Sim),
+        usecase_id: usecaseId,
+        usecase_name: nameById.get(usecaseId) ?? '',
+        email: r.Usuario,
+        name: r.Usuario_Nombre,
+        date: r.Fecha_y_Hora,
+        score,
+      }
+    })
+    .filter((r): r is SaleExercisesRow => r !== null)
 }
 
 function aggregateSaleExercisesRows(rows: SaleExercisesRow[]) {
@@ -774,6 +863,37 @@ function textField(key: string, label: string, text: string | null): DrilldownFi
   }
 }
 
+// exceltis_rest tenants have no single-session-by-id endpoint (the query is
+// scoped by usecase, not saex_id) — fetch across a wide window and find the
+// matching row client-side. Fine in practice: every one of these tenants has
+// at most a few thousand sessions total.
+const CORE_EXCELTIS_KEYS = new Set([
+  'ID_Sim', 'ID_Caso_de_Uso', 'Usuario', 'Usuario_Nombre', 'Fecha_y_Hora', 'Calificacion',
+])
+
+/**
+ * Every extra key on an exceltis_rest row becomes a drilldown field
+ * generically — Pregunta_N/Respuesta_N (Gentera/Heineken/Chiesi/Labomed),
+ * the 6 competency fields + totals (M8), whatever Lacoste's interaction
+ * fields are named, etc. This is what lets one code path serve every
+ * client's own bespoke extra fields without hardcoding each one.
+ */
+function genericFieldsFromExceltisRow(row: ExceltisRestRow): DrilldownField[] {
+  const fields: DrilldownField[] = []
+  for (const [key, value] of Object.entries(row)) {
+    if (CORE_EXCELTIS_KEYS.has(key)) continue
+    if (value === null || value === undefined || value === 'No aplica' || value === '') continue
+    const label = key.replace(/_/g, ' ')
+    if (typeof value === 'number') {
+      fields.push({ fieldKey: key.toLowerCase(), fieldLabel: label, valueNum: value, valueText: null, valueLongtext: null, normalizedValue: value })
+    } else {
+      const text = String(value)
+      fields.push({ fieldKey: key.toLowerCase(), fieldLabel: label, valueNum: null, valueText: text, valueLongtext: null, normalizedValue: text })
+    }
+  }
+  return fields
+}
+
 export async function pharmaDashboardDrilldown(
   tenant: PharmaTenant,
   savedReportId: number,
@@ -781,6 +901,31 @@ export async function pharmaDashboardDrilldown(
   // Negative IDs are synthetic (certification rows have no real session id —
   // see sanferCertificationResults). Nothing meaningful to drill into.
   if (savedReportId < 0) return null
+
+  if (TENANT_CONFIG[tenant].kind === 'exceltis_rest') {
+    let rawRows: ExceltisRestRow[]
+    try {
+      rawRows = await fetchExceltisRestRawRows(tenant, '2015-01-01T00:00:00.000Z', '2035-12-31T00:00:00.000Z')
+    } catch {
+      return null
+    }
+    const row = rawRows.find(r => Number(r.ID_Sim) === savedReportId)
+    if (!row) return null
+
+    const score = Number(row.Calificacion)
+    const fields: DrilldownField[] = [
+      scoreField(Number.isNaN(score) ? 0 : score),
+      resultField(!Number.isNaN(score) && score >= PASS_THRESHOLD),
+      ...genericFieldsFromExceltisRow(row),
+    ]
+    return {
+      savedReportId: Number(row.ID_Sim),
+      usecaseId: Number(row.ID_Caso_de_Uso),
+      date: String(row.Fecha_y_Hora).slice(0, 10),
+      fields,
+      closingJson: null,
+    }
+  }
 
   if (TENANT_CONFIG[tenant].kind === 'kpi') {
     let resp: { session: ApotexSessionDetail }
