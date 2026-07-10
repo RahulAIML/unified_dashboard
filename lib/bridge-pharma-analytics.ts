@@ -1,20 +1,21 @@
 /**
  * bridge-pharma-analytics.ts
  *
- * Data adapter for pharma-sim tenants (Sanfer, Apotex, …) served by
- * rolplay-shared-bridge on serv.aux-rolplay.com — a completely separate
- * infrastructure from the standard coach_app/rolplay_pro_analytics pipeline
- * and from Banco. See lib/pharma-tenant.ts for tenant resolution.
+ * Data adapter for pharma-sim tenants (Sanfer, Apotex, Weser, Adium, …)
+ * living on serv.aux-rolplay.com — a completely separate infrastructure
+ * from the standard coach_app/rolplay_pro_analytics pipeline and from
+ * Banco. See lib/pharma-tenant.ts for tenant resolution + config.
  *
- * Each tenant's underlying bridge has a DIFFERENT action set and response
- * shape (Apotex has purpose-built kpi.* aggregate actions; Sanfer only
- * exposes raw per-session rows via cert.sessions), so this file branches
- * per tenant internally, then maps everything into the SAME shared types
- * (OverviewApiResponse, TrendsApiResponse, …) the standard pipeline and the
- * Banco adapter already produce — the dashboard UI needs zero changes.
+ * Two bridge kinds (TENANT_CONFIG[tenant].kind):
+ *   'sale_exercises' — Sanfer, Weser, Adium. Raw per-session rows from a
+ *      sale_exercises/usecases-shaped schema, aggregated here in JS. Sanfer
+ *      pulls via cert.sessions (no ucid list needed); Weser/Adium pull via
+ *      sim.demorp6 with their small fixed ucid list, since their bridges
+ *      don't expose an unfiltered variant.
+ *   'kpi' — Apotex. Purpose-built kpi.* aggregate actions, mapped directly.
  *
  * ISOLATION RULES (mirrors bridge-banco-analytics.ts):
- *   ✅ Only talks to the pharma bridge over HTTPS — never touches MySQL
+ *   ✅ Only talks to each tenant's bridge over HTTPS — never touches MySQL
  *      directly, never imports from bridge-client.ts or data-provider.ts
  *   ❌ Never references customer_id — pharma tenants are resolved by email
  *      domain only (see pharma-tenant.ts)
@@ -32,27 +33,24 @@ import type {
   EvaluationApiRow,
 } from './types'
 import type { DrilldownResult, DrilldownField } from './data-provider'
-import type { PharmaTenant } from './pharma-tenant'
+import { TENANT_CONFIG, type PharmaTenant } from './pharma-tenant'
 
-const PASS_THRESHOLD = 70 // matches both tenants' own pass/fail convention
+const PASS_THRESHOLD = 70 // matches every tenant's own pass/fail convention (>=70)
 
 // ── HTTP client ────────────────────────────────────────────────────────────────
-
-function bridgeBaseUrl(): string {
-  const base = process.env.PHARMA_BRIDGE_BASE_URL
-  if (!base) throw new Error('PHARMA_BRIDGE_BASE_URL is not configured')
-  return base.replace(/\/+$/, '')
-}
 
 async function bridgeCall<T = Record<string, unknown>>(
   tenant: PharmaTenant,
   action: string,
   params: Record<string, string | number> = {},
 ): Promise<T> {
-  const url = `${bridgeBaseUrl()}/${tenant}/bridge/`
-  const res = await fetch(url, {
+  const cfg = TENANT_CONFIG[tenant]
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (cfg.xTenant) headers['X-Tenant'] = cfg.xTenant
+
+  const res = await fetch(cfg.url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ action, ...params }),
     signal: AbortSignal.timeout(30_000),
     cache: 'no-store',
@@ -64,14 +62,14 @@ async function bridgeCall<T = Record<string, unknown>>(
   return json as T
 }
 
-/** ISO-8601 → 'YYYY-MM-DD' (both bridges' date_filter expect plain dates) */
+/** ISO-8601 → 'YYYY-MM-DD' (every bridge's date filter expects plain dates) */
 function isoToDate(iso: string): string {
   return iso.slice(0, 10)
 }
 
-// ── Sanfer: raw-row fetch + in-adapter aggregation ─────────────────────────────
+// ── sale_exercises tenants: raw-row fetch + in-adapter aggregation ─────────────
 
-interface SanferSessionRow {
+interface SaleExercisesRow {
   id: number
   usecase_id: number
   usecase_name: string
@@ -81,14 +79,55 @@ interface SanferSessionRow {
   score: number
 }
 
-async function fetchSanferSessions(fromIso: string, toIso: string): Promise<SanferSessionRow[]> {
-  const resp = await bridgeCall<{ data: SanferSessionRow[] }>('sanfer', 'cert.sessions', {
-    date_from: isoToDate(fromIso),
-    date_to:   isoToDate(toIso),
-    limit:     20_000,
-    refresh:   1,
-  })
-  return resp.data ?? []
+// sim.demorp6's row shape (Weser, Adium, and Sanfer's own DB2 path) —
+// PascalCase Spanish keys, distinct from cert.sessions' snake_case shape.
+interface SimDemorp6Row {
+  ID_Sim: number
+  ID_Caso_de_Uso: number
+  Usuario: string
+  Usuario_Nombre: string
+  Fecha_y_Hora: string
+  Calificacion: number
+}
+
+async function fetchSaleExercisesSessions(
+  tenant: PharmaTenant,
+  fromIso: string,
+  toIso: string,
+): Promise<SaleExercisesRow[]> {
+  const cfg = TENANT_CONFIG[tenant]
+  const date_from = isoToDate(fromIso)
+  const date_to   = isoToDate(toIso)
+
+  if (!cfg.ucids) {
+    // Sanfer — no fixed ucid list, cert.sessions scans every usecase active
+    // in the window and already returns the normalized shape directly.
+    const resp = await bridgeCall<{ data: SaleExercisesRow[] }>(tenant, 'cert.sessions', {
+      date_from, date_to, limit: 20_000, refresh: 1,
+    })
+    return resp.data ?? []
+  }
+
+  // Weser / Adium — small fixed ucid list, sim.demorp6 requires explicit ids.
+  const [sessionsResp, namesResp] = await Promise.all([
+    bridgeCall<{ data: SimDemorp6Row[] }>(tenant, 'sim.demorp6', {
+      ids: cfg.ucids.join(','), date_from, date_to,
+    }),
+    bridgeCall<{ data: { ID_Caso_de_Uso: number; Caso_de_Uso: string }[] }>(tenant, 'activities.demorp6', {
+      ids: cfg.ucids.join(','),
+    }).catch(() => ({ data: [] })),
+  ])
+  const nameById = new Map(namesResp.data.map(a => [a.ID_Caso_de_Uso, a.Caso_de_Uso]))
+
+  return (sessionsResp.data ?? []).map(r => ({
+    id:           r.ID_Sim,
+    usecase_id:   r.ID_Caso_de_Uso,
+    usecase_name: nameById.get(r.ID_Caso_de_Uso) ?? '',
+    email:        r.Usuario,
+    name:         r.Usuario_Nombre,
+    date:         r.Fecha_y_Hora,
+    score:        r.Calificacion,
+  }))
 }
 
 // ── Apotex: purpose-built kpi.* actions ────────────────────────────────────────
@@ -143,18 +182,15 @@ export async function pharmaDashboardOverview(
   tenant: PharmaTenant,
   params: { fromIso: string; toIso: string; prevFromIso: string; prevToIso: string },
 ): Promise<OverviewApiResponse> {
-  if (tenant === 'apotex') {
+  if (TENANT_CONFIG[tenant].kind === 'kpi') {
     const [cur, prev] = await Promise.all([
-      bridgeCall<ApotexOverview>('apotex', 'kpi.overview', {
+      bridgeCall<ApotexOverview>(tenant, 'kpi.overview', {
         date_from: isoToDate(params.fromIso), date_to: isoToDate(params.toIso),
       }),
-      bridgeCall<ApotexOverview>('apotex', 'kpi.overview', {
+      bridgeCall<ApotexOverview>(tenant, 'kpi.overview', {
         date_from: isoToDate(params.prevFromIso), date_to: isoToDate(params.prevToIso),
       }),
     ])
-    // Apotex's SUM(expr >= n) aggregates (sessions_pass) come back from PDO as
-    // numeric strings, not numbers — Number() everything defensively so the
-    // response actually matches its declared OverviewApiResponse types.
     return {
       totalEvaluations:     Number(cur.overview.total_sessions),
       avgScore:             cur.overview.avg_score != null ? Number(cur.overview.avg_score) : null,
@@ -166,12 +202,11 @@ export async function pharmaDashboardOverview(
     }
   }
 
-  // Sanfer
   const [curRows, prevRows] = await Promise.all([
-    fetchSanferSessions(params.fromIso, params.toIso),
-    fetchSanferSessions(params.prevFromIso, params.prevToIso),
+    fetchSaleExercisesSessions(tenant, params.fromIso, params.toIso),
+    fetchSaleExercisesSessions(tenant, params.prevFromIso, params.prevToIso),
   ])
-  const agg = (rows: SanferSessionRow[]) => {
+  const agg = (rows: SaleExercisesRow[]) => {
     const total  = rows.length
     const passed = rows.filter(r => r.score >= PASS_THRESHOLD).length
     const avg    = total ? rows.reduce((s, r) => s + r.score, 0) / total : null
@@ -201,8 +236,8 @@ export async function pharmaDashboardTrends(
   tenant: PharmaTenant,
   params: { fromIso: string; toIso: string },
 ): Promise<TrendsApiResponse> {
-  if (tenant === 'apotex') {
-    const resp = await bridgeCall<{ trend: ApotexTrendRow[] }>('apotex', 'kpi.score_trend', {
+  if (TENANT_CONFIG[tenant].kind === 'kpi') {
+    const resp = await bridgeCall<{ trend: ApotexTrendRow[] }>(tenant, 'kpi.score_trend', {
       date_from: isoToDate(params.fromIso), date_to: isoToDate(params.toIso), granularity: 'day',
     })
     const scoreTrend: ApiTrendPoint[] = []
@@ -218,8 +253,7 @@ export async function pharmaDashboardTrends(
     return { scoreTrend, passFailTrend, evalCountTrend }
   }
 
-  // Sanfer — aggregate raw rows by day
-  const rows = await fetchSanferSessions(params.fromIso, params.toIso)
+  const rows = await fetchSaleExercisesSessions(tenant, params.fromIso, params.toIso)
   const byDay = new Map<string, { total: number; passed: number; scoreSum: number }>()
   for (const r of rows) {
     const day = r.date.slice(0, 10)
@@ -248,8 +282,8 @@ export async function pharmaDashboardUsecaseBreakdown(
   tenant: PharmaTenant,
   params: { fromIso: string; toIso: string },
 ): Promise<UsecaseBreakdownApiResponse> {
-  if (tenant === 'apotex') {
-    const resp = await bridgeCall<{ activities: ApotexActivityRow[] }>('apotex', 'kpi.activity_summary', {
+  if (TENANT_CONFIG[tenant].kind === 'kpi') {
+    const resp = await bridgeCall<{ activities: ApotexActivityRow[] }>(tenant, 'kpi.activity_summary', {
       date_from: isoToDate(params.fromIso), date_to: isoToDate(params.toIso),
     })
     const data: UsecaseApiRow[] = (resp.activities ?? [])
@@ -265,8 +299,7 @@ export async function pharmaDashboardUsecaseBreakdown(
     return { data }
   }
 
-  // Sanfer — aggregate raw rows by usecase
-  const rows = await fetchSanferSessions(params.fromIso, params.toIso)
+  const rows = await fetchSaleExercisesSessions(tenant, params.fromIso, params.toIso)
   const byUc = new Map<number, { name: string; total: number; passed: number; scoreSum: number }>()
   for (const r of rows) {
     const bucket = byUc.get(r.usecase_id) ?? { name: r.usecase_name, total: 0, passed: 0, scoreSum: 0 }
@@ -296,8 +329,8 @@ export async function pharmaDashboardBestPerformers(
 ): Promise<BestPerformersApiResponse> {
   const limit = Math.min(Math.max(1, params.limit), 20)
 
-  if (tenant === 'apotex') {
-    const resp = await bridgeCall<{ leaderboard: ApotexLeaderRow[] }>('apotex', 'kpi.leaderboard', {
+  if (TENANT_CONFIG[tenant].kind === 'kpi') {
+    const resp = await bridgeCall<{ leaderboard: ApotexLeaderRow[] }>(tenant, 'kpi.leaderboard', {
       date_from: isoToDate(params.fromIso), date_to: isoToDate(params.toIso), limit,
     })
     const data: BestPerformerRow[] = (resp.leaderboard ?? []).map(r => ({
@@ -310,8 +343,7 @@ export async function pharmaDashboardBestPerformers(
     return { data }
   }
 
-  // Sanfer — aggregate raw rows by user
-  const rows = await fetchSanferSessions(params.fromIso, params.toIso)
+  const rows = await fetchSaleExercisesSessions(tenant, params.fromIso, params.toIso)
   const byUser = new Map<string, { name: string; total: number; passed: number; scoreSum: number }>()
   for (const r of rows) {
     if (!r.email) continue
@@ -343,8 +375,8 @@ export async function pharmaDashboardResults(
 ): Promise<ResultsApiResponse> {
   const limit = Math.min(Math.max(1, params.limit), 200)
 
-  if (tenant === 'apotex') {
-    const resp = await bridgeCall<{ sessions: ApotexSessionRow[] }>('apotex', 'kpi.sessions', {
+  if (TENANT_CONFIG[tenant].kind === 'kpi') {
+    const resp = await bridgeCall<{ sessions: ApotexSessionRow[] }>(tenant, 'kpi.sessions', {
       date_from: isoToDate(params.fromIso), date_to: isoToDate(params.toIso), limit,
     })
     const data: EvaluationApiRow[] = (resp.sessions ?? []).map(r => {
@@ -362,8 +394,7 @@ export async function pharmaDashboardResults(
     return { data }
   }
 
-  // Sanfer
-  const rows = await fetchSanferSessions(params.fromIso, params.toIso)
+  const rows = await fetchSaleExercisesSessions(tenant, params.fromIso, params.toIso)
   const data: EvaluationApiRow[] = rows
     .sort((a, b) => (a.date < b.date ? 1 : -1))
     .slice(0, limit)
@@ -383,7 +414,7 @@ export async function pharmaDashboardResults(
 
 // ── 6. Drilldown (single session) ─────────────────────────────────────────────
 
-interface SanferReportRonda {
+interface SaleExercisesReportRonda {
   n: number
   pregunta: string | null
   respuesta_rep: string | null
@@ -392,16 +423,18 @@ interface SanferReportRonda {
   analisis: string
   puntos: number | null
 }
-interface SanferReportSeccion { q: string; a: string }
-interface SanferReport {
+interface SaleExercisesReportSeccion { q: string; a: string }
+// sim.report's response shape — identical across Sanfer (PHP), Weser, and
+// Adium (both Node) since the Node bridges were ported directly from it.
+interface SaleExercisesReport {
   ID_Sim: number
   ID_Caso_de_Uso: number
   Fecha_y_Hora: string
   Calificacion: number
   Producto: string
   Titulo: string
-  Rondas: SanferReportRonda[]
-  Secciones: SanferReportSeccion[]
+  Rondas: SaleExercisesReportRonda[]
+  Secciones: SaleExercisesReportSeccion[]
 }
 
 interface ApotexSessionDetail {
@@ -442,10 +475,10 @@ export async function pharmaDashboardDrilldown(
   tenant: PharmaTenant,
   savedReportId: number,
 ): Promise<DrilldownResult | null> {
-  if (tenant === 'apotex') {
+  if (TENANT_CONFIG[tenant].kind === 'kpi') {
     let resp: { session: ApotexSessionDetail }
     try {
-      resp = await bridgeCall<{ session: ApotexSessionDetail }>('apotex', 'kpi.session_detail', {
+      resp = await bridgeCall<{ session: ApotexSessionDetail }>(tenant, 'kpi.session_detail', {
         id: savedReportId,
       })
     } catch {
@@ -471,10 +504,9 @@ export async function pharmaDashboardDrilldown(
     }
   }
 
-  // Sanfer
-  let resp: { data: SanferReport }
+  let resp: { data: SaleExercisesReport }
   try {
-    resp = await bridgeCall<{ data: SanferReport }>('sanfer', 'sim.report', { sim_id: savedReportId })
+    resp = await bridgeCall<{ data: SaleExercisesReport }>(tenant, 'sim.report', { sim_id: savedReportId })
   } catch {
     return null
   }
