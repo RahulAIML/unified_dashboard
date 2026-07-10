@@ -65,9 +65,10 @@ export async function GET(request: NextRequest) {
       const data = await pharmaDashboardTrends(tenant, {
         fromIso: range.from.toISOString(),
         toIso:   range.to.toISOString(),
+        solution,
       })
       return buildSuccess(data, {
-        from: range.from.toISOString(), to: range.to.toISOString(), source: `pharma-${tenant}`,
+        from: range.from.toISOString(), to: range.to.toISOString(), solution, source: `pharma-${tenant}`,
       })
     }
 

@@ -4,15 +4,25 @@
  * Data adapter for pharma-sim tenants (Sanfer, Apotex, Weser, Adium, …)
  * living on serv.aux-rolplay.com — a completely separate infrastructure
  * from the standard coach_app/rolplay_pro_analytics pipeline and from
- * Banco. See lib/pharma-tenant.ts for tenant resolution + config.
+ * Banco. See lib/pharma-tenant.ts for tenant resolution + verified module
+ * config.
  *
- * Two bridge kinds (TENANT_CONFIG[tenant].kind):
- *   'sale_exercises' — Sanfer, Weser, Adium. Raw per-session rows from a
- *      sale_exercises/usecases-shaped schema, aggregated here in JS. Sanfer
- *      pulls via cert.sessions (no ucid list needed); Weser/Adium pull via
- *      sim.demorp6 with their small fixed ucid list, since their bridges
- *      don't expose an unfiltered variant.
- *   'kpi' — Apotex. Purpose-built kpi.* aggregate actions, mapped directly.
+ * SOLUTION-AWARE: the dashboard's module filter ('lms' | 'coach' |
+ * 'simulator' | 'certification' | 'second-brain' | null for "Todos") must
+ * pull genuinely DIFFERENT data per module, not the same numbers reshuffled:
+ *   - Sanfer 'certification' → official platform DB (profiles_assigned /
+ *     fase1-3), a WHOLLY SEPARATE data source from session counts.
+ *   - Apotex 'coach' → activity_ids 8/9/10 only (Coach Maestro), verified
+ *     against kpi.activity_summary; 'simulator' excludes those same ids for
+ *     Overview/Breakdown (Trends/BestPerformers/Results fall back to the
+ *     unfiltered blend for those three views — the underlying bridge only
+ *     supports a single activity_id filter per call, and per-id-merging
+ *     every non-coach activity there would mean ~9 extra calls per view).
+ *   - 'lms' / 'second-brain' → no verified real data source for ANY pharma
+ *     tenant yet, so these return empty rather than repeating other module
+ *     data.
+ *   - null / 'simulator' (sale_exercises tenants with no coach split) / any
+ *     other value → the tenant's general blended view (existing behavior).
  *
  * ISOLATION RULES (mirrors bridge-banco-analytics.ts):
  *   ✅ Only talks to each tenant's bridge over HTTPS — never touches MySQL
@@ -36,6 +46,14 @@ import type { DrilldownResult, DrilldownField } from './data-provider'
 import { TENANT_CONFIG, type PharmaTenant } from './pharma-tenant'
 
 const PASS_THRESHOLD = 70 // matches every tenant's own pass/fail convention (>=70)
+
+const EMPTY_OVERVIEW: OverviewApiResponse = {
+  totalEvaluations: 0, prevTotalEvaluations: 0,
+  avgScore: null,      prevAvgScore: null,
+  passRate: null,      prevPassRate: null,
+  passedEvaluations: 0,
+}
+const EMPTY_TRENDS: TrendsApiResponse = { scoreTrend: [], passFailTrend: [], evalCountTrend: [] }
 
 // ── HTTP client ────────────────────────────────────────────────────────────────
 
@@ -79,8 +97,7 @@ interface SaleExercisesRow {
   score: number
 }
 
-// sim.demorp6's row shape (Weser, Adium, and Sanfer's own DB2 path) —
-// PascalCase Spanish keys, distinct from cert.sessions' snake_case shape.
+// sim.demorp6's row shape (Weser, Adium) — PascalCase Spanish keys.
 interface SimDemorp6Row {
   ID_Sim: number
   ID_Caso_de_Uso: number
@@ -99,22 +116,34 @@ async function fetchSaleExercisesSessions(
   const date_from = isoToDate(fromIso)
   const date_to   = isoToDate(toIso)
 
-  if (!cfg.ucids) {
-    // Sanfer — no fixed ucid list, cert.sessions scans every usecase active
-    // in the window and already returns the normalized shape directly.
-    const resp = await bridgeCall<{ data: SaleExercisesRow[] }>(tenant, 'cert.sessions', {
-      date_from, date_to, limit: 20_000, refresh: 1,
-    })
-    return resp.data ?? []
+  if (tenant === 'sanfer') {
+    // Sanfer's real dashboard (src/api/client.ts) always scopes to its exact
+    // 44-ID certification exercise list via sim.demorp6 — using the broader
+    // "every usecase for this client" scan silently returns a DIFFERENT
+    // (larger) total than the real product.
+    const [sessionsResp, namesResp] = await Promise.all([
+      bridgeCall<{ data: SimDemorp6Row[] }>(tenant, 'sim.demorp6', {
+        ids: cfg.ucids!.join(','), date_from, date_to, refresh: 1,
+      }),
+      bridgeCall<{ data: { ID_Caso_de_Uso: number; Caso_de_Uso: string }[] }>(tenant, 'activities.demorp6', {
+        ids: cfg.ucids!.join(','),
+      }).catch(() => ({ data: [] })),
+    ])
+    const nameById = new Map(namesResp.data.map(a => [a.ID_Caso_de_Uso, a.Caso_de_Uso]))
+    return (sessionsResp.data ?? []).map(r => ({
+      id: r.ID_Sim, usecase_id: r.ID_Caso_de_Uso,
+      usecase_name: nameById.get(r.ID_Caso_de_Uso) ?? '',
+      email: r.Usuario, name: r.Usuario_Nombre, date: r.Fecha_y_Hora, score: r.Calificacion,
+    }))
   }
 
   // Weser / Adium — small fixed ucid list, sim.demorp6 requires explicit ids.
   const [sessionsResp, namesResp] = await Promise.all([
     bridgeCall<{ data: SimDemorp6Row[] }>(tenant, 'sim.demorp6', {
-      ids: cfg.ucids.join(','), date_from, date_to,
+      ids: cfg.ucids!.join(','), date_from, date_to,
     }),
     bridgeCall<{ data: { ID_Caso_de_Uso: number; Caso_de_Uso: string }[] }>(tenant, 'activities.demorp6', {
-      ids: cfg.ucids.join(','),
+      ids: cfg.ucids!.join(','),
     }).catch(() => ({ data: [] })),
   ])
   const nameById = new Map(namesResp.data.map(a => [a.ID_Caso_de_Uso, a.Caso_de_Uso]))
@@ -128,6 +157,128 @@ async function fetchSaleExercisesSessions(
     date:         r.Fecha_y_Hora,
     score:        r.Calificacion,
   }))
+}
+
+function aggregateSaleExercisesRows(rows: SaleExercisesRow[]) {
+  const total  = rows.length
+  const passed = rows.filter(r => r.score >= PASS_THRESHOLD).length
+  const avg    = total ? rows.reduce((s, r) => s + r.score, 0) / total : null
+  return {
+    total,
+    avgScore: avg != null ? Math.round(avg * 100) / 100 : null,
+    passRate: total ? Math.round((passed / total) * 10000) / 100 : null,
+    passed,
+  }
+}
+
+// ── Sanfer certification: WHOLLY SEPARATE data source (official platform DB) ──
+// Verified against src/pages/CertificationPage.tsx + src/api/client.ts:
+// fetchCertStats() / fetchCertification() query profiles_assigned on the
+// official DB (rolePlay_sanfer_v3), NOT sale_exercises. No date-range concept
+// exists here — cert.stats/org.certification are current-state snapshots.
+
+interface SanferCertStats {
+  total: number; certified: number; completed: number; expected: number
+  pct: number; cert_pct: number
+}
+interface SanferCertRow {
+  mb_user: string; nombre: string | null; profile_id: number
+  finalized: 0 | 1
+  // fase*_score come back from PDO as numeric strings ("95.00"), not numbers —
+  // same class of bug as Apotex's sessions_pass. Number() before any arithmetic,
+  // or reduce() silently does string concatenation and the result serializes
+  // as NaN -> null in JSON, masking the bug entirely.
+  fase1: 0 | 1; fase1_score: number | string | null
+  fase2: 0 | 1; fase2_score: number | string | null
+  fase3: 0 | 1; fase3_score: number | string | null
+}
+
+function faseScores(r: SanferCertRow): number[] {
+  return [r.fase1_score, r.fase2_score, r.fase3_score]
+    .filter((n): n is number | string => n != null)
+    .map(Number)
+    .filter(n => !Number.isNaN(n))
+}
+function fasesCompleted(r: SanferCertRow): number {
+  return r.fase1 + r.fase2 + r.fase3
+}
+
+async function sanferCertificationOverview(): Promise<OverviewApiResponse> {
+  const [stats, rows] = await Promise.all([
+    bridgeCall<{ total: number } & SanferCertStats>('sanfer', 'cert.stats', { refresh: 1 }),
+    bridgeCall<{ data: SanferCertRow[] }>('sanfer', 'org.certification', { refresh: 1 }),
+  ])
+  const allScores = (rows.data ?? []).flatMap(faseScores)
+  const avgScore  = allScores.length ? Math.round((allScores.reduce((a, b) => a + b, 0) / allScores.length) * 100) / 100 : null
+  return {
+    totalEvaluations: stats.total, avgScore, passRate: stats.cert_pct, passedEvaluations: stats.certified,
+    // cert.stats is a current-state snapshot with no date range — there is no
+    // real "previous period" to compare against, so we report zero change
+    // rather than fabricate a trend that doesn't exist.
+    prevTotalEvaluations: stats.total, prevAvgScore: avgScore, prevPassRate: stats.cert_pct,
+  }
+}
+
+async function sanferCertificationBreakdown(): Promise<UsecaseBreakdownApiResponse> {
+  const resp = await bridgeCall<{ data: SanferCertRow[] }>('sanfer', 'org.certification', { refresh: 1 })
+  const byProfile = new Map<number, { total: number; passed: number; scores: number[] }>()
+  for (const r of resp.data ?? []) {
+    const b = byProfile.get(r.profile_id) ?? { total: 0, passed: 0, scores: [] }
+    b.total++
+    if (r.finalized) b.passed++
+    b.scores.push(...faseScores(r))
+    byProfile.set(r.profile_id, b)
+  }
+  const data: UsecaseApiRow[] = [...byProfile.entries()]
+    .map(([profileId, b]) => ({
+      usecaseId: profileId,
+      usecase_name: `Línea de certificación ${profileId}`,
+      totalEvaluations: b.total,
+      avgScore: b.scores.length ? Math.round((b.scores.reduce((a, c) => a + c, 0) / b.scores.length) * 100) / 100 : null,
+      passRate: b.total ? Math.round((b.passed / b.total) * 10000) / 100 : null,
+      passed: b.passed,
+    }))
+    .sort((a, b) => b.totalEvaluations - a.totalEvaluations)
+  return { data }
+}
+
+async function sanferCertificationBestPerformers(limit: number): Promise<BestPerformersApiResponse> {
+  const resp = await bridgeCall<{ data: SanferCertRow[] }>('sanfer', 'org.certification', { refresh: 1 })
+  const data: BestPerformerRow[] = (resp.data ?? [])
+    .map(r => {
+      const scores = faseScores(r)
+      return {
+        user_email: r.mb_user, user_name: r.nombre,
+        sessions: fasesCompleted(r),
+        avg_score: scores.length ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 100) / 100 : 0,
+        pass_rate: r.finalized ? 100 : Math.round((fasesCompleted(r) / 3) * 10000) / 100,
+      }
+    })
+    .sort((a, b) => b.avg_score - a.avg_score || b.sessions - a.sessions)
+    .slice(0, limit)
+  return { data }
+}
+
+async function sanferCertificationResults(limit: number): Promise<ResultsApiResponse> {
+  const resp = await bridgeCall<{ data: SanferCertRow[] }>('sanfer', 'org.certification', { refresh: 1 })
+  // No numeric session ID exists in this dataset (profiles_assigned rows are
+  // per-user, not per-event) — synthesize a stable one from array position so
+  // rows render, but drilldown is not meaningful for certification rows.
+  const data: EvaluationApiRow[] = (resp.data ?? [])
+    .slice(0, limit)
+    .map((r, i) => {
+      const scores = faseScores(r)
+      const avg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0
+      return {
+        savedReportId: -(i + 1), // negative = certification-sourced, not a real bridge session id
+        usecaseId: r.profile_id,
+        score: Math.round(avg),
+        result: r.finalized ? 'passed' : 'failed',
+        passed: r.finalized === 1,
+        date: '', // profiles_assigned carries no per-row date
+      }
+    })
+  return { data }
 }
 
 // ── Apotex: purpose-built kpi.* actions ────────────────────────────────────────
@@ -176,13 +327,161 @@ interface ApotexSessionRow {
   score: number
 }
 
+/** kpi.activity_summary rows split into Coach Maestro (verified ids) vs everything else. */
+async function apotexActivityGroups(fromIso: string, toIso: string) {
+  const resp = await bridgeCall<{ activities: ApotexActivityRow[] }>('apotex', 'kpi.activity_summary', {
+    date_from: isoToDate(fromIso), date_to: isoToDate(toIso),
+  })
+  const coachIds = new Set(TENANT_CONFIG.apotex.coachActivityIds ?? [])
+  const all = (resp.activities ?? []).filter(a => Number(a.sessions) > 0)
+  return {
+    coach: all.filter(a => coachIds.has(a.activity_id)),
+    simulator: all.filter(a => !coachIds.has(a.activity_id)),
+  }
+}
+
+function summarizeApotexActivities(rows: ApotexActivityRow[]): OverviewApiResponse {
+  const total  = rows.reduce((s, r) => s + Number(r.sessions), 0)
+  const passed = rows.reduce((s, r) => s + Number(r.sessions_pass), 0)
+  const scoreWeighted = rows.reduce((s, r) => s + (r.avg_score ?? 0) * Number(r.sessions), 0)
+  return {
+    totalEvaluations: total,
+    avgScore: total ? Math.round((scoreWeighted / total) * 100) / 100 : null,
+    passRate: total ? Math.round((passed / total) * 10000) / 100 : null,
+    passedEvaluations: passed,
+    prevTotalEvaluations: 0, prevAvgScore: null, prevPassRate: null, // filled in by caller with a second window
+  }
+}
+
+function activityRowsToUsecaseRows(rows: ApotexActivityRow[]): UsecaseApiRow[] {
+  return rows
+    .map(a => ({
+      usecaseId: a.activity_id, usecase_name: a.activity_name,
+      totalEvaluations: Number(a.sessions),
+      avgScore: a.avg_score != null ? Number(a.avg_score) : null,
+      passRate: a.pass_rate_pct != null ? Number(a.pass_rate_pct) : null,
+      passed: Number(a.sessions_pass),
+    }))
+    .sort((a, b) => b.totalEvaluations - a.totalEvaluations)
+}
+
+/** Coach Maestro trends/leaderboard/sessions — merges per-id calls (only 3 ids, cheap). */
+async function apotexCoachTrend(fromIso: string, toIso: string): Promise<TrendsApiResponse> {
+  const ids = TENANT_CONFIG.apotex.coachActivityIds ?? []
+  const resps = await Promise.all(ids.map(id =>
+    bridgeCall<{ trend: ApotexTrendRow[] }>('apotex', 'kpi.score_trend', {
+      date_from: isoToDate(fromIso), date_to: isoToDate(toIso), granularity: 'day', activity_id: id,
+    }).catch(() => ({ trend: [] as ApotexTrendRow[] }))
+  ))
+  const byDay = new Map<string, { sessions: number; pass: number; scoreWeighted: number }>()
+  for (const resp of resps) {
+    for (const r of resp.trend ?? []) {
+      const sessions = Number(r.sessions), pass = Number(r.sessions_pass)
+      const b = byDay.get(r.period) ?? { sessions: 0, pass: 0, scoreWeighted: 0 }
+      b.sessions += sessions; b.pass += pass; b.scoreWeighted += (r.avg_score ?? 0) * sessions
+      byDay.set(r.period, b)
+    }
+  }
+  const days = [...byDay.keys()].sort()
+  const scoreTrend: ApiTrendPoint[] = [], passFailTrend: ApiTrendPoint[] = [], evalCountTrend: ApiTrendPoint[] = []
+  for (const day of days) {
+    const b = byDay.get(day)!
+    scoreTrend.push({ date: day, value: b.sessions ? Math.round((b.scoreWeighted / b.sessions) * 100) / 100 : 0 })
+    passFailTrend.push({ date: day, value: b.pass, value2: b.sessions - b.pass })
+    evalCountTrend.push({ date: day, value: b.sessions })
+  }
+  return { scoreTrend, passFailTrend, evalCountTrend }
+}
+
+async function apotexCoachLeaderboard(fromIso: string, toIso: string, limit: number): Promise<BestPerformersApiResponse> {
+  const ids = TENANT_CONFIG.apotex.coachActivityIds ?? []
+  const resps = await Promise.all(ids.map(id =>
+    bridgeCall<{ leaderboard: ApotexLeaderRow[] }>('apotex', 'kpi.leaderboard', {
+      date_from: isoToDate(fromIso), date_to: isoToDate(toIso), limit: 500, activity_id: id,
+    }).catch(() => ({ leaderboard: [] as ApotexLeaderRow[] }))
+  ))
+  const byEmail = new Map<string, { name: string | null; sessions: number; scoreWeighted: number }>()
+  for (const resp of resps) {
+    for (const r of resp.leaderboard ?? []) {
+      const sessions = Number(r.sessions)
+      const b = byEmail.get(r.email) ?? { name: r.name, sessions: 0, scoreWeighted: 0 }
+      b.sessions += sessions; b.scoreWeighted += (r.avg_score ?? 0) * sessions
+      byEmail.set(r.email, b)
+    }
+  }
+  const data: BestPerformerRow[] = [...byEmail.entries()]
+    .map(([email, b]) => ({
+      user_email: email, user_name: b.name,
+      sessions: b.sessions, avg_score: b.sessions ? Math.round((b.scoreWeighted / b.sessions) * 100) / 100 : 0,
+      pass_rate: 0, // not tracked per-merge; individual kpi.leaderboard calls don't expose sessions_pass
+    }))
+    .sort((a, b) => b.avg_score - a.avg_score || b.sessions - a.sessions)
+    .slice(0, limit)
+  return { data }
+}
+
+async function apotexCoachSessions(fromIso: string, toIso: string, limit: number): Promise<ResultsApiResponse> {
+  const ids = TENANT_CONFIG.apotex.coachActivityIds ?? []
+  const resps = await Promise.all(ids.map(id =>
+    bridgeCall<{ sessions: ApotexSessionRow[] }>('apotex', 'kpi.sessions', {
+      date_from: isoToDate(fromIso), date_to: isoToDate(toIso), limit, activity_id: id,
+    }).catch(() => ({ sessions: [] as ApotexSessionRow[] }))
+  ))
+  const rows = resps.flatMap(r => r.sessions ?? [])
+  const data: EvaluationApiRow[] = rows
+    .sort((a, b) => (a.fecha < b.fecha ? 1 : -1))
+    .slice(0, limit)
+    .map(r => {
+      const score = Number(r.score); const passed = score >= PASS_THRESHOLD
+      return {
+        savedReportId: Number(r.id), usecaseId: Number(r.usecase_id ?? r.activity_id),
+        score, result: passed ? 'passed' : 'failed', passed, date: r.fecha.slice(0, 10),
+      }
+    })
+  return { data }
+}
+
+// ── Module routing helper ──────────────────────────────────────────────────────
+
+/**
+ * True when `solution` names a module this tenant does NOT have real,
+ * distinct data for. Returning empty here (rather than falling through to
+ * the tenant's default/blended view) matters: a tenant with no Coach Maestro
+ * module must not show its Simulador numbers again under a "Coach Maestro"
+ * label — that is the exact "same data everywhere" failure this file exists
+ * to avoid.
+ */
+function isUnsupportedModule(tenant: PharmaTenant, solution: string | null | undefined): boolean {
+  if (!solution || solution === 'simulator') return false // "Todos" / general view — always the tenant's own default
+  if (solution === 'lms' || solution === 'second-brain') return true // no pharma tenant has real data for these — verified via audit
+  if (solution === 'certification') return !TENANT_CONFIG[tenant].hasCertification
+  if (solution === 'coach') return !TENANT_CONFIG[tenant].coachActivityIds
+  return false
+}
+
 // ── 1. Overview ───────────────────────────────────────────────────────────────
 
 export async function pharmaDashboardOverview(
   tenant: PharmaTenant,
-  params: { fromIso: string; toIso: string; prevFromIso: string; prevToIso: string },
+  params: { fromIso: string; toIso: string; prevFromIso: string; prevToIso: string; solution?: string | null },
 ): Promise<OverviewApiResponse> {
+  if (isUnsupportedModule(tenant, params.solution)) return EMPTY_OVERVIEW
+
+  if (tenant === 'sanfer' && params.solution === 'certification') {
+    return sanferCertificationOverview()
+  }
+
   if (TENANT_CONFIG[tenant].kind === 'kpi') {
+    if (params.solution === 'coach' || params.solution === 'simulator') {
+      const wantCoach = params.solution === 'coach'
+      const [curGroups, prevGroups] = await Promise.all([
+        apotexActivityGroups(params.fromIso, params.toIso),
+        apotexActivityGroups(params.prevFromIso, params.prevToIso),
+      ])
+      const cur  = summarizeApotexActivities(wantCoach ? curGroups.coach : curGroups.simulator)
+      const prev = summarizeApotexActivities(wantCoach ? prevGroups.coach : prevGroups.simulator)
+      return { ...cur, prevTotalEvaluations: prev.totalEvaluations, prevAvgScore: prev.avgScore, prevPassRate: prev.passRate }
+    }
     const [cur, prev] = await Promise.all([
       bridgeCall<ApotexOverview>(tenant, 'kpi.overview', {
         date_from: isoToDate(params.fromIso), date_to: isoToDate(params.toIso),
@@ -206,19 +505,8 @@ export async function pharmaDashboardOverview(
     fetchSaleExercisesSessions(tenant, params.fromIso, params.toIso),
     fetchSaleExercisesSessions(tenant, params.prevFromIso, params.prevToIso),
   ])
-  const agg = (rows: SaleExercisesRow[]) => {
-    const total  = rows.length
-    const passed = rows.filter(r => r.score >= PASS_THRESHOLD).length
-    const avg    = total ? rows.reduce((s, r) => s + r.score, 0) / total : null
-    return {
-      total,
-      avgScore: avg != null ? Math.round(avg * 100) / 100 : null,
-      passRate: total ? Math.round((passed / total) * 10000) / 100 : null,
-      passed,
-    }
-  }
-  const cur  = agg(curRows)
-  const prev = agg(prevRows)
+  const cur  = aggregateSaleExercisesRows(curRows)
+  const prev = aggregateSaleExercisesRows(prevRows)
   return {
     totalEvaluations:     cur.total,
     avgScore:             cur.avgScore,
@@ -234,9 +522,20 @@ export async function pharmaDashboardOverview(
 
 export async function pharmaDashboardTrends(
   tenant: PharmaTenant,
-  params: { fromIso: string; toIso: string },
+  params: { fromIso: string; toIso: string; solution?: string | null },
 ): Promise<TrendsApiResponse> {
+  if (isUnsupportedModule(tenant, params.solution)) return EMPTY_TRENDS
+  // Certification has no per-day breakdown (profiles_assigned carries no
+  // date column) — an empty trend is honest; a fabricated one would not be.
+  if (tenant === 'sanfer' && params.solution === 'certification') return EMPTY_TRENDS
+
   if (TENANT_CONFIG[tenant].kind === 'kpi') {
+    if (params.solution === 'coach') return apotexCoachTrend(params.fromIso, params.toIso)
+    // NOTE: 'simulator' still returns the unfiltered (Coach Maestro-inclusive)
+    // trend here — per-id-merging every non-coach activity would mean ~9
+    // extra bridge calls for this one view. Overview/Breakdown ARE correctly
+    // split; this is a scoped, documented gap for Trends/BestPerformers/
+    // Results specifically.
     const resp = await bridgeCall<{ trend: ApotexTrendRow[] }>(tenant, 'kpi.score_trend', {
       date_from: isoToDate(params.fromIso), date_to: isoToDate(params.toIso), granularity: 'day',
     })
@@ -280,23 +579,20 @@ export async function pharmaDashboardTrends(
 
 export async function pharmaDashboardUsecaseBreakdown(
   tenant: PharmaTenant,
-  params: { fromIso: string; toIso: string },
+  params: { fromIso: string; toIso: string; solution?: string | null },
 ): Promise<UsecaseBreakdownApiResponse> {
+  if (isUnsupportedModule(tenant, params.solution)) return { data: [] }
+  if (tenant === 'sanfer' && params.solution === 'certification') return sanferCertificationBreakdown()
+
   if (TENANT_CONFIG[tenant].kind === 'kpi') {
+    if (params.solution === 'coach' || params.solution === 'simulator') {
+      const groups = await apotexActivityGroups(params.fromIso, params.toIso)
+      return { data: activityRowsToUsecaseRows(params.solution === 'coach' ? groups.coach : groups.simulator) }
+    }
     const resp = await bridgeCall<{ activities: ApotexActivityRow[] }>(tenant, 'kpi.activity_summary', {
       date_from: isoToDate(params.fromIso), date_to: isoToDate(params.toIso),
     })
-    const data: UsecaseApiRow[] = (resp.activities ?? [])
-      .filter(a => Number(a.sessions) > 0)
-      .map(a => ({
-        usecaseId:        a.activity_id,
-        usecase_name:     a.activity_name,
-        totalEvaluations: Number(a.sessions),
-        avgScore:         a.avg_score != null ? Number(a.avg_score) : null,
-        passRate:         a.pass_rate_pct != null ? Number(a.pass_rate_pct) : null,
-        passed:           Number(a.sessions_pass),
-      }))
-    return { data }
+    return { data: activityRowsToUsecaseRows((resp.activities ?? []).filter(a => Number(a.sessions) > 0)) }
   }
 
   const rows = await fetchSaleExercisesSessions(tenant, params.fromIso, params.toIso)
@@ -325,11 +621,15 @@ export async function pharmaDashboardUsecaseBreakdown(
 
 export async function pharmaDashboardBestPerformers(
   tenant: PharmaTenant,
-  params: { fromIso: string; toIso: string; limit: number },
+  params: { fromIso: string; toIso: string; limit: number; solution?: string | null },
 ): Promise<BestPerformersApiResponse> {
   const limit = Math.min(Math.max(1, params.limit), 20)
+  if (isUnsupportedModule(tenant, params.solution)) return { data: [] }
+  if (tenant === 'sanfer' && params.solution === 'certification') return sanferCertificationBestPerformers(limit)
 
   if (TENANT_CONFIG[tenant].kind === 'kpi') {
+    if (params.solution === 'coach') return apotexCoachLeaderboard(params.fromIso, params.toIso, limit)
+    // 'simulator' — see Trends comment above re: the same documented scope gap.
     const resp = await bridgeCall<{ leaderboard: ApotexLeaderRow[] }>(tenant, 'kpi.leaderboard', {
       date_from: isoToDate(params.fromIso), date_to: isoToDate(params.toIso), limit,
     })
@@ -371,11 +671,14 @@ export async function pharmaDashboardBestPerformers(
 
 export async function pharmaDashboardResults(
   tenant: PharmaTenant,
-  params: { fromIso: string; toIso: string; limit: number },
+  params: { fromIso: string; toIso: string; limit: number; solution?: string | null },
 ): Promise<ResultsApiResponse> {
   const limit = Math.min(Math.max(1, params.limit), 200)
+  if (isUnsupportedModule(tenant, params.solution)) return { data: [] }
+  if (tenant === 'sanfer' && params.solution === 'certification') return sanferCertificationResults(limit)
 
   if (TENANT_CONFIG[tenant].kind === 'kpi') {
+    if (params.solution === 'coach') return apotexCoachSessions(params.fromIso, params.toIso, limit)
     const resp = await bridgeCall<{ sessions: ApotexSessionRow[] }>(tenant, 'kpi.sessions', {
       date_from: isoToDate(params.fromIso), date_to: isoToDate(params.toIso), limit,
     })
@@ -475,6 +778,10 @@ export async function pharmaDashboardDrilldown(
   tenant: PharmaTenant,
   savedReportId: number,
 ): Promise<DrilldownResult | null> {
+  // Negative IDs are synthetic (certification rows have no real session id —
+  // see sanferCertificationResults). Nothing meaningful to drill into.
+  if (savedReportId < 0) return null
+
   if (TENANT_CONFIG[tenant].kind === 'kpi') {
     let resp: { session: ApotexSessionDetail }
     try {

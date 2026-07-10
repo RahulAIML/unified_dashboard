@@ -67,9 +67,10 @@ export async function GET(request: NextRequest) {
         fromIso: range.from.toISOString(),
         toIso:   range.to.toISOString(),
         limit,
+        solution,
       })
       return buildSuccess(data, {
-        from: range.from.toISOString(), to: range.to.toISOString(), source: `pharma-${tenant}`, limit,
+        from: range.from.toISOString(), to: range.to.toISOString(), solution, source: `pharma-${tenant}`, limit,
       })
     }
 
