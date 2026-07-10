@@ -2,6 +2,9 @@ import { NextRequest } from 'next/server'
 import { getDrilldown } from '@/lib/data-provider'
 import { buildSuccess, buildApiError } from '@/lib/api-utils'
 import { getAuthContextFromRequest } from '@/lib/server-auth'
+import { resolveOrgType } from '@/lib/org-type'
+import { resolvePharmaTenant } from '@/lib/pharma-tenant'
+import { pharmaDashboardDrilldown } from '@/lib/bridge-pharma-analytics'
 import { isDemoMode } from '@/lib/demo'
 import { getDemoReport } from '@/lib/demo/reports'
 import { DEMO_REPORT_IDS } from '@/lib/demo/engine'
@@ -28,6 +31,17 @@ export async function GET(
       if (!report) return buildApiError('Demo report not found', 404)
       // Return with the originally requested ID so the URL stays correct
       return buildSuccess({ ...report, savedReportId: id }, { savedReportId: id, source: 'demo' })
+    }
+
+    const orgType = resolveOrgType(ctx.email, ctx.customerId)
+    if (orgType === 'pharma') {
+      const tenant = resolvePharmaTenant(ctx.email)
+      if (!tenant) return buildApiError('Pharma tenant could not be resolved', 500)
+
+      const data = await pharmaDashboardDrilldown(tenant, id)
+      if (!data) return buildApiError('Report not found', 404)
+
+      return buildSuccess(data, { savedReportId: id, source: `pharma-${tenant}` })
     }
 
     const data = await getDrilldown(id, ctx.customerId)

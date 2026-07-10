@@ -31,6 +31,7 @@ import type {
   ResultsApiResponse,
   EvaluationApiRow,
 } from './types'
+import type { DrilldownResult, DrilldownField } from './data-provider'
 import type { PharmaTenant } from './pharma-tenant'
 
 const PASS_THRESHOLD = 70 // matches both tenants' own pass/fail convention
@@ -378,4 +379,140 @@ export async function pharmaDashboardResults(
       }
     })
   return { data }
+}
+
+// ── 6. Drilldown (single session) ─────────────────────────────────────────────
+
+interface SanferReportRonda {
+  n: number
+  pregunta: string | null
+  respuesta_rep: string | null
+  criterio: string
+  respuesta_modelo: string
+  analisis: string
+  puntos: number | null
+}
+interface SanferReportSeccion { q: string; a: string }
+interface SanferReport {
+  ID_Sim: number
+  ID_Caso_de_Uso: number
+  Fecha_y_Hora: string
+  Calificacion: number
+  Producto: string
+  Titulo: string
+  Rondas: SanferReportRonda[]
+  Secciones: SanferReportSeccion[]
+}
+
+interface ApotexSessionDetail {
+  id: number
+  fecha: string
+  usecase_id: number
+  activity_id: number
+  actividad: string
+  tipo: string
+  score: number | string
+  feedback: string | null
+}
+
+function scoreField(score: number): DrilldownField {
+  return {
+    fieldKey: 'overall_score', fieldLabel: 'Puntuación',
+    valueNum: score, valueText: null, valueLongtext: null, normalizedValue: score,
+  }
+}
+// normalizeResult() in kpi-builder.ts treats the literal string "Deficiente"
+// as fail and everything else as pass — match that convention here.
+function resultField(passed: boolean): DrilldownField {
+  const text = passed ? 'Aprobado' : 'Deficiente'
+  return {
+    fieldKey: 'overall_result', fieldLabel: 'Resultado',
+    valueNum: null, valueText: text, valueLongtext: null, normalizedValue: text,
+  }
+}
+function textField(key: string, label: string, text: string | null): DrilldownField | null {
+  if (!text) return null
+  return {
+    fieldKey: key, fieldLabel: label,
+    valueNum: null, valueText: text, valueLongtext: null, normalizedValue: text,
+  }
+}
+
+export async function pharmaDashboardDrilldown(
+  tenant: PharmaTenant,
+  savedReportId: number,
+): Promise<DrilldownResult | null> {
+  if (tenant === 'apotex') {
+    let resp: { session: ApotexSessionDetail }
+    try {
+      resp = await bridgeCall<{ session: ApotexSessionDetail }>('apotex', 'kpi.session_detail', {
+        id: savedReportId,
+      })
+    } catch {
+      return null
+    }
+    const s = resp.session
+    const score = Number(s.score)
+    const passed = score >= PASS_THRESHOLD
+    const fields: DrilldownField[] = [
+      scoreField(score),
+      resultField(passed),
+      textField('actividad', 'Actividad', s.actividad),
+      textField('tipo', 'Tipo', s.tipo),
+      textField('feedback', 'Retroalimentación', s.feedback),
+    ].filter((f): f is DrilldownField => f !== null)
+
+    return {
+      savedReportId: s.id,
+      usecaseId:     s.usecase_id ?? s.activity_id,
+      date:          s.fecha.slice(0, 10),
+      fields,
+      closingJson:   null,
+    }
+  }
+
+  // Sanfer
+  let resp: { data: SanferReport }
+  try {
+    resp = await bridgeCall<{ data: SanferReport }>('sanfer', 'sim.report', { sim_id: savedReportId })
+  } catch {
+    return null
+  }
+  const r = resp.data
+  const passed = r.Calificacion >= PASS_THRESHOLD
+  const fields: DrilldownField[] = [
+    scoreField(r.Calificacion),
+    resultField(passed),
+    textField('producto', 'Producto', r.Producto),
+    textField('titulo', 'Título', r.Titulo),
+  ].filter((f): f is DrilldownField => f !== null)
+
+  for (const ronda of r.Rondas ?? []) {
+    const n = ronda.n
+    fields.push(
+      ...([
+        textField(`ronda_${n}_pregunta`, `Ronda ${n} — Pregunta`, ronda.pregunta),
+        textField(`ronda_${n}_respuesta`, `Ronda ${n} — Respuesta`, ronda.respuesta_rep),
+        textField(`ronda_${n}_criterio`, `Ronda ${n} — Criterio`, ronda.criterio),
+        textField(`ronda_${n}_modelo`, `Ronda ${n} — Respuesta modelo`, ronda.respuesta_modelo),
+        textField(`ronda_${n}_analisis`, `Ronda ${n} — Análisis`, ronda.analisis),
+      ].filter((f): f is DrilldownField => f !== null))
+    )
+  }
+  for (const [i, sec] of (r.Secciones ?? []).entries()) {
+    fields.push(
+      ...([
+        textField(`seccion_${i + 1}_q`, `Sección ${i + 1} — Pregunta`, sec.q),
+        textField(`seccion_${i + 1}_a`, `Sección ${i + 1} — Respuesta`, sec.a),
+      ].filter((f): f is DrilldownField => f !== null))
+    )
+  }
+
+  return {
+    savedReportId: r.ID_Sim,
+    usecaseId:     r.ID_Caso_de_Uso,
+    date:          r.Fecha_y_Hora.slice(0, 10),
+    fields,
+    closingJson:   null,
+  }
 }
