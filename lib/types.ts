@@ -194,10 +194,18 @@ export interface ApiTrendPoint {
 }
 
 /** Response from GET /api/dashboard/trends */
+export interface ScoreDistributionBucket {
+  range: string // e.g. "70-79"
+  count: number
+  pct:   number
+}
+
 export interface TrendsApiResponse {
   scoreTrend:     ApiTrendPoint[]
   passFailTrend:  ApiTrendPoint[]
   evalCountTrend: ApiTrendPoint[]
+  /** Only present for tenants where score-distribution buckets can be computed from raw session rows. */
+  scoreDistribution?: ScoreDistributionBucket[]
 }
 
 /** A single row from GET /api/dashboard/results */
@@ -242,6 +250,69 @@ export interface BestPerformerRow {
 
 export interface BestPerformersApiResponse {
   data: BestPerformerRow[]
+  /** All-time (not date-filtered) aggregate — only present for tenants with a real source for it (e.g. Sanfer's sim.topstats). */
+  allTimeStats?: {
+    totalRecords:  number
+    avgBestScore:  number
+    recordsGe80:   number
+    uniqueUsers:   number
+    uniqueSims:    number
+  }
+}
+
+// ── Objections (pharma-sim tenants with a real objection-handling data source) ──
+
+export interface ObjectionRow {
+  usecaseId:     number
+  objectionText: string
+  count:         number
+  passRate:      number
+  modelAnswer:   string | null
+  topAnswers:    { text: string; name: string }[]
+}
+
+export interface ObjectionsApiResponse {
+  data: ObjectionRow[]
+}
+
+// ── Business Lines (pharma-sim tenants with a real line/tag catalog) ──────────
+
+export interface BusinessLineRow {
+  tagId:        number
+  name:         string
+  memberCount:  number
+  simCount:     number
+  avgScore:     number | null
+  activeUsers:  number
+}
+
+export interface BusinessLinesApiResponse {
+  data: BusinessLineRow[]
+}
+
+// ── Organization (pharma-sim tenants with a real members/admins source) ──────
+
+export interface OrgMemberRow {
+  id:          number
+  fullName:    string
+  email:       string
+  designation: string | null
+  adminId:     number | null
+}
+
+export interface OrgAdminRow {
+  id:          number
+  fullName:    string
+  email:       string
+  profileType: string
+}
+
+export interface OrganizationApiResponse {
+  totalMembers:    number
+  totalAdmins:     number
+  totalSupervisors: number
+  members: OrgMemberRow[]
+  admins:  OrgAdminRow[]
 }
 
 // ── LMS (limited data — placeholder) ─────────

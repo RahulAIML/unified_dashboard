@@ -35,12 +35,20 @@ import type {
   OverviewApiResponse,
   TrendsApiResponse,
   ApiTrendPoint,
+  ScoreDistributionBucket,
   UsecaseBreakdownApiResponse,
   UsecaseApiRow,
   BestPerformersApiResponse,
   BestPerformerRow,
   ResultsApiResponse,
   EvaluationApiRow,
+  ObjectionsApiResponse,
+  ObjectionRow,
+  BusinessLinesApiResponse,
+  BusinessLineRow,
+  OrganizationApiResponse,
+  OrgMemberRow,
+  OrgAdminRow,
 } from './types'
 import type { DrilldownResult, DrilldownField } from './data-provider'
 import { TENANT_CONFIG, type PharmaTenant } from './pharma-tenant'
@@ -549,7 +557,15 @@ function isUnsupportedModule(tenant: PharmaTenant, solution: string | null | und
   if (!solution || solution === 'simulator') return false // "Todos" / general view — always the tenant's own default
   if (solution === 'lms' || solution === 'second-brain') return true // no pharma tenant has real data for these — verified via audit
   if (solution === 'certification') return !TENANT_CONFIG[tenant].hasCertification
-  if (solution === 'coach') return !TENANT_CONFIG[tenant].coachActivityIds
+  // 'coach' is genuinely separate data ONLY for 'kpi'-kind tenants with a
+  // confirmed coachActivityIds split (Apotex). For sale_exercises/
+  // exceltis_rest tenants there's no distinct Coach Maestro data source —
+  // but unlike lms/second-brain, "coaching" is a legitimate DIFFERENT LENS
+  // on the same practice-session data (verified against Sanfer's own
+  // CoachingPage.tsx, which derives its insights from the same sim rows,
+  // not a separate table) — so it falls through to the tenant's normal
+  // data below rather than being blocked as unsupported.
+  if (solution === 'coach') return TENANT_CONFIG[tenant].kind === 'kpi' && !TENANT_CONFIG[tenant].coachActivityIds
   return false
 }
 
@@ -666,7 +682,22 @@ export async function pharmaDashboardTrends(
     passFailTrend.push({ date: day, value: b.passed, value2: b.total - b.passed })
     evalCountTrend.push({ date: day, value: b.total })
   }
-  return { scoreTrend, passFailTrend, evalCountTrend }
+  return { scoreTrend, passFailTrend, evalCountTrend, scoreDistribution: buildScoreDistribution(rows.map(r => r.score)) }
+}
+
+function buildScoreDistribution(scores: number[]): ScoreDistributionBucket[] {
+  const buckets = [
+    { range: '0-9', min: 0, max: 9 }, { range: '10-19', min: 10, max: 19 },
+    { range: '20-29', min: 20, max: 29 }, { range: '30-39', min: 30, max: 39 },
+    { range: '40-49', min: 40, max: 49 }, { range: '50-59', min: 50, max: 59 },
+    { range: '60-69', min: 60, max: 69 }, { range: '70-79', min: 70, max: 79 },
+    { range: '80-89', min: 80, max: 89 }, { range: '90-100', min: 90, max: 100 },
+  ]
+  const total = scores.length
+  return buckets.map(b => {
+    const count = scores.filter(s => s >= b.min && s <= b.max).length
+    return { range: b.range, count, pct: total ? Math.round((count / total) * 10000) / 100 : 0 }
+  })
 }
 
 // ── 3. Usecase breakdown ──────────────────────────────────────────────────────
@@ -758,7 +789,27 @@ export async function pharmaDashboardBestPerformers(
     }))
     .sort((a, b) => b.avg_score - a.avg_score || b.sessions - a.sessions)
     .slice(0, limit)
-  return { data }
+
+  // sim.topstats — all-time (not date-filtered) aggregate. Only Sanfer's
+  // bridge has this action confirmed working; skip silently for everyone else.
+  let allTimeStats: BestPerformersApiResponse['allTimeStats']
+  if (tenant === 'sanfer') {
+    try {
+      const ts = await bridgeCall<{
+        stats: { total_records: number; avg_best_score: number; records_ge80: number; unique_sims: number; unique_users: number }
+      }>('sanfer', 'sim.topstats')
+      allTimeStats = {
+        totalRecords: Number(ts.stats.total_records),
+        avgBestScore: Number(ts.stats.avg_best_score),
+        recordsGe80:  Number(ts.stats.records_ge80),
+        uniqueUsers:  Number(ts.stats.unique_users),
+        uniqueSims:   Number(ts.stats.unique_sims),
+      }
+    } catch {
+      // non-critical — omit if the call fails
+    }
+  }
+  return { data, allTimeStats }
 }
 
 // ── 5. Individual results ─────────────────────────────────────────────────────
@@ -807,6 +858,154 @@ export async function pharmaDashboardResults(
       }
     })
   return { data }
+}
+
+// ── Objections (Sanfer only, confirmed via objections.demorp6) ────────────────
+
+interface SanferObjectionRow {
+  usecase_id: number
+  objection_text: string
+  count: number
+  pass_count: number
+  pass_rate: number
+  model_answer: string
+  top_answers: { text: string; name: string }[]
+}
+
+export async function pharmaDashboardObjections(
+  tenant: PharmaTenant,
+  params: { fromIso: string; toIso: string },
+): Promise<ObjectionsApiResponse> {
+  const cfg = TENANT_CONFIG[tenant]
+  if (!cfg.hasObjections || !cfg.ucids) return { data: [] }
+  const resp = await bridgeCall<{ data: SanferObjectionRow[] }>(tenant, 'objections.demorp6', {
+    ids: cfg.ucids.join(','), date_from: isoToDate(params.fromIso), date_to: isoToDate(params.toIso),
+  })
+  const data: ObjectionRow[] = (resp.data ?? []).map(r => ({
+    usecaseId: r.usecase_id,
+    objectionText: r.objection_text,
+    count: Number(r.count),
+    passRate: Number(r.pass_rate),
+    modelAnswer: r.model_answer || null,
+    topAnswers: r.top_answers ?? [],
+  }))
+  return { data }
+}
+
+// ── Business Lines (Sanfer only, confirmed via CERT_LINES in src/lib/certification.ts) ──
+// Copied directly from the real Sanfer_dashboard repo (RahulAIML/sanfer) —
+// tagId -> its 3 assigned saexId (usecase_id) values. This is NOT the same
+// number space as tag1.id/profile_id — usecase_ids are the 390-493 exercise
+// IDs, tag1/profile_id are small 1-32 line identifiers. An earlier version of
+// this function wrongly assumed usecase_id === tagId, which produced all
+// zeros (no session's usecase_id is ever in the 1-32 range).
+const SANFER_CERT_LINE_SAEX_IDS: Record<number, number[]> = {
+  6:  [464, 436, 484], // Minotauros
+  28: [411, 454, 481], // Proteus
+  8:  [489, 460, 468], // Poseidón
+  9:  [445, 410, 491], // Horus
+  10: [461, 402, 432], // Cíclopes
+  11: [453, 419, 403], // Cronos
+  12: [465, 405, 446], // Atlantes
+  23: [420, 408, 440], // Fenix
+  5:  [428, 457, 488], // Argonautas
+  7:  [409, 449, 420], // Apolos
+  1:  [399, 490, 390], // Titanes
+  2:  [493, 413, 448], // Pegasos
+  3:  [406, 492, 455], // Perseus
+  25: [467, 433, 462], // Ares
+  24: [421, 423, 439], // Vulcanos
+}
+
+interface Tag1Row { id: number; name: string; idStatus: number }
+interface SanferMemberTagRow { mb_idTag1: number }
+
+export async function pharmaDashboardBusinessLines(
+  tenant: PharmaTenant,
+  params: { fromIso: string; toIso: string },
+): Promise<BusinessLinesApiResponse> {
+  const cfg = TENANT_CONFIG[tenant]
+  if (!cfg.hasBusinessLines) return { data: [] }
+
+  // tag1 catalog lives behind the api/data/ REST proxy (same convention
+  // Sanfer's own fetchLines() uses: src/api/client.ts `${BASE}/data/${CLIENT}/tag1`),
+  // NOT the action-dispatch bridge — hardcoded here since only Sanfer has
+  // hasBusinessLines set; revisit with a per-tenant DB-name config field if
+  // a second tenant needs this.
+  const [tagResp, rows, membersResp] = await Promise.all([
+    fetch('https://serv.aux-rolplay.com/sanfer/api/data/rolplay_sanfer_robin/tag1', {
+      signal: AbortSignal.timeout(30_000), cache: 'no-store',
+    }).then(r => r.json()).catch(() => null) as Promise<{ data: Tag1Row[] } | null>,
+    fetchSaleExercisesSessions(tenant, params.fromIso, params.toIso),
+    bridgeCall<{ data: SanferMemberTagRow[] }>(tenant, 'org.members').catch(() => ({ data: [] })),
+  ])
+  const lines = (tagResp?.data ?? []).filter(t => SANFER_CERT_LINE_SAEX_IDS[t.id])
+
+  const memberCountByTag = new Map<number, number>()
+  for (const m of membersResp.data ?? []) {
+    if (!m.mb_idTag1) continue
+    memberCountByTag.set(m.mb_idTag1, (memberCountByTag.get(m.mb_idTag1) ?? 0) + 1)
+  }
+
+  const byUsecase = new Map<number, { total: number; scoreSum: number; users: Set<string> }>()
+  for (const r of rows) {
+    const b = byUsecase.get(r.usecase_id) ?? { total: 0, scoreSum: 0, users: new Set() }
+    b.total++; b.scoreSum += r.score
+    if (r.email) b.users.add(r.email)
+    byUsecase.set(r.usecase_id, b)
+  }
+
+  const data: BusinessLineRow[] = lines.map(t => {
+    const saexIds = SANFER_CERT_LINE_SAEX_IDS[t.id] ?? []
+    let total = 0, scoreSum = 0
+    const users = new Set<string>()
+    for (const id of saexIds) {
+      const b = byUsecase.get(id)
+      if (!b) continue
+      total += b.total; scoreSum += b.scoreSum
+      for (const u of b.users) users.add(u)
+    }
+    return {
+      tagId: t.id, name: t.name,
+      memberCount: memberCountByTag.get(t.id) ?? 0,
+      simCount: total,
+      avgScore: total ? Math.round((scoreSum / total) * 100) / 100 : null,
+      activeUsers: users.size,
+    }
+  })
+  return { data }
+}
+
+// ── Organization (Sanfer only, confirmed via org.members/org.admins) ──────────
+
+interface SanferMemberRow {
+  mb_id: number; mb_fullname: string; mb_email: string
+  mb_admin: number; mb_designation: string
+}
+interface SanferAdminRow {
+  rpa_id: number; rpa_full_name: string; rpa_email: string; rpa_profile_type: string
+}
+
+export async function pharmaDashboardOrganization(tenant: PharmaTenant): Promise<OrganizationApiResponse> {
+  const EMPTY: OrganizationApiResponse = { totalMembers: 0, totalAdmins: 0, totalSupervisors: 0, members: [], admins: [] }
+  if (!TENANT_CONFIG[tenant].hasOrganization) return EMPTY
+
+  const [membersResp, adminsResp] = await Promise.all([
+    bridgeCall<{ data: SanferMemberRow[]; count: number }>(tenant, 'org.members'),
+    bridgeCall<{ data: SanferAdminRow[]; count: number }>(tenant, 'org.admins'),
+  ])
+
+  const members: OrgMemberRow[] = (membersResp.data ?? []).map(m => ({
+    id: m.mb_id, fullName: m.mb_fullname, email: m.mb_email,
+    designation: m.mb_designation || null, adminId: m.mb_admin || null,
+  }))
+  const admins: OrgAdminRow[] = (adminsResp.data ?? []).map(a => ({
+    id: a.rpa_id, fullName: a.rpa_full_name, email: a.rpa_email, profileType: a.rpa_profile_type,
+  }))
+  const totalSupervisors = admins.filter(a => a.profileType === 'supervisor').length
+  const totalAdmins = admins.filter(a => a.profileType === 'admin' || a.profileType === 'tenant').length
+
+  return { totalMembers: membersResp.count ?? members.length, totalAdmins, totalSupervisors, members, admins }
 }
 
 // ── 6. Drilldown (single session) ─────────────────────────────────────────────

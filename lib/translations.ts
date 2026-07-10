@@ -504,6 +504,41 @@ export const translations = {
     registerErrPwMatch:     'Passwords do not match',
     registerErrFailed:      'Registration failed. Please try again.',
     registerErrOccurred:    'An error occurred. Please try again.',
+
+    // ── Business Lines (pharma-sim tenants) ───────────────────
+    businessLines:      'Business Lines',
+    businessLinesSub:   'Certification lines — members, sessions, and average score per line',
+    colLine:            'Line',
+    colMembers:          'Members',
+    colSimCount:         'Sessions',
+    colActiveUsers:      'Active Users',
+
+    // ── Organization (pharma-sim tenants) ─────────────────────
+    organization:        'Organization',
+    organizationSub:     'Members and administrators roster',
+    totalAdminsLabel:    'Total Admins',
+    totalSupervisorsLabel: 'Total Supervisors',
+    colFullName:         'Name',
+    colDesignation:      'Designation',
+    colProfileType:      'Role',
+
+    // ── Objections (pharma-sim tenants) ───────────────────────
+    objections:          'Objection Handling',
+    objectionsSub:       'Doctor objections encountered in practice sessions, with success rates',
+    colObjectionText:    'Objection',
+    colTimesEncountered: 'Times Encountered',
+    colSuccessRate:      'Success Rate',
+    colModelAnswer:      'Model Answer',
+
+    // ── All-time stats (pharma-sim tenants) ───────────────────
+    allTimeStats:        'All-Time Stats',
+    totalRecordsAllTime: 'Total Records (All-Time)',
+    avgBestScoreAllTime: 'Avg Best Score (All-Time)',
+    recordsGe80Label:    'Records ≥ 80%',
+
+    // ── Score distribution (pharma-sim tenants) ───────────────
+    scoreDistribution:    'Score Distribution',
+    scoreDistributionSub: 'How session scores are spread across ranges',
   },
 
   es: {
@@ -1003,6 +1038,41 @@ export const translations = {
     registerErrPwMatch:     'Las contraseñas no coinciden',
     registerErrFailed:      'Error al registrarse. Inténtalo de nuevo.',
     registerErrOccurred:    'Ocurrió un error. Inténtalo de nuevo.',
+
+    // ── Líneas de negocio (tenants pharma-sim) ────────────────
+    businessLines:      'Líneas de Negocio',
+    businessLinesSub:   'Líneas de certificación — miembros, sesiones y puntuación media por línea',
+    colLine:            'Línea',
+    colMembers:          'Miembros',
+    colSimCount:         'Sesiones',
+    colActiveUsers:      'Usuarios Activos',
+
+    // ── Organización (tenants pharma-sim) ─────────────────────
+    organization:        'Organización',
+    organizationSub:     'Directorio de miembros y administradores',
+    totalAdminsLabel:    'Total Administradores',
+    totalSupervisorsLabel: 'Total Supervisores',
+    colFullName:         'Nombre',
+    colDesignation:      'Puesto',
+    colProfileType:      'Rol',
+
+    // ── Manejo de objeciones (tenants pharma-sim) ─────────────
+    objections:          'Manejo de Objeciones',
+    objectionsSub:       'Objeciones de médicos encontradas en sesiones de práctica, con tasas de éxito',
+    colObjectionText:    'Objeción',
+    colTimesEncountered: 'Veces Encontrada',
+    colSuccessRate:      'Tasa de Éxito',
+    colModelAnswer:      'Respuesta Modelo',
+
+    // ── Estadísticas históricas (tenants pharma-sim) ──────────
+    allTimeStats:        'Estadísticas Históricas',
+    totalRecordsAllTime: 'Total de Registros (Histórico)',
+    avgBestScoreAllTime: 'Punt. Media Mejor Resultado (Histórico)',
+    recordsGe80Label:    'Registros ≥ 80%',
+
+    // ── Distribución de puntuación (tenants pharma-sim) ───────
+    scoreDistribution:    'Distribución de Puntuación',
+    scoreDistributionSub: 'Cómo se distribuyen las puntuaciones de las sesiones por rango',
   },
 } as const
 

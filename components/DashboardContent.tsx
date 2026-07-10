@@ -704,6 +704,22 @@ export function DashboardContent() {
                     {t.bestPerformersSub} — {t.last} {days} {t.days}
                   </p>
                 </div>
+
+                {/* All-time stats — only present for tenants with a real source for it (e.g. Sanfer's sim.topstats) */}
+                {bestPerformers?.allTimeStats && (
+                  <div className="ml-10 mb-4 flex flex-wrap gap-x-6 gap-y-2 text-xs">
+                    <span className="text-muted-foreground">
+                      {t.totalRecordsAllTime}: <span className="font-semibold text-foreground tabular-nums">{bestPerformers.allTimeStats.totalRecords.toLocaleString()}</span>
+                    </span>
+                    <span className="text-muted-foreground">
+                      {t.avgBestScoreAllTime}: <span className="font-semibold text-foreground tabular-nums">{bestPerformers.allTimeStats.avgBestScore} pts</span>
+                    </span>
+                    <span className="text-muted-foreground">
+                      {t.recordsGe80Label}: <span className="font-semibold text-primary tabular-nums">{bestPerformers.allTimeStats.recordsGe80.toLocaleString()}</span>
+                    </span>
+                  </div>
+                )}
+
                 {bestLoading ? (
                   <div className="space-y-3">
                     {Array.from({ length: 5 }).map((_, i) => (
@@ -770,6 +786,33 @@ export function DashboardContent() {
                     })}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Score Distribution — only present for tenants where it can be computed from raw session rows */}
+            {(trends?.scoreDistribution?.length ?? 0) > 0 && (
+              <div className="rounded-[16px] border border-border/60 bg-card p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)]">
+                <div className="mb-5">
+                  <h3 className="text-base sm:text-lg font-semibold">{t.scoreDistribution}</h3>
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-1.5">{t.scoreDistributionSub}</p>
+                </div>
+                <div className="space-y-2">
+                  {trends!.scoreDistribution!.map(bucket => (
+                    <div key={bucket.range} className="flex items-center gap-3">
+                      <span className="w-16 shrink-0 text-xs font-medium text-muted-foreground tabular-nums">{bucket.range}</span>
+                      <div className="flex-1 h-5 bg-muted/40 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full"
+                          style={{ width: `${Math.max(bucket.pct, bucket.count > 0 ? 2 : 0)}%`, background: `linear-gradient(90deg, hsl(var(--primary)), hsl(var(--accent)))` }}
+                        />
+                      </div>
+                      <span className="w-20 shrink-0 text-xs text-right tabular-nums">
+                        <span className="font-semibold">{bucket.count}</span>
+                        <span className="text-muted-foreground"> ({bucket.pct}%)</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 

@@ -20,6 +20,8 @@ import type {
   TrendsApiResponse,
   UsecaseBreakdownApiResponse,
   UsecaseApiRow,
+  ObjectionsApiResponse,
+  ObjectionRow,
 } from "@/lib/types"
 
 const icons = [
@@ -77,13 +79,15 @@ export default function CoachPage() {
   const brand = useClientBrand()
   const days = Math.round((dateRange.to.getTime() - dateRange.from.getTime()) / 86_400_000)
 
-  const overviewUrl = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to, { solution: "coach", rk: refreshKey })
-  const trendsUrl   = buildApiUrl("/api/dashboard/trends",   dateRange.from, dateRange.to, { solution: "coach", rk: refreshKey })
-  const ucUrl       = buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to, { solution: "coach", rk: refreshKey })
+  const overviewUrl   = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to, { solution: "coach", rk: refreshKey })
+  const trendsUrl     = buildApiUrl("/api/dashboard/trends",   dateRange.from, dateRange.to, { solution: "coach", rk: refreshKey })
+  const ucUrl         = buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to, { solution: "coach", rk: refreshKey })
+  const objectionsUrl = buildApiUrl("/api/dashboard/objections", dateRange.from, dateRange.to, { rk: refreshKey })
 
   const { data: overview, loading: overviewLoading, error: overviewError } = useApi<OverviewApiResponse>(overviewUrl)
   const { data: trends,   loading: trendsLoading,   error: trendsError }   = useApi<TrendsApiResponse>(trendsUrl)
   const { data: ucBreakdown, loading: ucLoading,    error: ucError }       = useApi<UsecaseBreakdownApiResponse>(ucUrl)
+  const { data: objections, loading: objectionsLoading }                  = useApi<ObjectionsApiResponse>(objectionsUrl)
 
   const hasData = overview && overview.totalEvaluations > 0
 
@@ -159,6 +163,15 @@ export default function CoachPage() {
       key: "passed", header: t.colPassed,
       render: r => <span className="tabular-nums text-primary font-semibold">{r.passed}</span>,
     },
+  ], [t])
+
+  const objectionColumns: Column<ObjectionRow>[] = useMemo(() => [
+    {
+      key: "objectionText", header: t.colObjectionText,
+      render: r => <span className="text-sm max-w-md block truncate" title={r.objectionText}>{r.objectionText}</span>,
+    },
+    { key: "count", header: t.colTimesEncountered, render: r => <span className="tabular-nums font-medium">{r.count}</span> },
+    { key: "passRate", header: t.colSuccessRate, render: r => <PassRateBar value={r.passRate} /> },
   ], [t])
 
   return (
@@ -250,6 +263,34 @@ export default function CoachPage() {
             }
           </div>
         </div>
+
+        {/* Objection Handling — only rendered when a tenant has real objection-handling data */}
+        {(objectionsLoading || (objections?.data?.length ?? 0) > 0) && (
+          <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-4 flex-wrap">
+              <div>
+                <h3 className="text-sm font-semibold">{t.objections}</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">{t.objectionsSub}</p>
+              </div>
+              <ExportButton
+                data={objections?.data ?? []}
+                filename={csvFilename("objections")}
+                columns={[
+                  { header: "Objection",         value: r => r.objectionText },
+                  { header: "Times Encountered", value: r => r.count },
+                  { header: "Success Rate (%)",  value: r => r.passRate },
+                  { header: "Model Answer",      value: r => r.modelAnswer ?? "" },
+                ]}
+              />
+            </div>
+            <div className="p-5">
+              {objectionsLoading
+                ? <div className="py-10 text-center text-sm text-muted-foreground">{t.loading}</div>
+                : <DataTable data={objections!.data} columns={objectionColumns} pageSize={10} />
+              }
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

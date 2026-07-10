@@ -22,6 +22,10 @@ import type {
   TrendsApiResponse,
   ResultsApiResponse,
   EvaluationApiRow,
+  BusinessLinesApiResponse,
+  BusinessLineRow,
+  OrganizationApiResponse,
+  OrgMemberRow,
 } from "@/lib/types"
 
 const icons = [
@@ -61,10 +65,14 @@ export default function CertificationPage() {
   const overviewUrl = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to, { solution: "certification", rk: refreshKey })
   const trendsUrl   = buildApiUrl("/api/dashboard/trends",   dateRange.from, dateRange.to, { solution: "certification", rk: refreshKey })
   const resultsUrl  = buildApiUrl("/api/dashboard/results",  dateRange.from, dateRange.to, { limit: 100, solution: "certification", rk: refreshKey })
+  const linesUrl    = buildApiUrl("/api/dashboard/business-lines", dateRange.from, dateRange.to, { rk: refreshKey })
+  const orgUrl      = buildApiUrl("/api/dashboard/organization", dateRange.from, dateRange.to, { rk: refreshKey })
 
   const { data: overview, loading: overviewLoading, error: overviewError } = useApi<OverviewApiResponse>(overviewUrl)
   const { data: trends,   loading: trendsLoading,   error: trendsError }   = useApi<TrendsApiResponse>(trendsUrl)
   const { data: results,  loading: resultsLoading,  error: resultsError }  = useApi<ResultsApiResponse>(resultsUrl)
+  const { data: lines,    loading: linesLoading }                          = useApi<BusinessLinesApiResponse>(linesUrl)
+  const { data: org,      loading: orgLoading }                            = useApi<OrganizationApiResponse>(orgUrl)
 
   const hasData = overview && overview.totalEvaluations > 0
 
@@ -168,6 +176,25 @@ export default function CertificationPage() {
     },
   ], [t])
 
+  const lineColumns: Column<BusinessLineRow>[] = useMemo(() => [
+    { key: "name", header: t.colLine, render: r => <span className="font-medium text-sm capitalize">{r.name}</span> },
+    { key: "memberCount", header: t.colMembers, render: r => <span className="tabular-nums font-medium">{r.memberCount}</span> },
+    { key: "simCount", header: t.colSimCount, render: r => <span className="tabular-nums font-medium">{r.simCount}</span> },
+    {
+      key: "avgScore", header: t.colAvgScore,
+      render: r => r.avgScore != null
+        ? <span className="tabular-nums font-semibold">{r.avgScore} pts</span>
+        : <span className="text-muted-foreground">—</span>,
+    },
+    { key: "activeUsers", header: t.colActiveUsers, render: r => <span className="tabular-nums text-primary font-semibold">{r.activeUsers}</span> },
+  ], [t])
+
+  const memberColumns: Column<OrgMemberRow>[] = useMemo(() => [
+    { key: "fullName", header: t.colFullName, render: r => <span className="font-medium text-sm">{r.fullName}</span> },
+    { key: "email", header: t.colEmail, render: r => <span className="text-muted-foreground text-xs">{r.email}</span> },
+    { key: "designation", header: t.colDesignation, render: r => <span className="text-muted-foreground text-xs">{r.designation ?? "—"}</span> },
+  ], [t])
+
   return (
     <div className="min-h-screen w-full">
       <DashboardHeader title={t.certTitle} subtitle={t.certSub} />
@@ -265,6 +292,51 @@ export default function CertificationPage() {
             }
           </div>
         </div>
+
+        {/* Business Lines — only rendered when a tenant has a real lines catalog */}
+        {(linesLoading || (lines?.data?.length ?? 0) > 0) && (
+          <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-border">
+              <h3 className="text-sm font-semibold">{t.businessLines}</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">{t.businessLinesSub}</p>
+            </div>
+            <div className="p-5">
+              {linesLoading
+                ? <div className="py-10 text-center text-sm text-muted-foreground">{t.loading}</div>
+                : <DataTable data={lines!.data} columns={lineColumns} pageSize={15} />
+              }
+            </div>
+          </div>
+        )}
+
+        {/* Organization — only rendered when a tenant has a real members/admins source */}
+        {(orgLoading || (org?.members?.length ?? 0) > 0) && (
+          <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-4 flex-wrap">
+              <div>
+                <h3 className="text-sm font-semibold">{t.organization}</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {orgLoading ? t.loading : `${org?.totalMembers ?? 0} ${t.colMembers.toLowerCase()} · ${org?.totalAdmins ?? 0} ${t.totalAdminsLabel.toLowerCase()} · ${org?.totalSupervisors ?? 0} ${t.totalSupervisorsLabel.toLowerCase()}`}
+                </p>
+              </div>
+              <ExportButton
+                data={org?.members ?? []}
+                filename={csvFilename("organization-members")}
+                columns={[
+                  { header: "Name",        value: r => r.fullName },
+                  { header: "Email",       value: r => r.email },
+                  { header: "Designation", value: r => r.designation ?? "" },
+                ]}
+              />
+            </div>
+            <div className="p-5">
+              {orgLoading
+                ? <div className="py-10 text-center text-sm text-muted-foreground">{t.loading}</div>
+                : <DataTable data={org!.members} columns={memberColumns} pageSize={10} />
+              }
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

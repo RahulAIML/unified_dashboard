@@ -76,6 +76,12 @@ interface TenantConfig {
   hasCertification?: boolean
   /** kpi kind only — activity_ids that are the real "Coach Maestro" module, verified against kpi.activity_summary. */
   coachActivityIds?: number[]
+  /** True only where objections.demorp6 is confirmed present and working (Sanfer). */
+  hasObjections?: boolean
+  /** True only where a members-tag "business lines" catalog (tag1 table) is confirmed present (Sanfer). */
+  hasBusinessLines?: boolean
+  /** True only where org.members/org.admins are confirmed present and working (Sanfer). */
+  hasOrganization?: boolean
 }
 
 function unifiedBridgeUrl(tenant: string): string {
@@ -99,6 +105,7 @@ export const TENANT_CONFIG: Record<PharmaTenant, TenantConfig> = {
   sanfer: {
     kind: 'sale_exercises', url: unifiedBridgeUrl('sanfer'), xTenant: 'sanfer',
     ucids: SANFER_CERT_IDS, hasCertification: true,
+    hasObjections: true, hasBusinessLines: true, hasOrganization: true,
   },
   apotex: {
     kind: 'kpi', url: unifiedBridgeUrl('apotex'), xTenant: 'apotex',
