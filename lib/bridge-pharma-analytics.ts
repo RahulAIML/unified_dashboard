@@ -272,6 +272,11 @@ interface SanferCertStats {
 }
 interface SanferCertRow {
   mb_user: string; nombre: string | null; profile_id: number
+  // Real sales-line name for this profile_id, from queries_Sanfer.pdf's
+  // "Users certified by line" query (LEFT JOIN sales_line ON bhl_id =
+  // prf_assigned_profile) — added to the bridge query for this; without it
+  // there is no way to name a profile_id group other than the raw number.
+  linea: string | null
   finalized: 0 | 1
   // fase*_score come back from PDO as numeric strings ("95.00"), not numbers —
   // same class of bug as Apotex's sessions_pass. Number() before any arithmetic,
@@ -310,9 +315,9 @@ async function sanferCertificationOverview(): Promise<OverviewApiResponse> {
 
 async function sanferCertificationBreakdown(): Promise<UsecaseBreakdownApiResponse> {
   const resp = await bridgeCall<{ data: SanferCertRow[] }>('sanfer', 'org.certification', { refresh: 1 })
-  const byProfile = new Map<number, { total: number; passed: number; scores: number[] }>()
+  const byProfile = new Map<number, { name: string | null; total: number; passed: number; scores: number[] }>()
   for (const r of resp.data ?? []) {
-    const b = byProfile.get(r.profile_id) ?? { total: 0, passed: 0, scores: [] }
+    const b = byProfile.get(r.profile_id) ?? { name: r.linea, total: 0, passed: 0, scores: [] }
     b.total++
     if (r.finalized) b.passed++
     b.scores.push(...faseScores(r))
@@ -321,7 +326,7 @@ async function sanferCertificationBreakdown(): Promise<UsecaseBreakdownApiRespon
   const data: UsecaseApiRow[] = [...byProfile.entries()]
     .map(([profileId, b]) => ({
       usecaseId: profileId,
-      usecase_name: `Línea de certificación ${profileId}`,
+      usecase_name: b.name,
       totalEvaluations: b.total,
       avgScore: b.scores.length ? Math.round((b.scores.reduce((a, c) => a + c, 0) / b.scores.length) * 100) / 100 : null,
       passRate: b.total ? Math.round((b.passed / b.total) * 10000) / 100 : null,
