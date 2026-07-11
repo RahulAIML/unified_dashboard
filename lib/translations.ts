@@ -228,6 +228,8 @@ export const translations = {
     partialAccessTitle:   'Some modules are unavailable',
     partialAccessSub:     'Your account has access to some features, but not all modules. Contact your administrator for full access.',
     moduleNotAvailable:   'This module is not available for your account',
+    goToSecondBrain:      'Go to Second Brain',
+    goToLms:              'Go to LMS',
 
     // ── Best Performers ──────────────────────────────────────
     bestPerformers:    'Best Performers',
@@ -762,6 +764,8 @@ export const translations = {
     partialAccessTitle:   'Algunos módulos no están disponibles',
     partialAccessSub:     'Tu cuenta tiene acceso a algunas funciones, pero no todos los módulos. Contacta a tu administrador para obtener acceso completo.',
     moduleNotAvailable:   'Este módulo no está disponible para tu cuenta',
+    goToSecondBrain:      'Ir a Second Brain',
+    goToLms:              'Ir a LMS',
 
     // ── Best Performers ──────────────────────────────────────
     bestPerformers:    'Mejores Participantes',
