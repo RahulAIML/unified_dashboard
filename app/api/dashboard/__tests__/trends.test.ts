@@ -34,14 +34,14 @@ describe('GET /api/dashboard/trends', () => {
   })
 
   it("returns empty trends for orgType 'none'", async () => {
-    vi.mocked(resolveOrgType).mockReturnValue('none')
+    vi.mocked(resolveOrgType).mockResolvedValue('none')
     const body = await (await GET(makeReq())).json()
     expect(body.data).toEqual(EMPTY_TRENDS)
     expect(bancoDashboardTrends).not.toHaveBeenCalled()
   })
 
   it("calls bancoDashboardTrends for orgType 'banco'", async () => {
-    vi.mocked(resolveOrgType).mockReturnValue('banco')
+    vi.mocked(resolveOrgType).mockResolvedValue('banco')
     vi.mocked(bancoDashboardTrends).mockResolvedValue({
       scoreTrend: [{ date: '2026-04-10', value: 70 }],
       passFailTrend: [], evalCountTrend: [],
@@ -52,7 +52,7 @@ describe('GET /api/dashboard/trends', () => {
   })
 
   it("calls getDashboardTrends for orgType 'analytics'", async () => {
-    vi.mocked(resolveOrgType).mockReturnValue('analytics')
+    vi.mocked(resolveOrgType).mockResolvedValue('analytics')
     vi.mocked(getDashboardTrends).mockResolvedValue(EMPTY_TRENDS)
     await GET(makeReq())
     expect(getDashboardTrends).toHaveBeenCalledOnce()
@@ -60,7 +60,7 @@ describe('GET /api/dashboard/trends', () => {
   })
 
   it('returns empty for solution=second-brain', async () => {
-    vi.mocked(resolveOrgType).mockReturnValue('analytics')
+    vi.mocked(resolveOrgType).mockResolvedValue('analytics')
     const body = await (await GET(makeReq('&solution=second-brain'))).json()
     expect(body.data).toEqual(EMPTY_TRENDS)
   })

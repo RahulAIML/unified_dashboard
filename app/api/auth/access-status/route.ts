@@ -132,7 +132,7 @@ export async function GET(request: NextRequest) {
   const hasCoachData       = auth.customerId > 0
   const hasSecondBrainData = await probeSecondBrainAccess(auth.customerId, auth.email)
   const hasBancoAccess     = isBancoOrg(auth.email)
-  const hasPharmaAccess    = resolvePharmaTenant(auth.email) !== null
+  const hasPharmaAccess    = await resolvePharmaTenant(auth.email) !== null
   const hasAnyAccess       = hasCoachData || hasSecondBrainData || hasBancoAccess || hasPharmaAccess
 
   return NextResponse.json({

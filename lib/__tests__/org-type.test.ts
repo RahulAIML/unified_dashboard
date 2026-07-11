@@ -68,30 +68,30 @@ describe('resolveOrgType', () => {
     delete process.env.BANCO_EMAIL_DOMAINS
   })
 
-  it("returns 'banco' when email matches Banco domain, regardless of customerId", () => {
+  it("returns 'banco' when email matches Banco domain, regardless of customerId", async () => {
     process.env.BANCO_EMAIL_DOMAINS = 'bancoppel.com'
-    expect(resolveOrgType('user@bancoppel.com', 0)).toBe('banco')
-    expect(resolveOrgType('user@bancoppel.com', 5)).toBe('banco')
+    expect(await resolveOrgType('user@bancoppel.com', 0)).toBe('banco')
+    expect(await resolveOrgType('user@bancoppel.com', 5)).toBe('banco')
   })
 
-  it("returns 'analytics' when customerId > 0 and not Banco", () => {
+  it("returns 'analytics' when customerId > 0 and not Banco", async () => {
     process.env.BANCO_EMAIL_DOMAINS = 'bancoppel.com'
-    expect(resolveOrgType('user@rolplay.pro', 3)).toBe('analytics')
-    expect(resolveOrgType('admin@hyqvia.com', 11)).toBe('analytics')
+    expect(await resolveOrgType('user@rolplay.pro', 3)).toBe('analytics')
+    expect(await resolveOrgType('admin@hyqvia.com', 11)).toBe('analytics')
   })
 
-  it("returns 'none' when not Banco and customerId is 0", () => {
+  it("returns 'none' when not Banco and customerId is 0", async () => {
     process.env.BANCO_EMAIL_DOMAINS = 'bancoppel.com'
-    expect(resolveOrgType('newuser@gmail.com', 0)).toBe('none')
+    expect(await resolveOrgType('newuser@gmail.com', 0)).toBe('none')
   })
 
-  it("returns 'none' when BANCO_EMAIL_DOMAINS is not set and customerId is 0", () => {
+  it("returns 'none' when BANCO_EMAIL_DOMAINS is not set and customerId is 0", async () => {
     delete process.env.BANCO_EMAIL_DOMAINS
-    expect(resolveOrgType('user@bancoppel.com', 0)).toBe('none')
+    expect(await resolveOrgType('user@bancoppel.com', 0)).toBe('none')
   })
 
-  it("'banco' takes priority over 'analytics' if a Banco user also has customerId > 0", () => {
+  it("'banco' takes priority over 'analytics' if a Banco user also has customerId > 0", async () => {
     process.env.BANCO_EMAIL_DOMAINS = 'bancoppel.com'
-    expect(resolveOrgType('user@bancoppel.com', 7)).toBe('banco')
+    expect(await resolveOrgType('user@bancoppel.com', 7)).toBe('banco')
   })
 })

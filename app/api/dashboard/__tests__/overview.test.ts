@@ -70,7 +70,7 @@ describe('GET /api/dashboard/overview — auth', () => {
 
 describe("GET /api/dashboard/overview — orgType 'none'", () => {
   it('returns empty overview without calling any data source', async () => {
-    vi.mocked(resolveOrgType).mockReturnValue('none')
+    vi.mocked(resolveOrgType).mockResolvedValue('none')
 
     const res  = await GET(makeRequest())
     const body = await res.json()
@@ -88,7 +88,7 @@ describe("GET /api/dashboard/overview — orgType 'none'", () => {
 
 describe("GET /api/dashboard/overview — orgType 'banco'", () => {
   it('calls bancoDashboardOverview and returns its data', async () => {
-    vi.mocked(resolveOrgType).mockReturnValue('banco')
+    vi.mocked(resolveOrgType).mockResolvedValue('banco')
     vi.mocked(bancoDashboardOverview).mockResolvedValue({
       totalEvaluations: 50, avgScore: 72.5, passRate: 80,
       passedEvaluations: 40, prevTotalEvaluations: 30,
@@ -106,7 +106,7 @@ describe("GET /api/dashboard/overview — orgType 'banco'", () => {
   })
 
   it('returns 500 when banco bridge throws', async () => {
-    vi.mocked(resolveOrgType).mockReturnValue('banco')
+    vi.mocked(resolveOrgType).mockResolvedValue('banco')
     vi.mocked(bancoDashboardOverview).mockRejectedValue(new Error('bridge down'))
 
     const res  = await GET(makeRequest())
@@ -121,7 +121,7 @@ describe("GET /api/dashboard/overview — orgType 'banco'", () => {
 
 describe("GET /api/dashboard/overview — orgType 'analytics'", () => {
   it('calls getDashboardOverview and returns its data', async () => {
-    vi.mocked(resolveOrgType).mockReturnValue('analytics')
+    vi.mocked(resolveOrgType).mockResolvedValue('analytics')
     vi.mocked(getDashboardOverview).mockResolvedValue({
       totalEvaluations: 120, avgScore: 81, passRate: 88,
       passedEvaluations: 106, prevTotalEvaluations: 100,
@@ -138,7 +138,7 @@ describe("GET /api/dashboard/overview — orgType 'analytics'", () => {
   })
 
   it('returns empty when solution=second-brain', async () => {
-    vi.mocked(resolveOrgType).mockReturnValue('analytics')
+    vi.mocked(resolveOrgType).mockResolvedValue('analytics')
 
     const res  = await GET(makeRequest('&solution=second-brain'))
     const body = await res.json()
@@ -149,7 +149,7 @@ describe("GET /api/dashboard/overview — orgType 'analytics'", () => {
   })
 
   it('returns 400 when date range is missing', async () => {
-    vi.mocked(resolveOrgType).mockReturnValue('analytics')
+    vi.mocked(resolveOrgType).mockResolvedValue('analytics')
 
     const res = await GET(new NextRequest('http://localhost/api/dashboard/overview'))
     expect(res.status).toBe(400)

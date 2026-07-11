@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
     return buildSuccess(demoUsecaseBreakdown(range.from, range.to, sol), { source: 'demo' })
   }
 
-  const orgType = resolveOrgType(ctx.email, ctx.customerId)
+  const orgType = await resolveOrgType(ctx.email, ctx.customerId)
   if (orgType === 'none') return buildSuccess({ data: [] })
 
   try {
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
 
     // ── Pharma-sim pipeline (Sanfer, Apotex, …) ───────────────────────────────
     if (orgType === 'pharma') {
-      const tenant = resolvePharmaTenant(ctx.email)
+      const tenant = await resolvePharmaTenant(ctx.email)
       if (!tenant) return buildApiError('Pharma tenant could not be resolved', 500)
 
       const data = await pharmaDashboardUsecaseBreakdown(tenant, {

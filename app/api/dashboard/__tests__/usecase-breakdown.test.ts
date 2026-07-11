@@ -33,13 +33,13 @@ describe('GET /api/dashboard/usecase-breakdown', () => {
   })
 
   it("returns empty data for orgType 'none'", async () => {
-    vi.mocked(resolveOrgType).mockReturnValue('none')
+    vi.mocked(resolveOrgType).mockResolvedValue('none')
     const body = await (await GET(makeReq())).json()
     expect(body.data).toEqual({ data: [] })
   })
 
   it("calls bancoDashboardUsecaseBreakdown for orgType 'banco'", async () => {
-    vi.mocked(resolveOrgType).mockReturnValue('banco')
+    vi.mocked(resolveOrgType).mockResolvedValue('banco')
     vi.mocked(bancoDashboardUsecaseBreakdown).mockResolvedValue({
       data: [{ usecaseId: 11, usecase_name: null, totalEvaluations: 10, avgScore: 70, passRate: 80, passed: 8 }],
     })
@@ -49,7 +49,7 @@ describe('GET /api/dashboard/usecase-breakdown', () => {
   })
 
   it("calls getUsecaseBreakdown for orgType 'analytics'", async () => {
-    vi.mocked(resolveOrgType).mockReturnValue('analytics')
+    vi.mocked(resolveOrgType).mockResolvedValue('analytics')
     vi.mocked(getUsecaseBreakdown).mockResolvedValue([])
     await GET(makeReq())
     expect(getUsecaseBreakdown).toHaveBeenCalledOnce()

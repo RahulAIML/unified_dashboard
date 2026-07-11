@@ -33,9 +33,9 @@ export async function GET(
       return buildSuccess({ ...report, savedReportId: id }, { savedReportId: id, source: 'demo' })
     }
 
-    const orgType = resolveOrgType(ctx.email, ctx.customerId)
+    const orgType = await resolveOrgType(ctx.email, ctx.customerId)
     if (orgType === 'pharma') {
-      const tenant = resolvePharmaTenant(ctx.email)
+      const tenant = await resolvePharmaTenant(ctx.email)
       if (!tenant) return buildApiError('Pharma tenant could not be resolved', 500)
 
       const data = await pharmaDashboardDrilldown(tenant, id)

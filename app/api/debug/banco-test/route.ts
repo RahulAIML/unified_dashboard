@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const orgType       = resolveOrgType(auth.email, auth.customerId)
+  const orgType       = await resolveOrgType(auth.email, auth.customerId)
   const isBanco       = isBancoOrg(auth.email)
   const bancoDomains  = process.env.BANCO_EMAIL_DOMAINS ?? '(not set)'
   const bridgeUrl     = process.env.BRIDGE_URL     ? '✓ set' : '✗ MISSING'

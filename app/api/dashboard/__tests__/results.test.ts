@@ -33,13 +33,13 @@ describe('GET /api/dashboard/results', () => {
   })
 
   it("returns empty data for orgType 'none'", async () => {
-    vi.mocked(resolveOrgType).mockReturnValue('none')
+    vi.mocked(resolveOrgType).mockResolvedValue('none')
     const body = await (await GET(makeReq())).json()
     expect(body.data).toEqual({ data: [] })
   })
 
   it("calls bancoDashboardResults for orgType 'banco'", async () => {
-    vi.mocked(resolveOrgType).mockReturnValue('banco')
+    vi.mocked(resolveOrgType).mockResolvedValue('banco')
     vi.mocked(bancoDashboardResults).mockResolvedValue({
       data: [{ savedReportId: 1, usecaseId: 11, score: 75, result: 'passed', passed: true, date: '2026-04-15' }],
     })
@@ -49,7 +49,7 @@ describe('GET /api/dashboard/results', () => {
   })
 
   it("calls getEvaluationResults for orgType 'analytics'", async () => {
-    vi.mocked(resolveOrgType).mockReturnValue('analytics')
+    vi.mocked(resolveOrgType).mockResolvedValue('analytics')
     vi.mocked(getEvaluationResults).mockResolvedValue([])
     await GET(makeReq())
     expect(getEvaluationResults).toHaveBeenCalledOnce()
@@ -57,7 +57,7 @@ describe('GET /api/dashboard/results', () => {
   })
 
   it('caps limit at 200', async () => {
-    vi.mocked(resolveOrgType).mockReturnValue('analytics')
+    vi.mocked(resolveOrgType).mockResolvedValue('analytics')
     vi.mocked(getEvaluationResults).mockResolvedValue([])
     await GET(makeReq('&limit=9999'))
     const call = vi.mocked(getEvaluationResults).mock.calls[0]

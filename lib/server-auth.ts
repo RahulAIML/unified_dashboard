@@ -26,3 +26,18 @@ export async function getAuthContextFromRequest(request: NextRequest): Promise<A
     customerId,
   }
 }
+
+/**
+ * Returns the authenticated user's DB row only if role === 'admin'. Role
+ * isn't in the JWT claims, so this does one extra lookup — acceptable since
+ * admin routes are low-traffic. Returns null for unauthenticated OR
+ * non-admin requests (caller doesn't need to distinguish the two).
+ */
+export async function requireAdminFromRequest(request: NextRequest) {
+  const ctx = await getAuthContextFromRequest(request)
+  if (!ctx) return null
+  const { findUserById } = await import('./db-users')
+  const user = await findUserById(ctx.userId).catch(() => null)
+  if (!user || user.role !== 'admin') return null
+  return { ...ctx, role: user.role as 'admin' }
+}

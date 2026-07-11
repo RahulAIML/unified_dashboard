@@ -18,11 +18,11 @@ export async function GET(request: NextRequest) {
 
   if (isDemoMode()) return buildSuccess(EMPTY, { source: 'demo' })
 
-  const orgType = resolveOrgType(ctx.email, ctx.customerId)
+  const orgType = await resolveOrgType(ctx.email, ctx.customerId)
   if (orgType !== 'pharma') return buildSuccess(EMPTY)
 
   try {
-    const tenant = resolvePharmaTenant(ctx.email)
+    const tenant = await resolvePharmaTenant(ctx.email)
     if (!tenant) return buildApiError('Pharma tenant could not be resolved', 500)
 
     const data = await pharmaDashboardOrganization(tenant)

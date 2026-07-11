@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import {
   LayoutDashboard, BookOpen, BrainCircuit, Gamepad2,
-  BadgeCheck, Database, Sun, Moon, Settings, LogOut,
+  BadgeCheck, Database, Sun, Moon, Settings, LogOut, ShieldCheck,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useTheme } from "./ThemeProvider"
@@ -55,7 +55,7 @@ export function Sidebar() {
   const t     = useT()
   const brand = useClientBrand()
   const { platformName } = usePlatformName()
-  const { clearAuth } = useAuthContext()
+  const { clearAuth, user } = useAuthContext()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
 
@@ -99,6 +99,9 @@ export function Sidebar() {
     { href: "/certification", label: t.navCertification, icon: BadgeCheck      },
     { href: "/second-brain",  label: t.navSecondBrain,   icon: Database        },
     { href: "/settings",      label: t.navSettings,      icon: Settings        },
+    ...(user?.role === "admin"
+      ? [{ href: "/admin/tenants", label: t.navAdminTenants, icon: ShieldCheck }]
+      : []),
   ]
 
   // Close sidebar on route change (mobile)

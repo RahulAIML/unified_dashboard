@@ -33,13 +33,13 @@ describe('GET /api/dashboard/best-performers', () => {
   })
 
   it("returns empty data for orgType 'none'", async () => {
-    vi.mocked(resolveOrgType).mockReturnValue('none')
+    vi.mocked(resolveOrgType).mockResolvedValue('none')
     const body = await (await GET(makeReq())).json()
     expect(body.data).toEqual({ data: [] })
   })
 
   it("calls bancoDashboardBestPerformers for orgType 'banco'", async () => {
-    vi.mocked(resolveOrgType).mockReturnValue('banco')
+    vi.mocked(resolveOrgType).mockResolvedValue('banco')
     vi.mocked(bancoDashboardBestPerformers).mockResolvedValue({
       data: [{ user_email: '', user_name: 'Juan', sessions: 5, avg_score: 75, pass_rate: 80 }],
     })
@@ -50,7 +50,7 @@ describe('GET /api/dashboard/best-performers', () => {
   })
 
   it("calls bridgeBestPerformers for orgType 'analytics'", async () => {
-    vi.mocked(resolveOrgType).mockReturnValue('analytics')
+    vi.mocked(resolveOrgType).mockResolvedValue('analytics')
     vi.mocked(bridgeBestPerformers).mockResolvedValue([])
     await GET(makeReq())
     expect(bridgeBestPerformers).toHaveBeenCalledOnce()
@@ -58,7 +58,7 @@ describe('GET /api/dashboard/best-performers', () => {
   })
 
   it('caps limit at 5 for analytics', async () => {
-    vi.mocked(resolveOrgType).mockReturnValue('analytics')
+    vi.mocked(resolveOrgType).mockResolvedValue('analytics')
     vi.mocked(bridgeBestPerformers).mockResolvedValue([])
     await GET(makeReq('&limit=100'))
     const call = vi.mocked(bridgeBestPerformers).mock.calls[0][0]

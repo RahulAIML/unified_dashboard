@@ -33,12 +33,12 @@ export function isBancoOrg(email: string): boolean {
  * @param email      - Authenticated user email (from JWT)
  * @param customerId - Resolved customer_id from login (0 = not in coach_users)
  */
-export function resolveOrgType(
+export async function resolveOrgType(
   email: string,
   customerId: number,
-): 'banco' | 'pharma' | 'analytics' | 'none' {
-  if (isBancoOrg(email))            return 'banco'
-  if (resolvePharmaTenant(email))   return 'pharma'
-  if (customerId > 0)               return 'analytics'
+): Promise<'banco' | 'pharma' | 'analytics' | 'none'> {
+  if (isBancoOrg(email))                 return 'banco'
+  if (await resolvePharmaTenant(email))  return 'pharma'
+  if (customerId > 0)                    return 'analytics'
   return 'none'
 }

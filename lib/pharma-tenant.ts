@@ -62,11 +62,14 @@
  *     flagged, not investigated further.
  */
 
-export type PharmaTenant =
-  | 'sanfer' | 'apotex' | 'weser' | 'adium'
-  | 'heineken' | 'm8' | 'lacoste' | 'lacosteAsistentes' | 'chiesi' | 'labomed'
+// PharmaTenant used to be a fixed string-literal union of the hand-onboarded
+// clients below. It's now a plain string so tenants registered through the
+// admin wizard (app/admin/tenants) work without a code change — see
+// ensureDynamicTenantsLoaded() further down, which merges DB rows (lib/db-tenants.ts)
+// over these hardcoded defaults at runtime.
+export type PharmaTenant = string
 
-interface TenantConfig {
+export interface TenantConfig {
   kind: 'sale_exercises' | 'kpi' | 'exceltis_rest'
   url: string
   xTenant?: string
@@ -82,6 +85,11 @@ interface TenantConfig {
   hasBusinessLines?: boolean
   /** True only where org.members/org.admins are confirmed present and working (Sanfer). */
   hasOrganization?: boolean
+  /** True only where sim.topstats (all-time leaderboard) is confirmed present (Sanfer). */
+  hasTopStats?: boolean
+  /** Extra header to send when this tenant's endpoint lives on a different server and needs its own auth. */
+  authHeaderName?: string
+  authHeaderValue?: string
 }
 
 function unifiedBridgeUrl(tenant: string): string {
@@ -101,6 +109,13 @@ const SANFER_CERT_IDS = [
   492, 493,
 ]
 
+// Mutable — ensureDynamicTenantsLoaded() below adds/overwrites entries from
+// the pharma_tenants DB table on top of these hand-verified defaults. Every
+// downstream read (bridge-pharma-analytics.ts, API routes) is synchronous and
+// happens only after a route has already called resolvePharmaTenant()/
+// resolveOrgType() for the current request, which is the single choke point
+// that awaits the DB load — so TENANT_CONFIG is always fully populated by
+// the time anything else reads it.
 export const TENANT_CONFIG: Record<PharmaTenant, TenantConfig> = {
   sanfer: {
     kind: 'sale_exercises', url: unifiedBridgeUrl('sanfer'), xTenant: 'sanfer',
@@ -157,21 +172,102 @@ export const TENANT_CONFIG: Record<PharmaTenant, TenantConfig> = {
   },
 }
 
-const KNOWN_TENANTS = Object.keys(TENANT_CONFIG) as PharmaTenant[]
+// Dynamic (admin-wizard-registered) domains, merged with PHARMA_TENANT_DOMAINS below.
+const dynamicDomainMap = new Map<string, PharmaTenant>()
 
-function domainMap(): Map<string, PharmaTenant> {
+function envDomainMap(): Map<string, PharmaTenant> {
   const raw = process.env.PHARMA_TENANT_DOMAINS ?? ''
   const map = new Map<string, PharmaTenant>()
   for (const entry of raw.split(',')) {
     const [tenant, domain] = entry.split(':').map(s => s.trim().toLowerCase())
     if (!tenant || !domain) continue
-    if (!KNOWN_TENANTS.includes(tenant as PharmaTenant)) continue
-    map.set(domain, tenant as PharmaTenant)
+    map.set(domain, tenant)
   }
   return map
 }
 
-export function resolvePharmaTenant(email: string): PharmaTenant | null {
+function domainMap(): Map<string, PharmaTenant> {
+  // Dynamic entries take priority so an admin can repoint a domain without
+  // waiting on an env var change/redeploy.
+  return new Map([...envDomainMap(), ...dynamicDomainMap])
+}
+
+// ── DB-backed dynamic tenants ──────────────────────────────────────────────────
+// Loaded lazily, cached in-process for DYNAMIC_TENANTS_TTL_MS so a request
+// doesn't hit Postgres on every single dashboard call. Admin writes (POST/PATCH
+// /api/admin/tenants) call invalidateDynamicTenantsCache() so changes are
+// visible immediately rather than waiting out the TTL.
+const DYNAMIC_TENANTS_TTL_MS = 30_000
+let dynamicTenantsLoadedAt = 0
+let dynamicTenantsPromise: Promise<void> | null = null
+
+// Tracks which TENANT_CONFIG keys came from the DB on the last load, so a
+// tenant that gets deactivated (and drops out of listActiveTenants()) can be
+// removed from TENANT_CONFIG instead of leaving a stale entry behind —
+// otherwise resolvePharmaTenant() would stop returning its key (fixed by the
+// active-only domain query below) but any code that already had the key would
+// still see last-known-good config for it.
+let previouslyLoadedDynamicKeys = new Set<string>()
+
+async function loadDynamicTenants(): Promise<void> {
+  // Import lazily so this file (used by client-safe org-type checks in some
+  // contexts historically) never pulls in the pg-backed db layer unless a
+  // dynamic load is actually needed.
+  const { listActiveTenants, listActiveDomainMappings } = await import('./db-tenants')
+  const [tenants, domains] = await Promise.all([
+    listActiveTenants().catch(() => []),
+    listActiveDomainMappings().catch(() => []),
+  ])
+
+  const currentKeys = new Set(tenants.map(t => t.tenantKey))
+  for (const staleKey of previouslyLoadedDynamicKeys) {
+    if (!currentKeys.has(staleKey)) delete TENANT_CONFIG[staleKey]
+  }
+  previouslyLoadedDynamicKeys = currentKeys
+
+  for (const t of tenants) {
+    TENANT_CONFIG[t.tenantKey] = {
+      kind: t.kind,
+      url: t.url,
+      xTenant: t.xTenant ?? undefined,
+      ucids: t.ucids,
+      hasCertification: t.hasCertification,
+      hasObjections: t.hasObjections,
+      hasBusinessLines: t.hasBusinessLines,
+      hasOrganization: t.hasOrganization,
+      hasTopStats: t.hasTopStats,
+      coachActivityIds: t.coachActivityIds ?? undefined,
+      authHeaderName: t.authHeaderName ?? undefined,
+      authHeaderValue: t.authHeaderValue ?? undefined,
+    }
+  }
+
+  dynamicDomainMap.clear()
+  for (const d of domains) dynamicDomainMap.set(d.domain, d.tenantKey)
+}
+
+/** Call after any admin write so the next request picks up the change immediately. */
+export function invalidateDynamicTenantsCache(): void {
+  dynamicTenantsLoadedAt = 0
+  dynamicTenantsPromise = null
+}
+
+async function ensureDynamicTenantsLoaded(): Promise<void> {
+  const isStale = Date.now() - dynamicTenantsLoadedAt > DYNAMIC_TENANTS_TTL_MS
+  if (!isStale) return
+  if (!dynamicTenantsPromise) {
+    dynamicTenantsPromise = loadDynamicTenants()
+      .then(() => { dynamicTenantsLoadedAt = Date.now() })
+      .catch((err) => {
+        console.warn('[pharma-tenant] failed to load dynamic tenants (non-fatal):', (err as Error).message)
+      })
+      .finally(() => { dynamicTenantsPromise = null })
+  }
+  await dynamicTenantsPromise
+}
+
+export async function resolvePharmaTenant(email: string): Promise<PharmaTenant | null> {
+  await ensureDynamicTenantsLoaded()
   const userDomain = email.toLowerCase().split('@')[1] ?? ''
   if (!userDomain) return null
   return domainMap().get(userDomain) ?? null
