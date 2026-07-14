@@ -268,6 +268,48 @@ function aggregateSaleExercisesRows(rows: SaleExercisesRow[]) {
   }
 }
 
+// ── Data bounds (earliest/latest session date) — snap-to-span default range ──
+// A fresh login must show a tenant's full history, not a trailing window. Each
+// bridge kind exposes its span differently, so derive it from data that already
+// exists (no bridge changes — the bridge is a read-only production dependency).
+
+function endOfMonthIso(period: string): string {
+  // 'YYYY-MM' → last calendar day of that month as 'YYYY-MM-DD'
+  const [y, m] = period.split('-').map(Number)
+  if (!y || !m) return `${period}-01`
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate()
+  return `${period}-${String(lastDay).padStart(2, '0')}`
+}
+
+export async function pharmaDataBounds(
+  tenant: PharmaTenant,
+): Promise<{ min: string; max: string } | null> {
+  const cfg = TENANT_CONFIG[tenant]
+
+  if (cfg.kind === 'kpi') {
+    // Monthly trend over a wide window is the cheapest way to learn the span
+    // without pulling every session row.
+    const resp = await bridgeCall<{ trend: ApotexTrendRow[] }>(tenant, 'kpi.score_trend', {
+      date_from: '2015-01-01', date_to: '2035-12-31', granularity: 'month',
+    }).catch(() => ({ trend: [] as ApotexTrendRow[] }))
+    const periods = (resp.trend ?? [])
+      .filter(r => Number(r.sessions) > 0)
+      .map(r => r.period)
+      .filter(Boolean)
+      .sort()
+    if (!periods.length) return null
+    return { min: `${periods[0]}-01`, max: endOfMonthIso(periods[periods.length - 1]) }
+  }
+
+  // sale_exercises / exceltis_rest — derive from the actual session rows.
+  const rows = await fetchSaleExercisesSessions(
+    tenant, '2015-01-01T00:00:00.000Z', '2035-12-31T00:00:00.000Z',
+  ).catch(() => [] as SaleExercisesRow[])
+  const dates = rows.map(r => String(r.date).slice(0, 10)).filter(Boolean).sort()
+  if (!dates.length) return null
+  return { min: dates[0], max: dates[dates.length - 1] }
+}
+
 // ── Sanfer certification: WHOLLY SEPARATE data source (official platform DB) ──
 // Verified against src/pages/CertificationPage.tsx + src/api/client.ts:
 // fetchCertStats() / fetchCertification() query profiles_assigned on the

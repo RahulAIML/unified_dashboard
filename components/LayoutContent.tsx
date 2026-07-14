@@ -4,12 +4,18 @@ import { usePathname } from 'next/navigation'
 import { Sidebar } from '@/components/Sidebar'
 import { AIAssistant } from '@/components/ai-assistant'
 import { useAuthContext } from '@/components/AuthProvider'
+import { useSnapDateRange } from '@/lib/hooks/useSnapDateRange'
 
 const AUTH_ROUTES = ['/auth/login', '/auth/register']
 
 export function LayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const { isAuthenticated, isLoading } = useAuthContext()
+
+  // Snap the default date range to the tenant's real data span, once, after
+  // login. Internally gated on auth + rangeInitialized, so it's safe to mount
+  // here (the single wrapper around every authenticated page).
+  useSnapDateRange()
 
   const isAuthRoute = AUTH_ROUTES.some(route => pathname.startsWith(route))
 

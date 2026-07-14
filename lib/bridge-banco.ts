@@ -121,6 +121,22 @@ export async function bridgeBancoUsers(): Promise<BancoUser[]> {
 }
 
 /**
+ * Earliest + latest Banco session dates, used to snap the dashboard's default
+ * date range to the real data span. Returns null when there are no sessions.
+ */
+export async function bridgeBancoDataBounds(): Promise<{ min: string; max: string } | null> {
+  const rows = await bancoPost<{ min_date: string | null; max_date: string | null }>(
+    `SELECT MIN(date_created) AS min_date,
+            MAX(date_created) AS max_date
+       FROM coach_app.saved_reports
+      WHERE banco_user_id > 0`,
+  )
+  const r = rows[0]
+  if (!r?.min_date || !r?.max_date) return null
+  return { min: String(r.min_date), max: String(r.max_date) }
+}
+
+/**
  * Fetch Banco sessions with employee details for a date range.
  * Returns one row per session with aggregated round count.
  */

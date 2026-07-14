@@ -96,6 +96,27 @@ export async function resolveCustomerIdByEmail(email: string): Promise<number | 
 }
 
 /**
+ * Earliest + latest session timestamps for a customer, used to snap the
+ * dashboard's default date range to the tenant's real data span (so a fresh
+ * login shows all existing data rather than an arbitrary trailing window).
+ * Returns null when the customer has no analytics rows at all.
+ */
+export async function bridgeAnalyticsDataBounds(
+  customerId: number,
+): Promise<{ min: string; max: string } | null> {
+  const rows = await bridgePost<{ min_date: string | null; max_date: string | null }>(
+    `SELECT MIN(report_created_at) AS min_date,
+            MAX(report_created_at) AS max_date
+       FROM rolplay_pro_analytics.report_field_current
+      WHERE customer_id = ?`,
+    [customerId],
+  )
+  const r = rows[0]
+  if (!r?.min_date || !r?.max_date) return null
+  return { min: String(r.min_date), max: String(r.max_date) }
+}
+
+/**
  * Overview KPIs for one time window.
  *
  * FIX: Sessions are counted from ALL field rows (not just score-field rows).
