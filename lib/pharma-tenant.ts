@@ -175,6 +175,14 @@ export const TENANT_CONFIG: Record<PharmaTenant, TenantConfig> = {
 // Dynamic (admin-wizard-registered) domains, merged with PHARMA_TENANT_DOMAINS below.
 const dynamicDomainMap = new Map<string, PharmaTenant>()
 
+// Built-in domain aliases — real user domains that differ from the primary
+// domain a tenant was configured with. Apotex's real reps are on apotex.com.mx,
+// but the tenant is keyed apotex.com; without this alias a real @apotex.com.mx
+// login resolves to no tenant. Lowest priority (env + DB can override).
+const DEFAULT_DOMAIN_ALIASES: Record<string, PharmaTenant> = {
+  'apotex.com.mx': 'apotex',
+}
+
 function envDomainMap(): Map<string, PharmaTenant> {
   const raw = process.env.PHARMA_TENANT_DOMAINS ?? ''
   const map = new Map<string, PharmaTenant>()
@@ -187,9 +195,12 @@ function envDomainMap(): Map<string, PharmaTenant> {
 }
 
 function domainMap(): Map<string, PharmaTenant> {
-  // Dynamic entries take priority so an admin can repoint a domain without
-  // waiting on an env var change/redeploy.
-  return new Map([...envDomainMap(), ...dynamicDomainMap])
+  // Priority: dynamic (admin-configured) > env > built-in aliases.
+  return new Map([
+    ...Object.entries(DEFAULT_DOMAIN_ALIASES),
+    ...envDomainMap(),
+    ...dynamicDomainMap,
+  ])
 }
 
 // ── DB-backed dynamic tenants ──────────────────────────────────────────────────

@@ -19,6 +19,7 @@ import { resolvePharmaTenant } from '@/lib/pharma-tenant'
 import { pharmaDataBounds } from '@/lib/bridge-pharma-analytics'
 import { bridgeAnalyticsDataBounds } from '@/lib/bridge-client'
 import { bridgeBancoDataBounds } from '@/lib/bridge-banco'
+import { resolveRolplayAppClientId, rolplayAppDataBounds } from '@/lib/bridge-rolplay-app'
 import { isDemoMode } from '@/lib/demo'
 
 export const runtime = 'nodejs'
@@ -49,6 +50,12 @@ export async function GET(request: NextRequest) {
       if (tenant) {
         bounds = await pharmaDataBounds(tenant)
         source = `pharma-${tenant}`
+      }
+    } else if (orgType === 'rolplay-app') {
+      const clientId = resolveRolplayAppClientId(ctx.email)
+      if (clientId) {
+        bounds = await rolplayAppDataBounds(clientId)
+        source = `rolplay-app-${clientId}`
       }
     } else if (orgType === 'analytics') {
       bounds = await bridgeAnalyticsDataBounds(ctx.customerId)

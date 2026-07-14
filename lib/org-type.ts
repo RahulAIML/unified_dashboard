@@ -5,14 +5,17 @@
  * user belongs to. Import this in API routes — never in client components.
  *
  * Four data sources:
- *   'banco'     → coach_app.banco_users / saved_reports / saved_reports_options
+ *   'banco'      → banco-domain orgs → Second Brain (see banco-second-brain.ts)
  *   'pharma'     → per-tenant PHP bridge (serv.aux-rolplay.com) — see pharma-tenant.ts
+ *   'rolplay-app' → standalone Rolplay app platform (r_* tables via raw-SQL) —
+ *                   counts-only, resolved by explicit login map (bridge-rolplay-app.ts)
  *   'analytics' → rolplay_pro_analytics via PHP bridge (customer_id scoped)
  *   'none'      → authenticated but no recognized data source
  *
  * Second Brain is probed separately (API call) and does not affect org type.
  */
 import { resolvePharmaTenant } from './pharma-tenant'
+import { resolveRolplayAppClientId } from './bridge-rolplay-app'
 
 /**
  * Returns true when the given email belongs to the Banco organization.
@@ -36,9 +39,12 @@ export function isBancoOrg(email: string): boolean {
 export async function resolveOrgType(
   email: string,
   customerId: number,
-): Promise<'banco' | 'pharma' | 'analytics' | 'none'> {
+): Promise<'banco' | 'pharma' | 'rolplay-app' | 'analytics' | 'none'> {
   if (isBancoOrg(email))                 return 'banco'
   if (await resolvePharmaTenant(email))  return 'pharma'
+  // Before analytics: rolplay-app clients can share a domain with a coach_app
+  // analytics customer (audioweb.com.mx), so the explicit login map wins.
+  if (resolveRolplayAppClientId(email))  return 'rolplay-app'
   if (customerId > 0)                    return 'analytics'
   return 'none'
 }

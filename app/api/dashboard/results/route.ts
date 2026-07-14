@@ -7,6 +7,7 @@ import { resolveOrgType } from '@/lib/org-type'
 import { bancoDashboardResults } from '@/lib/bridge-banco-analytics'
 import { resolvePharmaTenant } from '@/lib/pharma-tenant'
 import { pharmaDashboardResults } from '@/lib/bridge-pharma-analytics'
+import { resolveRolplayAppClientId, rolplayAppResults } from '@/lib/bridge-rolplay-app'
 import { isDemoMode } from '@/lib/demo'
 import { demoResults } from '@/lib/demo/engine'
 
@@ -71,6 +72,17 @@ export async function GET(request: NextRequest) {
       })
       return buildSuccess(data, {
         from: range.from.toISOString(), to: range.to.toISOString(), solution, source: `pharma-${tenant}`, limit,
+      })
+    }
+
+    // ── Rolplay-app platform (counts-only; sessions listed, no scores) ────────
+    if (orgType === 'rolplay-app') {
+      const clientId = resolveRolplayAppClientId(ctx.email)
+      if (!clientId) return buildApiError('Rolplay-app client could not be resolved', 500)
+      const data = await rolplayAppResults(clientId, limit)
+      return buildSuccess(data, {
+        from: range.from.toISOString(), to: range.to.toISOString(),
+        source: `rolplay-app-${clientId}`, limit,
       })
     }
 
