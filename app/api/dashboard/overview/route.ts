@@ -4,7 +4,7 @@ import { buildSuccess, buildApiError, parseDateRange } from '@/lib/api-utils'
 import { getAuthContextFromRequest } from '@/lib/server-auth'
 import { resolveDynamicUsecaseIds } from '@/lib/dynamic-usecase-resolver'
 import { resolveOrgType } from '@/lib/org-type'
-import { bancoDashboardOverview } from '@/lib/bridge-banco-analytics'
+import { bancoOverviewFromSecondBrain } from '@/lib/banco-second-brain'
 import { resolvePharmaTenant } from '@/lib/pharma-tenant'
 import { pharmaDashboardOverview } from '@/lib/bridge-pharma-analytics'
 import { isDemoMode } from '@/lib/demo'
@@ -51,21 +51,15 @@ export async function GET(request: NextRequest) {
       return buildSuccess(EMPTY, { solution, source: 'second-brain-api-only' })
     }
 
-    // ── Banco pipeline ────────────────────────────────────────────────────────
+    // ── Banco pipeline (Second Brain-backed) ──────────────────────────────────
+    // Banco-domain orgs (coppel/bancoppel) aren't in coach_app.coach_users, so
+    // the SQL banco pipeline returns empty for them. Their real data is in
+    // Second Brain — route Overview there. See lib/banco-second-brain.ts.
     if (orgType === 'banco') {
-      const spanMs   = Math.max(0, range.to.getTime() - range.from.getTime())
-      const prevTo   = new Date(range.from.getTime() - 1)
-      const prevFrom = new Date(prevTo.getTime() - spanMs)
-
-      const data = await bancoDashboardOverview({
-        fromIso:     range.from.toISOString(),
-        toIso:       range.to.toISOString(),
-        prevFromIso: prevFrom.toISOString(),
-        prevToIso:   prevTo.toISOString(),
-      })
+      const data = await bancoOverviewFromSecondBrain(ctx.email, ctx.customerId)
       return buildSuccess(data, {
         from: range.from.toISOString(), to: range.to.toISOString(),
-        source: 'banco',
+        source: 'banco-second-brain',
       })
     }
 
