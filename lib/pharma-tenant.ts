@@ -92,9 +92,9 @@ export interface TenantConfig {
   authHeaderValue?: string
 }
 
-function unifiedBridgeUrl(tenant: string): string {
-  const base = process.env.PHARMA_BRIDGE_BASE_URL
-  if (!base) throw new Error('PHARMA_BRIDGE_BASE_URL is not configured')
+function unifiedBridgeUrl(tenant: string): string | null {
+  const base = process.env.PHARMA_BRIDGE_BASE_URL?.trim()
+  if (!base) return null
   return `${base.replace(/\/+$/, '')}/${tenant}/bridge/`
 }
 
@@ -117,15 +117,6 @@ const SANFER_CERT_IDS = [
 // that awaits the DB load — so TENANT_CONFIG is always fully populated by
 // the time anything else reads it.
 export const TENANT_CONFIG: Record<PharmaTenant, TenantConfig> = {
-  sanfer: {
-    kind: 'sale_exercises', url: unifiedBridgeUrl('sanfer'), xTenant: 'sanfer',
-    ucids: SANFER_CERT_IDS, hasCertification: true,
-    hasObjections: true, hasBusinessLines: true, hasOrganization: true,
-  },
-  apotex: {
-    kind: 'kpi', url: unifiedBridgeUrl('apotex'), xTenant: 'apotex',
-    coachActivityIds: [8, 9, 10],
-  },
   weser: {
     kind: 'sale_exercises', url: 'https://serv.aux-rolplay.com/weser/bridge/',
     ucids: [235, 236, 237],
@@ -169,6 +160,30 @@ export const TENANT_CONFIG: Record<PharmaTenant, TenantConfig> = {
     kind: 'exceltis_rest', url: 'https://serv.aux-rolplay.com/labomed',
     ucids: [458, 463],
   },
+}
+
+const sanferBridgeUrl = unifiedBridgeUrl('sanfer')
+if (sanferBridgeUrl) {
+  TENANT_CONFIG.sanfer = {
+    kind: 'sale_exercises',
+    url: sanferBridgeUrl,
+    xTenant: 'sanfer',
+    ucids: SANFER_CERT_IDS,
+    hasCertification: true,
+    hasObjections: true,
+    hasBusinessLines: true,
+    hasOrganization: true,
+  }
+}
+
+const apotexBridgeUrl = unifiedBridgeUrl('apotex')
+if (apotexBridgeUrl) {
+  TENANT_CONFIG.apotex = {
+    kind: 'kpi',
+    url: apotexBridgeUrl,
+    xTenant: 'apotex',
+    coachActivityIds: [8, 9, 10],
+  }
 }
 
 // Dynamic (admin-wizard-registered) domains, merged with PHARMA_TENANT_DOMAINS below.
