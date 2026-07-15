@@ -55,6 +55,25 @@ async def status(job_id: str) -> JobState:
     return job
 
 
+@router.post("/generate-sync", response_model=JobState, response_model_by_alias=True)
+async def generate_sync(req: GenerateRequest) -> JobState:
+    """Serverless-friendly: run the whole pipeline in ONE request and return the
+    finished result (config + validation + preview). No background job / polling,
+    so it works on stateless platforms (Vercel) where in-memory jobs don't persist."""
+    from ..workflow import run_generation
+    from ..models import JobState as JS
+
+    job = JS(job_id="sync", request=req)
+
+    async def _noop(_j) -> None:
+        return None
+
+    await run_generation(job, _noop)
+    if req.auto_publish and job.validation and job.validation.ok and job.dashboard:
+        job.published = await publish.run(job.dashboard, job.knowledge.domains if job.knowledge else [], _noop_log)
+    return job
+
+
 class PublishIn(BaseModel):
     job_id: str
 
