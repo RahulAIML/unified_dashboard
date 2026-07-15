@@ -14,6 +14,11 @@ from ..models import CompanyKnowledge, DashboardConfig, GenerateRequest, JobStat
 router = APIRouter(prefix="/ai", tags=["ai"])
 
 
+@router.get("/health")
+async def ai_health() -> dict:
+    return {"ok": True}
+
+
 async def _noop_log(*_args) -> None:
     return None
 
