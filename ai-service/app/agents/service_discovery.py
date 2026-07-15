@@ -27,14 +27,22 @@ async def run(knowledge: CompanyKnowledge, exercise_ids: list[int], log: LogFn) 
     pharma = RolplayPharmaConnector()
     services: list[ServiceDescriptor] = []
 
-    # 1) pharma bridge — try each candidate slug until one responds
+    # 1) pharma bridge — try each candidate slug until one responds.
+    #    If the manager didn't type exercise IDs, auto-fill known ones so
+    #    exceltis/sale_exercises clients onboard with the company name alone.
+    from ..known_tenants import known_ids_for
     resolved_slug = knowledge.slug
     for slug in candidate_slugs(knowledge.company):
+        effective_ids = exercise_ids or known_ids_for(slug)
+        if effective_ids and not exercise_ids:
+            await log("service_discovery", "info", f"Auto-filled {len(effective_ids)} known exercise ID(s) for '{slug}'")
         await log("service_discovery", "info", f"Probing pharma bridge for '{slug}'…")
-        svc = await pharma.probe(slug, exercise_ids)
+        svc = await pharma.probe(slug, effective_ids)
         if svc:
             services.append(svc)
             resolved_slug = slug
+            if effective_ids:
+                knowledge.exercise_ids = sorted(set(knowledge.exercise_ids) | set(effective_ids))
             await log("service_discovery", "success",
                       f"Found {svc.kind.value} at {svc.base_url} ({'has data' if svc.has_data else 'reachable'})")
             break

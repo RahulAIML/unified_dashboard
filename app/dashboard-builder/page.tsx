@@ -36,6 +36,7 @@ const ORDER = PHASE_STEPS.map(s => s.key)
 export default function DashboardBuilderPage() {
   const [company, setCompany] = useState('')
   const [idsText, setIdsText] = useState('')
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const [job, setJob] = useState<JobState | null>(null)
   const [starting, setStarting] = useState(false)
   const [publishing, setPublishing] = useState(false)
@@ -92,34 +93,40 @@ export default function DashboardBuilderPage() {
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
       <header className="mb-8">
-        <h1 className="text-2xl font-bold text-foreground">AI Dashboard Builder</h1>
+        <h1 className="text-2xl font-bold text-foreground">Build your dashboard</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Enter a company. AI discovers its services, understands the data, and builds a live dashboard — no developer needed.
+          Type your company name and press <span className="font-semibold text-foreground">Generate</span>.
+          Our AI finds your data, builds the dashboard, and shows you a live preview. No setup, no code.
         </p>
       </header>
 
-      {/* Input card */}
+      {/* Input card — company name is the only thing a manager needs */}
       <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-4 items-end">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm font-semibold text-foreground mb-1 block">Company</label>
-              <input value={company} onChange={e => setCompany(e.target.value)}
-                placeholder="Apotex" disabled={running}
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
-            </div>
-            <div>
-              <label className="text-sm font-semibold text-foreground mb-1 block">Exercise IDs <span className="text-muted-foreground font-normal">(optional)</span></label>
-              <input value={idsText} onChange={e => setIdsText(e.target.value)}
-                placeholder="137, 159, 173" disabled={running}
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
-            </div>
-          </div>
+        <label className="text-sm font-semibold text-foreground mb-2 block">Company name</label>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <input value={company} onChange={e => setCompany(e.target.value)}
+            placeholder="e.g. Apotex" disabled={running}
+            onKeyDown={e => { if (e.key === 'Enter' && company.trim() && !running) generate() }}
+            className="flex-1 rounded-lg border border-border bg-background px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-primary" />
           <button onClick={generate} disabled={running || starting || !company.trim()}
-            className="h-[38px] px-5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 disabled:opacity-50 whitespace-nowrap">
-            {running ? 'Generating…' : 'Generate Dashboard'}
+            className="px-6 py-3 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 disabled:opacity-50 whitespace-nowrap">
+            {running ? 'Generating…' : '✨ Generate Dashboard'}
           </button>
         </div>
+
+        <button type="button" onClick={() => setShowAdvanced(v => !v)}
+          className="mt-3 text-xs text-muted-foreground hover:text-foreground">
+          {showAdvanced ? '▾' : '▸'} Advanced (optional)
+        </button>
+        {showAdvanced && (
+          <div className="mt-2">
+            <label className="text-xs font-medium text-foreground mb-1 block">Exercise IDs</label>
+            <input value={idsText} onChange={e => setIdsText(e.target.value)}
+              placeholder="Leave blank — the AI finds these automatically" disabled={running}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+            <p className="text-xs text-muted-foreground mt-1">Only fill this in if you already know the specific exercise IDs. Otherwise leave it empty.</p>
+          </div>
+        )}
       </div>
 
       {/* Progress */}

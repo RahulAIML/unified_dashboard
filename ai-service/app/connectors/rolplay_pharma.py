@@ -62,7 +62,12 @@ class RolplayPharmaConnector:
         )
         if status != 200 or not isinstance(body, dict) or not body.get("ok"):
             return None
-        overview = body.get("overview") or {}
+        # A kpi bridge returns a real {"overview": {...}} object. Some other
+        # bridges (e.g. Sanfer's sale_exercises) reply ok:true with a help/
+        # action-list to unknown actions — that is NOT kpi, so fall through.
+        overview = body.get("overview")
+        if not isinstance(overview, dict) or "total_sessions" not in overview:
+            return None
         total = int(overview.get("total_sessions") or 0)
         endpoints = ["kpi.overview"]
         # confirm the richer actions too
@@ -82,7 +87,9 @@ class RolplayPharmaConnector:
     # ── sale_exercises ────────────────────────────────────────────────────────────
     async def _probe_sale_exercises(self, slug: str, exercise_ids: list[int]) -> ServiceDescriptor | None:
         for url in (_unified_url(slug), _host_url(slug)):
-            status, body = await post_json(url, {"action": "ping"}, headers={"X-Tenant": slug})
+            # Send a deliberately-unknown action: these bridges reply with their
+            # full action list (a real 'ping' just returns pong with no list).
+            status, body = await post_json(url, {"action": "__introspect__"}, headers={"X-Tenant": slug})
             actions = self._extract_actions(body)
             if status == 200 and actions and any(a.startswith("sim.") for a in actions):
                 has_data = False

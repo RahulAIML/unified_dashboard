@@ -30,7 +30,8 @@ async def run(company: str, ids: list[int]):
 
 async def main():
     await run("Apotex", [])
-    await run("Nonexistentco", [])  # exercises the no-service error branch
+    await run("Heineken", [])   # name-only: IDs must auto-fill → 626
+    await run("Sanfer", [])     # name-only sale_exercises → auto-filled cert IDs
 
 
 if __name__ == "__main__":
