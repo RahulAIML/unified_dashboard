@@ -4,11 +4,23 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 
-from .models import GenerateRequest, JobState
+from .models import GenerateRequest, JobPhase, JobState
 from .workflow import run_generation
 
 _JOBS: dict[str, JobState] = {}
 _counter = 0
+
+
+async def _run(job: JobState, update) -> None:
+    """Run via LangGraph; fall back to the sequential pipeline if the graph errors."""
+    try:
+        from .graph import run_generation_graph
+        await run_generation_graph(job, update)
+    except Exception as exc:  # noqa: BLE001
+        if job.phase not in (JobPhase.done, JobPhase.error):
+            await run_generation(job, update)
+        else:
+            job.error = job.error or str(exc)[:200]
 
 
 def _next_id() -> str:
@@ -26,7 +38,7 @@ async def _update(job: JobState) -> None:
 def create_job(req: GenerateRequest) -> JobState:
     job = JobState(job_id=_next_id(), request=req)
     _JOBS[job.job_id] = job
-    asyncio.create_task(run_generation(job, _update))
+    asyncio.create_task(_run(job, _update))
     return job
 
 

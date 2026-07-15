@@ -40,10 +40,13 @@ class Settings(BaseSettings):
     # Rolplay-app raw SQL endpoint (SELECT-only)
     rolplay_app_sql_url: str = "https://rolplay.app/ajax/remote-access.php"
 
-    # ── LLM (optional — agents fall back to deterministic heuristics if unset) ──
-    anthropic_api_key: str | None = None
+    # ── LLM (Gemini) — agents fall back to deterministic heuristics if unset ────
+    # Default: Gemini 3 Flash (Pro-level intelligence at Flash speed/price).
+    # Set LLM_MODEL=gemini-3.1-pro-preview for maximum reasoning quality.
     gemini_api_key: str | None = None
-    llm_model: str = "claude-sonnet-5"
+    llm_model: str = "gemini-3-flash-preview"
+    llm_thinking_level: str = "low"  # minimal|low|medium|high
+    gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
 
     # ── Discovery tuning ────────────────────────────────────────────────────────
     http_timeout_seconds: float = 30.0

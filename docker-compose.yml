@@ -1,0 +1,21 @@
+# Local full-stack dev for the AI dashboard-builder.
+#   docker compose up ai-service   # FastAPI on :8088
+# The Next.js app runs via `npm run dev` (set AI_SERVICE_URL=http://localhost:8088).
+services:
+  ai-service:
+    build: ./ai-service
+    ports:
+      - "8088:8088"
+    env_file:
+      - ./ai-service/.env
+    environment:
+      PORT: "8088"
+    restart: unless-stopped
+
+  # Optional: run the Next.js app in the same network.
+  # web:
+  #   build: .
+  #   ports: ["3000:3000"]
+  #   environment:
+  #     AI_SERVICE_URL: "http://ai-service:8088"
+  #   depends_on: [ai-service]
