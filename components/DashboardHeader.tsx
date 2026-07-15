@@ -14,7 +14,12 @@ import type { Module } from "@/lib/types"
 // Static module IDs — used for URL param validation (never changes with language)
 const MODULE_IDS: Module[] = ["lms", "coach", "simulator", "certification", "second-brain"]
 
+// "All" (≈10y back) is the DEFAULT so a dashboard opens on the tenant's full
+// history — not a recent window that can misrepresent a tenant whose recent
+// period differs from its all-time picture (e.g. a bad recent month).
+const ALL_TIME_DAYS = 3650
 const DATE_PRESETS = [
+  { label: "All", days: ALL_TIME_DAYS },
   { label: "7d", days: 7 },
   { label: "30d", days: 30 },
   { label: "90d", days: 90 },
@@ -40,7 +45,7 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
     { id: "second-brain",  label: t.moduleSecondBrain   },
   ]
 
-  const [activeDays, setActiveDays] = useState<number | "custom">(30)
+  const [activeDays, setActiveDays] = useState<number | "custom">(ALL_TIME_DAYS)
   const [refreshing, setRefreshing] = useState(false)
   const syncingFromUrl = useRef(false)
 
@@ -60,6 +65,10 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
         const spanDays = Math.round((to.getTime() - from.getTime()) / 86_400_000)
         if (DATE_PRESETS.some((preset) => preset.days === spanDays)) setActiveDays(spanDays)
         else setActiveDays("custom")
+      } else {
+        // No range in the URL → open on all-time so the dashboard shows the
+        // tenant's full history by default, not a recent window.
+        applyPreset(ALL_TIME_DAYS)
       }
 
       if (params.has("solution")) {
