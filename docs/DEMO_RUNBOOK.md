@@ -34,6 +34,7 @@ RolplayDemo2026!
 | **Takeda** | `eleazar.palacios@takeda.com` | `analytics` | **68** sessions |
 | **Besins** | `tjimenez@besins-healthcare.com` | `analytics` | **17** sessions |
 | **Coppel** | `demo@coppel.com` | banco → **Second Brain** | **22** coaching sessions · 17 members · 106 message logs |
+| **Siigo** | `demo@siigo.com` | `rolplay-app` (counts-only) | **89** sessions · 44 users · **scores not captured** (Avg/Pass show empty — honest) |
 
 **Two routing rules (why the emails differ):**
 - **Pharma & Banco** route by **email domain only** — the dashboard shows the
@@ -44,10 +45,14 @@ RolplayDemo2026!
   that domain would land in an empty dashboard).
 
 > Real end users exist too (e.g. `asilva1@apotex.com.mx`, `lizeth.arteaga@sanfer.com.mx`,
-> `ascanio.degracia@heineken.com`). NOTE: Apotex's real users are on
-> **`apotex.com.mx`**, but the tenant is configured for `apotex.com`. Use
-> `demo@apotex.com` for the demo, OR add `apotex.com.mx` in the admin portal
-> (§3) if you want real Apotex users to log in.
+> `ascanio.degracia@heineken.com`) and can log in directly. Apotex now accepts
+> **both** `apotex.com` and `apotex.com.mx` (built-in alias), so real Apotex reps
+> route correctly.
+>
+> **Siigo is counts-only:** it lives on the standalone Rolplay-app platform,
+> where sessions are recorded but scores are not. It shows real session/user
+> counts; Avg Score / Pass Rate are intentionally empty (never faked). Other
+> module tabs will be empty for Siigo.
 
 ### Create the accounts (RUN THIS ONCE — creates the logins above)
 ```bash
@@ -65,6 +70,7 @@ accounts=(
   "eleazar.palacios@takeda.com|Takeda Demo"
   "tjimenez@besins-healthcare.com|Besins Demo"
   "demo@coppel.com|Coppel Demo"
+  "demo@siigo.com|Siigo Demo"
 )
 for a in "${accounts[@]}"; do
   email="${a%%|*}"; name="${a##*|}"
