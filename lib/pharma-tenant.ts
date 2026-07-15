@@ -134,12 +134,11 @@ export const TENANT_CONFIG: Record<PharmaTenant, TenantConfig> = {
     kind: 'sale_exercises', url: 'https://serv.aux-rolplay.com/adium/bridge/',
     ucids: [145, 146, 208, 231],
   },
-  // Verified via exceltis_dashboard_heineken/app.py — HEINEKEN_IDS (commented
-  // out validation, but this is the list the real frontend uses).
-  heineken: {
-    kind: 'exceltis_rest', url: 'https://serv.aux-rolplay.com/heineken',
-    ucids: [137, 159, 173],
-  },
+  // NOTE: 'heineken' is intentionally NOT built-in here — it is onboarded at
+  // runtime via the admin wizard (pharma_tenants table) as a live demo of
+  // self-service onboarding. Its real bridge (serv.aux-rolplay.com/heineken,
+  // ucids 137/159/173, ~626 real sessions) is unchanged; only its registration
+  // moved from code to the DB. Re-add the block here to make it built-in again.
   // Verified via exceltis_dashboard_m8/app.py — M8_IDS.
   m8: {
     kind: 'exceltis_rest', url: 'https://serv.aux-rolplay.com/m8',
@@ -281,5 +280,12 @@ export async function resolvePharmaTenant(email: string): Promise<PharmaTenant |
   await ensureDynamicTenantsLoaded()
   const userDomain = email.toLowerCase().split('@')[1] ?? ''
   if (!userDomain) return null
-  return domainMap().get(userDomain) ?? null
+  const key = domainMap().get(userDomain)
+  if (!key) return null
+  // Guard: a domain can be mapped (e.g. via PHARMA_TENANT_DOMAINS env) while its
+  // TENANT_CONFIG entry is absent — e.g. a client that hasn't been onboarded via
+  // the admin wizard yet. Treat that as "not a pharma tenant" (clean empty
+  // dashboard) rather than returning a key with no config (which would crash
+  // downstream on cfg.url).
+  return TENANT_CONFIG[key] ? key : null
 }
