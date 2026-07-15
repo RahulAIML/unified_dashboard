@@ -59,7 +59,7 @@ class Settings(BaseSettings):
 
     @property
     def llm_enabled(self) -> bool:
-        return bool(self.anthropic_api_key)
+        return bool(self.gemini_api_key)
 
 
 @lru_cache

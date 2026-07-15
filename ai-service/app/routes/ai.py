@@ -72,9 +72,7 @@ async def do_publish(body: PublishIn) -> dict:
     return {"published": ok, "slug": job.dashboard.slug}
 
 
-@router.get("/dashboard/{slug}", response_model=DashboardConfig)
-async def get_dashboard(slug: str) -> DashboardConfig:
-    """Return a published dashboard config for the Next.js app to render."""
+async def _load_config(slug: str) -> DashboardConfig | None:
     from ..db import get_pool
     import json
     pool = await get_pool()
@@ -83,6 +81,25 @@ async def get_dashboard(slug: str) -> DashboardConfig:
         if row:
             return DashboardConfig.model_validate(json.loads(row["config"]))
     job = jobs.latest_for_slug(slug)
-    if job and job.dashboard:
-        return job.dashboard
-    raise HTTPException(status_code=404, detail="dashboard not found")
+    return job.dashboard if job and job.dashboard else None
+
+
+@router.get("/dashboard/{slug}", response_model=DashboardConfig)
+async def get_dashboard(slug: str) -> DashboardConfig:
+    """Return a published dashboard config (metadata only)."""
+    cfg = await _load_config(slug)
+    if not cfg:
+        raise HTTPException(status_code=404, detail="dashboard not found")
+    return cfg
+
+
+@router.get("/render/{slug}")
+async def render_dashboard(slug: str) -> dict:
+    """Return a published dashboard config PLUS live widget data — the Next.js
+    dynamic renderer draws a full dashboard page from this, for any connector."""
+    from ..agents import preview
+    cfg = await _load_config(slug)
+    if not cfg:
+        raise HTTPException(status_code=404, detail="dashboard not found")
+    pv = await preview.run(cfg, _noop_log)
+    return {"config": cfg.model_dump(), "preview": pv.model_dump()}

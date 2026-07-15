@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { DashboardRenderer } from '@/components/DashboardRenderer'
 
 // ── Types mirroring the AI service JobState ─────────────────────────────────────
 type Phase =
@@ -189,7 +190,7 @@ export default function DashboardBuilderPage() {
             )}
           </div>
 
-          <PreviewGrid dashboard={job.dashboard} preview={job.preview} />
+          <DashboardRenderer config={job.dashboard} preview={job.preview} />
 
           {job.dashboard.recommendations.length > 0 && (
             <ul className="mt-4 space-y-1 text-xs text-muted-foreground list-disc pl-5">
@@ -206,74 +207,6 @@ export default function DashboardBuilderPage() {
           </div>
         </div>
       )}
-    </div>
-  )
-}
-
-function fmt(v: unknown): string {
-  if (v === null || v === undefined) return '—'
-  if (typeof v === 'number') return v % 1 === 0 ? v.toLocaleString() : v.toFixed(2)
-  return String(v)
-}
-
-function PreviewGrid({ dashboard, preview }: { dashboard: DashboardConfig; preview: { widgets: WidgetPreview[] } }) {
-  const pv = new Map(preview.widgets.map(w => [w.widget_id, w]))
-  return (
-    <div className="space-y-5">
-      {dashboard.rows.map(row => (
-        <div key={row.id}>
-          {row.title && <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">{row.title}</div>}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {row.widgets.map(w => {
-              const p = pv.get(w.id)
-              const wide = w.type === 'table' || w.type === 'line_chart' || w.type === 'bar_chart'
-              return (
-                <div key={w.id} className={`rounded-xl border border-border/60 bg-background p-4 ${wide ? 'col-span-2 md:col-span-4' : ''}`}>
-                  <div className="text-xs text-muted-foreground mb-1">{w.title}</div>
-                  {w.type === 'kpi_tile' && <div className="text-2xl font-bold text-foreground">{fmt(p?.value)}</div>}
-                  {(w.type === 'line_chart' || w.type === 'bar_chart') && (
-                    <MiniChart series={p?.series ?? p?.rows ?? []} bar={w.type === 'bar_chart'} />
-                  )}
-                  {w.type === 'table' && <MiniTable rows={p?.rows ?? []} />}
-                  {p && !p.ok && <div className="text-xs text-amber-600 dark:text-amber-400 mt-1">no data{p.error ? `: ${p.error}` : ''}</div>}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function MiniChart({ series, bar }: { series: Record<string, unknown>[]; bar?: boolean }) {
-  const rows = series.slice(0, 14)
-  const vals = rows.map(r => Number(r.value ?? r.total_sessions ?? r.sessions ?? 0))
-  const max = Math.max(1, ...vals)
-  return (
-    <div className="flex items-end gap-1 h-24 mt-2">
-      {rows.map((r, i) => (
-        <div key={i} className="flex-1 flex flex-col items-center justify-end" title={`${r.date ?? r.activity ?? r.usecase ?? i}: ${vals[i]}`}>
-          <div className={`w-full rounded-t ${bar ? 'bg-primary/70' : 'bg-primary'}`} style={{ height: `${Math.max(4, (vals[i] / max) * 90)}%` }} />
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function MiniTable({ rows }: { rows: Record<string, unknown>[] }) {
-  if (!rows.length) return <div className="text-sm text-muted-foreground">—</div>
-  const cols = Object.keys(rows[0]).slice(0, 5)
-  return (
-    <div className="overflow-x-auto mt-1">
-      <table className="w-full text-xs">
-        <thead><tr className="text-muted-foreground text-left">{cols.map(c => <th key={c} className="py-1 pr-4 font-medium capitalize">{c.replace(/_/g, ' ')}</th>)}</tr></thead>
-        <tbody>
-          {rows.slice(0, 8).map((r, i) => (
-            <tr key={i} className="border-t border-border/40">{cols.map(c => <td key={c} className="py-1 pr-4 text-foreground">{fmt(r[c])}</td>)}</tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   )
 }
