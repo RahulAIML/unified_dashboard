@@ -1,0 +1,11 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+httpx==0.28.1
+pydantic==2.10.4
+pydantic-settings==2.7.1
+asyncpg==0.30.0
+python-dotenv==1.0.1
+langgraph==0.2.60
+# LLM providers are optional at runtime (agents fall back to heuristics when no
+# key is configured). Installed so the LLM path works when a key IS present.
+anthropic==0.42.0
