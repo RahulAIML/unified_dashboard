@@ -55,6 +55,34 @@ async def status(job_id: str) -> JobState:
     return job
 
 
+class ProvideIdsIn(BaseModel):
+    job_id: str
+    exercise_ids: list[int]
+
+
+@router.post("/provide-ids", response_model=JobState, response_model_by_alias=True)
+async def provide_ids(body: ProvideIdsIn) -> JobState:
+    """Resume a job paused at needs_ids with the manager-supplied exercise IDs."""
+    job = jobs.submit_ids(body.job_id, body.exercise_ids)
+    if not job:
+        raise HTTPException(status_code=409, detail="job is not waiting for exercise IDs")
+    return job
+
+
+class ConfirmServicesIn(BaseModel):
+    job_id: str
+    modules: list[str]
+
+
+@router.post("/confirm-services", response_model=JobState, response_model_by_alias=True)
+async def confirm_services(body: ConfirmServicesIn) -> JobState:
+    """Resume a job paused at review_services with the manager's selected subset."""
+    job = jobs.submit_services(body.job_id, body.modules)
+    if not job:
+        raise HTTPException(status_code=409, detail="job is not waiting for service confirmation")
+    return job
+
+
 @router.post("/generate-sync", response_model=JobState, response_model_by_alias=True)
 async def generate_sync(req: GenerateRequest) -> JobState:
     """Serverless-friendly: run the whole pipeline in ONE request and return the

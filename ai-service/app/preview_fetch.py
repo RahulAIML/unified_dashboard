@@ -45,7 +45,10 @@ async def _kpi(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
     slug = cfg.connector_handle.get("tenant", cfg.slug)
     frm, to = _date_range(cfg)
     hdr = {"X-Tenant": slug}
-    base = f"{get_settings().pharma_bridge_base_url.rstrip('/')}/{slug}/bridge/"
+    # Always prefer the exact URL discovery already verified works — never
+    # reconstruct from slug, which silently breaks for tenants whose bridge
+    # doesn't live at the "obvious" path (see _sale_exercises below).
+    base = cfg.connector_handle.get("base_url") or f"{get_settings().pharma_bridge_base_url.rstrip('/')}/{slug}/bridge/"
     if w.type == WidgetType.kpi_tile:
         _, body = await post_json(base, {"action": "kpi.overview", "date_from": frm, "date_to": to}, hdr)
         ov = (body or {}).get("overview", {}) if isinstance(body, dict) else {}
@@ -104,7 +107,12 @@ async def _sale_exercises(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPrevie
         return WidgetPreview(widget_id=w.id, ok=False, error="no exercise ids")
     slug = cfg.connector_handle.get("tenant", cfg.slug)
     frm, to = _date_range(cfg)
-    base = f"{get_settings().pharma_bridge_base_url.rstrip('/')}/{slug}/bridge/"
+    # BUG FIXED: two sale_exercises tenants (Adium, Weser) live at the bridge
+    # HOST ROOT (serv.aux-rolplay.com/{slug}/bridge/), not under /unified/ like
+    # Sanfer — reconstructing the URL from the unified base always 404'd for
+    # them, silently returning 0 sessions. Discovery already found and
+    # verified the real URL; always reuse it instead of guessing again.
+    base = cfg.connector_handle.get("base_url") or f"{get_settings().pharma_bridge_base_url.rstrip('/')}/{slug}/bridge/"
     _, body = await post_json(base, {"action": "sim.demorp6", "ids": ",".join(map(str, ids)), "date_from": frm, "date_to": to}, {"X-Tenant": slug})
     rows = (body or {}).get("data", []) if isinstance(body, dict) else []
     scores = [float(r["Calificacion"]) for r in rows if _num(r.get("Calificacion"))]

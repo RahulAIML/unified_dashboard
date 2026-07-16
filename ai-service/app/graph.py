@@ -23,7 +23,11 @@ from .agents import (
 )
 from .agents.service_discovery import pick_primary
 from .knowledge import put_knowledge
-from .models import JobLog, JobPhase, JobState
+from .models import JobLog, JobPhase, JobState, ServiceKind
+
+# Bridges with no endpoint that lists valid exercise/usecase IDs — the manager
+# must supply them once; there is no way to discover them live.
+_NEEDS_IDS = {ServiceKind.pharma_sale_exercises, ServiceKind.pharma_exceltis_rest}
 
 
 class GState(TypedDict, total=False):
@@ -83,6 +87,32 @@ async def n_schema(state: GState) -> dict:
     return {"schema": schema}
 
 
+async def n_needs_ids(state: GState) -> dict:
+    job = state["job"]
+    primary = state["primary"]
+    job.phase = JobPhase.needs_ids
+    job.pending_connector = primary.kind
+    job.percent = 40
+    await _mk_log(state)("service_discovery", "info",
+                         f"Found {primary.kind.value} for '{job.request.company}', but this bridge has no way to "
+                         "list its own exercise/usecase IDs — please provide them to continue.")
+    await state["update"](job)
+    return {}
+
+
+async def n_review_services(state: GState) -> dict:
+    job = state["job"]
+    schema = state["schema"]
+    job.phase = JobPhase.review_services
+    job.available_modules = list(schema.modules)
+    job.percent = 60
+    await _mk_log(state)("schema_discovery", "info",
+                         f"Found {len(schema.modules)} real module(s): {', '.join(schema.modules)}. "
+                         "Review and confirm which to include.")
+    await state["update"](job)
+    return {}
+
+
 async def n_planning(state: GState) -> dict:
     await _set(state, JobPhase.dashboard_planning, 68)
     rows, filters, recs = await dashboard_planning.run(state["schema"], _mk_log(state))
@@ -140,7 +170,19 @@ async def n_no_service(state: GState) -> dict:
 
 
 def _after_service(state: GState) -> str:
-    return "schema" if state.get("primary") else "no_service"
+    primary = state.get("primary")
+    if not primary:
+        return "no_service"
+    knowledge = state.get("knowledge")
+    has_ids = bool(knowledge and knowledge.exercise_ids)
+    if primary.kind in _NEEDS_IDS and not has_ids:
+        return "needs_ids"
+    return "schema"
+
+
+def _after_schema(state: GState) -> str:
+    schema = state.get("schema")
+    return "review_services" if schema and schema.modules else "planning"
 
 
 def build_graph():
@@ -150,13 +192,16 @@ def build_graph():
         ("discover_schema", n_schema), ("planning", n_planning), ("config", n_config),
         ("validation", n_validation), ("preview", n_preview), ("publish", n_publish),
         ("done", n_done), ("no_service", n_no_service),
+        ("needs_ids", n_needs_ids), ("review_services", n_review_services),
     ]:
         g.add_node(name, fn)
     g.add_edge(START, "plan")
     g.add_edge("plan", "company")
     g.add_edge("company", "service")
-    g.add_conditional_edges("service", _after_service, {"schema": "discover_schema", "no_service": "no_service"})
-    g.add_edge("discover_schema", "planning")
+    g.add_conditional_edges("service", _after_service,
+                            {"schema": "discover_schema", "no_service": "no_service", "needs_ids": "needs_ids"})
+    g.add_conditional_edges("discover_schema", _after_schema,
+                            {"planning": "planning", "review_services": "review_services"})
     g.add_edge("planning", "config")
     g.add_edge("config", "validation")
     g.add_edge("validation", "preview")
@@ -164,6 +209,8 @@ def build_graph():
     g.add_edge("publish", "done")
     g.add_edge("done", END)
     g.add_edge("no_service", END)
+    g.add_edge("needs_ids", END)
+    g.add_edge("review_services", END)
     return g.compile()
 
 
