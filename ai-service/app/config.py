@@ -36,7 +36,6 @@ class Settings(BaseSettings):
     # Second Brain
     second_brain_api_url: str | None = None
     second_brain_api_token: str | None = None
-    second_brain_admin_email: str | None = None
     # Rolplay-app raw SQL endpoint (SELECT-only)
     rolplay_app_sql_url: str = "https://rolplay.app/ajax/remote-access.php"
 

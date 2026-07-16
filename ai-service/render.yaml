@@ -31,7 +31,5 @@ services:
         sync: false
       - key: SECOND_BRAIN_API_TOKEN
         sync: false
-      - key: SECOND_BRAIN_ADMIN_EMAIL
-        sync: false
       - key: CORS_ORIGINS
         value: https://rolplaypro-dashboard.onrender.com
