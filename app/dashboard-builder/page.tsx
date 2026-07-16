@@ -6,7 +6,8 @@ import { DashboardRenderer } from '@/components/DashboardRenderer'
 // ── Types mirroring the AI service JobState ─────────────────────────────────────
 type Phase =
   | 'queued' | 'planning' | 'company_discovery' | 'service_discovery'
-  | 'schema_discovery' | 'dashboard_planning' | 'dashboard_config'
+  | 'needs_ids' | 'schema_discovery' | 'review_services'
+  | 'dashboard_planning' | 'dashboard_config'
   | 'validation' | 'preview' | 'publish' | 'done' | 'error'
 
 interface JobLog { ts: string; phase: Phase; level: 'info' | 'warn' | 'error' | 'success'; message: string }
@@ -20,6 +21,8 @@ interface JobState {
   job_id: string; phase: Phase; percent: number; logs: JobLog[]
   dashboard?: DashboardConfig | null; validation?: ValidationReport | null
   preview?: { widgets: WidgetPreview[] } | null; published?: boolean; error?: string | null
+  pending_connector?: string | null
+  available_modules?: string[]
 }
 
 const PHASE_STEPS: { key: Phase; label: string }[] = [
@@ -41,6 +44,10 @@ export default function DashboardBuilderPage() {
   const [job, setJob] = useState<JobState | null>(null)
   const [starting, setStarting] = useState(false)
   const [publishing, setPublishing] = useState(false)
+  const [pendingIdsText, setPendingIdsText] = useState('')
+  const [selectedModules, setSelectedModules] = useState<Set<string>>(new Set())
+  const [resuming, setResuming] = useState(false)
+  const seededModulesFor = useRef<string | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const logEndRef = useRef<HTMLDivElement | null>(null)
 
@@ -56,10 +63,59 @@ export default function DashboardBuilderPage() {
         if (!res.ok) return
         const j: JobState = await res.json()
         setJob(j)
-        if (j.phase === 'done' || j.phase === 'error') stopPoll()
+        // Pause polling while waiting on a manager decision — resumed by
+        // provideIds()/confirmServices() after they call the resume endpoint.
+        if (j.phase === 'done' || j.phase === 'error' || j.phase === 'needs_ids' || j.phase === 'review_services') {
+          stopPoll()
+        }
       } catch { /* keep polling */ }
     }, 1000)
   }, [])
+
+  // Pre-check every discovered module the first time review_services appears
+  // for this job — the manager deselects what they DON'T want, never picks blind.
+  useEffect(() => {
+    if (job?.phase === 'review_services' && job.available_modules && seededModulesFor.current !== job.job_id) {
+      setSelectedModules(new Set(job.available_modules))
+      seededModulesFor.current = job.job_id
+    }
+  }, [job])
+
+  async function provideIds() {
+    if (!job) return
+    const exercise_ids = pendingIdsText.split(/[,\s]+/).map(s => parseInt(s, 10)).filter(n => !isNaN(n))
+    if (exercise_ids.length === 0) return
+    setResuming(true)
+    try {
+      const res = await fetch('/api/ai/provide-ids', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job_id: job.job_id, exercise_ids }),
+      })
+      const j: JobState = await res.json()
+      setJob(j); setPendingIdsText(''); poll(j.job_id)
+    } finally { setResuming(false) }
+  }
+
+  async function confirmServices() {
+    if (!job) return
+    setResuming(true)
+    try {
+      const res = await fetch('/api/ai/confirm-services', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job_id: job.job_id, modules: Array.from(selectedModules) }),
+      })
+      const j: JobState = await res.json()
+      setJob(j); poll(j.job_id)
+    } finally { setResuming(false) }
+  }
+
+  function toggleModule(m: string) {
+    setSelectedModules(prev => {
+      const next = new Set(prev)
+      if (next.has(m)) next.delete(m); else next.add(m)
+      return next
+    })
+  }
 
   async function generate() {
     if (!company.trim()) return
@@ -88,8 +144,12 @@ export default function DashboardBuilderPage() {
     } finally { setPublishing(false) }
   }
 
-  const running = !!job && job.phase !== 'done' && job.phase !== 'error'
-  const currentIdx = job ? ORDER.indexOf(job.phase === 'dashboard_config' ? 'dashboard_planning' : job.phase) : -1
+  const PAUSED_PHASES: Phase[] = ['needs_ids', 'review_services']
+  const isPaused = !!job && PAUSED_PHASES.includes(job.phase)
+  const running = !!job && job.phase !== 'done' && job.phase !== 'error' && !isPaused
+  const stepForOrder = (p: Phase): Phase =>
+    p === 'dashboard_config' ? 'dashboard_planning' : p === 'needs_ids' ? 'service_discovery' : p === 'review_services' ? 'schema_discovery' : p
+  const currentIdx = job ? ORDER.indexOf(stepForOrder(job.phase)) : -1
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
@@ -172,6 +232,54 @@ export default function DashboardBuilderPage() {
             <div ref={logEndRef} />
           </div>
           {job.error && <p className="mt-3 text-sm text-destructive">{job.error}</p>}
+
+          {/* Pause: connector found, but this bridge has no way to list its own
+              exercise/usecase IDs — genuinely need the manager to supply them. */}
+          {job.phase === 'needs_ids' && (
+            <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+              <p className="text-sm font-semibold text-foreground mb-1">We need a bit more information</p>
+              <p className="text-xs text-muted-foreground mb-3">
+                We found your data source ({job.pending_connector?.replace(/_/g, ' ')}), but this type of system
+                doesn&apos;t let us list its exercise/usecase IDs automatically. If you know them, enter them below —
+                otherwise ask whoever manages your training platform.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <input value={pendingIdsText} onChange={e => setPendingIdsText(e.target.value)}
+                  placeholder="e.g. 137, 159, 173" disabled={resuming}
+                  onKeyDown={e => { if (e.key === 'Enter' && pendingIdsText.trim()) provideIds() }}
+                  className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                <button onClick={provideIds} disabled={resuming || !pendingIdsText.trim()}
+                  className="px-5 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 disabled:opacity-50 whitespace-nowrap">
+                  {resuming ? 'Continuing…' : 'Continue'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Pause: schema discovery found the company's REAL modules — the
+              manager reviews/narrows exactly that list, never picks blind. */}
+          {job.phase === 'review_services' && (
+            <div className="mt-4 rounded-xl border border-border bg-background p-4">
+              <p className="text-sm font-semibold text-foreground mb-1">We found these real services for your company</p>
+              <p className="text-xs text-muted-foreground mb-3">
+                These are the services your training data actually contains — nothing guessed. Uncheck any you don&apos;t
+                want included in the dashboard.
+              </p>
+              <div className="space-y-2 mb-4">
+                {(job.available_modules ?? []).map(m => (
+                  <label key={m} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" checked={selectedModules.has(m)} onChange={() => toggleModule(m)}
+                      className="rounded border-border" />
+                    {m}
+                  </label>
+                ))}
+              </div>
+              <button onClick={confirmServices} disabled={resuming || selectedModules.size === 0}
+                className="px-5 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 disabled:opacity-50">
+                {resuming ? 'Continuing…' : `Continue with ${selectedModules.size} selected`}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

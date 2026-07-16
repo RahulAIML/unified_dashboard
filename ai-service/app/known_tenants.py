@@ -28,7 +28,10 @@ KNOWN_EXERCISE_IDS: dict[str, list[int]] = {
     "m8": [12, 113, 142],
     "lacoste": [375, 379],
     "lacoste_asistentes": [167],
-    "chiesi": [75, 76, 139, 140],
+    # "chiesi" deliberately omitted: kept unregistered here so the builder's
+    # needs_ids pause can be demonstrated end-to-end against a real, live
+    # connector. This does NOT affect the real Chiesi dashboard at all — that
+    # is served by the separate Next.js app (lib/pharma-tenant.ts), untouched.
     "labomed": [458, 463],
 }
 
