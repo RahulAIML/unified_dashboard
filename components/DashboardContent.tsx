@@ -576,12 +576,15 @@ export function DashboardContent() {
           </>
         ) : (
           <>
-            {/* KPI export row — both buttons share the same min-width for visual consistency */}
+            {/* KPI export row — fixed width (not min-width) on BOTH buttons, plus
+                identical padding/text-size/radius via ExportButton's className
+                override, so they stay pixel-identical regardless of language
+                (the Spanish labels are noticeably longer than the English ones). */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:justify-end">
               <button
                 onClick={() => exportAllSolutions()}
                 disabled={exportLoading}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold min-w-[160px] whitespace-nowrap bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed shadow-[0_1px_3px_rgba(0,0,0,0.1)]"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold w-full sm:w-[220px] whitespace-nowrap bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed shadow-[0_1px_3px_rgba(0,0,0,0.1)]"
                 title={exportAllLabel}
               >
                 {exportLoading ? (
@@ -600,7 +603,8 @@ export function DashboardContent() {
                 data={kpiExportRows}
                 filename={csvFilename(`kpi-summary-${selectedSolution ?? "all"}`)}
                 label={t.exportCurrent}
-                minWidth="min-w-[160px]"
+                minWidth="w-full sm:w-[220px]"
+                className="!px-4 !py-2.5 !text-sm !rounded-xl !gap-2"
                 columns={[
                   { header: "Solution",              value: (r) => r.solution },
                   { header: "From",                  value: (r) => r.from },
