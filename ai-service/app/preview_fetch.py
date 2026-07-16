@@ -25,6 +25,13 @@ def _date_range(cfg: DashboardConfig) -> tuple[str, str]:
 
 async def fetch_widget(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
     try:
+        # raw_field is only ever set for auto-discovered metrics (see
+        # agents/auto_discovery.py) — route those through the generic
+        # action-dispatch fetcher regardless of connector kind, since the
+        # dedicated per-kind functions below only know their own hardcoded
+        # action set.
+        if w.raw_field is not None and cfg.connector in (ServiceKind.pharma_kpi, ServiceKind.pharma_sale_exercises):
+            return await _generic_pharma_action(cfg, w)
         if cfg.connector == ServiceKind.pharma_kpi:
             return await _kpi(cfg, w)
         if cfg.connector == ServiceKind.pharma_exceltis_rest:
@@ -38,6 +45,36 @@ async def fetch_widget(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
         return WidgetPreview(widget_id=w.id, ok=False, error=f"no preview for {cfg.connector}")
     except Exception as exc:
         return WidgetPreview(widget_id=w.id, ok=False, error=str(exc)[:200])
+
+
+# ── generic action-dispatch (auto-discovered metrics) ────────────────────────────
+async def _generic_pharma_action(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
+    """Re-calls the exact action auto_discovery already verified returns real
+    data, and pulls w.raw_field (a dotted path, e.g. "certified" or
+    "stats.avg_best_score") out of the response. Works for any action name —
+    nothing here is specific to one company or one bridge's vocabulary."""
+    slug = cfg.connector_handle.get("tenant", cfg.slug)
+    frm, to = _date_range(cfg)
+    ids = cfg.connector_handle.get("exercise_ids", [])
+    base = cfg.connector_handle.get("base_url") or f"{get_settings().pharma_bridge_base_url.rstrip('/')}/{slug}/bridge/"
+    params: dict[str, Any] = {"action": w.source_action, "date_from": frm, "date_to": to}
+    if ids:
+        params["ids"] = ",".join(map(str, ids))
+    _, body = await post_json(base, params, {"X-Tenant": slug})
+    if not isinstance(body, dict) or body.get("ok") is False:
+        return WidgetPreview(widget_id=w.id, ok=False, error="action no longer returns real data")
+
+    node: Any = body
+    for part in (w.raw_field or "").split("."):
+        node = node.get(part) if isinstance(node, dict) else None
+        if node is None:
+            break
+
+    if w.type == WidgetType.table:
+        rows = node if isinstance(node, list) else None
+        return WidgetPreview(widget_id=w.id, ok=bool(rows), rows=rows)
+    val = node if isinstance(node, (int, float)) and not isinstance(node, bool) else None
+    return WidgetPreview(widget_id=w.id, ok=val is not None, value=val)
 
 
 # ── pharma kpi ──────────────────────────────────────────────────────────────────

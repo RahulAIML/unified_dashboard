@@ -17,6 +17,7 @@ correctness requires a manager decision, not a guess:
 from __future__ import annotations
 
 from .agents import (
+    auto_discovery,
     company_discovery,
     dashboard_config,
     dashboard_planning,
@@ -115,6 +116,14 @@ async def _continue_from_schema_discovery(job: JobState, knowledge, primary: Ser
     job.phase = JobPhase.schema_discovery; await update(job)
     schema = await schema_discovery.run(knowledge, primary, job.request.exercise_ids, log)
     job.schema_ = schema; job.percent = 55; await update(job)
+
+    # Exhaustive discovery: probe every action the bridge advertises that
+    # schema_discovery doesn't already recognize by name, keep only what
+    # comes back as real data. Runs before persisting/pausing so anything
+    # found is included in the manager's module review, not bolted on after.
+    await auto_discovery.run(schema, primary, job.request.exercise_ids, log)
+    job.schema_ = schema; await update(job)
+
     await put_knowledge(knowledge)  # persist learned services/ids
 
     if schema.modules:

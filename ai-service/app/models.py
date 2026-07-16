@@ -66,6 +66,7 @@ class MetricType(str, Enum):
     rate = "rate"          # percentage (pass rate, engagement)
     dimension = "dimension"  # groupable label (activity, line, user)
     timeseries = "timeseries"
+    table = "table"         # arbitrary row-shaped data (auto-discovered, generic columns)
 
 
 class DiscoveredMetric(BaseModel):
@@ -78,6 +79,12 @@ class DiscoveredMetric(BaseModel):
     source_action: str
     sample_value: Any | None = None
     supported: bool = True
+    # Dotted path to the value within the action's real JSON response (e.g.
+    # "certified" or "stats.avg_best_score" for a nested field, "data" for a
+    # table's row list). Only set for auto-discovered metrics the pipeline has
+    # never seen a hardcoded name for — known metrics resolve by metric_key
+    # via dedicated code and leave this unset.
+    raw_field: str | None = None
 
 
 class NormalizedSchema(BaseModel):
@@ -113,6 +120,9 @@ class WidgetConfig(BaseModel):
     source_action: str
     span: int = 1  # grid columns (1-4)
     note: str = ""
+    # See DiscoveredMetric.raw_field — carried through so the generic preview
+    # fetcher can pull the right field from an auto-discovered action's response.
+    raw_field: str | None = None
 
 
 class DashboardRow(BaseModel):

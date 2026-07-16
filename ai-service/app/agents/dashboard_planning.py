@@ -90,7 +90,8 @@ def _build_from_plan(plan: dict, schema: NormalizedSchema, metrics: dict):
             continue  # enforce: real metric only
         tile_keys.add(key)
         tiles.append(WidgetConfig(id=f"tile_{key}", type=WidgetType.kpi_tile, title=m.label,
-                                  metric_key=key, source_kind=m.source_kind, source_action=m.source_action))
+                                  metric_key=key, source_kind=m.source_kind, source_action=m.source_action,
+                                  raw_field=m.raw_field))
     # Gemini picks which tiles to feature/order, but every count/score/rate
     # metric that schema_discovery genuinely confirmed real (e.g. Sanfer's
     # certification stats) must still show up — an LLM's own summarization
@@ -100,7 +101,8 @@ def _build_from_plan(plan: dict, schema: NormalizedSchema, metrics: dict):
             continue
         tile_keys.add(m.key)
         tiles.append(WidgetConfig(id=f"tile_{m.key}", type=WidgetType.kpi_tile, title=m.label,
-                                  metric_key=m.key, source_kind=m.source_kind, source_action=m.source_action))
+                                  metric_key=m.key, source_kind=m.source_kind, source_action=m.source_action,
+                                  raw_field=m.raw_field))
 
     # DEDUP GUARD: every connector's preview layer implements at most ONE real
     # query per widget TYPE (one trend series, one dimension breakdown) — see
@@ -146,6 +148,12 @@ def _build_from_plan(plan: dict, schema: NormalizedSchema, metrics: dict):
             metrics=[k for k in ("total_sessions", "avg_score", "pass_rate") if k in metrics],
             source_kind=dm.source_kind, source_action=dm.source_action, span=4))
 
+    # Auto-discovered table-shaped metrics (e.g. Sanfer's objections/cert
+    # breakdowns) are each a genuinely distinct real dataset, not competing
+    # copies of the same query — so they bypass the one-per-type dedup above
+    # and are always all included, one widget per source action.
+    charts.extend(_auto_table_widgets(schema))
+
     rows: list[DashboardRow] = []
     if tiles:
         rows.append(DashboardRow(id="row_kpis", title="Overview", widgets=tiles))
@@ -156,10 +164,18 @@ def _build_from_plan(plan: dict, schema: NormalizedSchema, metrics: dict):
     return rows, filters, recs
 
 
+def _auto_table_widgets(schema: NormalizedSchema) -> list[WidgetConfig]:
+    return [
+        WidgetConfig(id=f"table_{m.key}", type=WidgetType.table, title=m.label,
+                     source_kind=m.source_kind, source_action=m.source_action, raw_field=m.raw_field, span=4)
+        for m in schema.metrics if m.type == MetricType.table
+    ]
+
+
 # ── Heuristic fallback ─────────────────────────────────────────────────────────────
 def _heuristic(schema: NormalizedSchema, metrics: dict):
     tiles = [WidgetConfig(id=f"tile_{m.key}", type=WidgetType.kpi_tile, title=m.label, metric_key=m.key,
-                          source_kind=m.source_kind, source_action=m.source_action)
+                          source_kind=m.source_kind, source_action=m.source_action, raw_field=m.raw_field)
              for m in schema.metrics if m.type in (MetricType.count, MetricType.score, MetricType.rate)]
     charts: list[WidgetConfig] = []
     ts = next((m for m in schema.metrics if m.type == MetricType.timeseries), None)
@@ -175,6 +191,7 @@ def _heuristic(schema: NormalizedSchema, metrics: dict):
                                    dimension=schema.dimensions[0] if schema.dimensions else "category",
                                    metrics=[k for k in ("total_sessions", "avg_score", "pass_rate") if k in metrics],
                                    source_kind=dim.source_kind, source_action=dim.source_action, span=4))
+    charts.extend(_auto_table_widgets(schema))
     rows: list[DashboardRow] = []
     if tiles:
         rows.append(DashboardRow(id="row_kpis", title="Overview", widgets=tiles))
