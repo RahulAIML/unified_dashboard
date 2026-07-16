@@ -113,6 +113,15 @@ async def _sale_exercises(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPrevie
     # them, silently returning 0 sessions. Discovery already found and
     # verified the real URL; always reuse it instead of guessing again.
     base = cfg.connector_handle.get("base_url") or f"{get_settings().pharma_bridge_base_url.rstrip('/')}/{slug}/bridge/"
+    # cert.stats is real and working for tenants that have it (verified on
+    # Sanfer's live bridge) but isn't advertised in the bridge's own
+    # introspection action list — schema_discovery still detects it via the
+    # cert.count/cert.sessions actions that ARE advertised. Fetch it
+    # separately; it's a distinct source, not derived from sim.demorp6 rows.
+    if w.metric_key == "certified":
+        _, cert_body = await post_json(base, {"action": "cert.stats"}, {"X-Tenant": slug})
+        v = (cert_body or {}).get("certified") if isinstance(cert_body, dict) else None
+        return WidgetPreview(widget_id=w.id, ok=v is not None, value=v)
     _, body = await post_json(base, {"action": "sim.demorp6", "ids": ",".join(map(str, ids)), "date_from": frm, "date_to": to}, {"X-Tenant": slug})
     rows = (body or {}).get("data", []) if isinstance(body, dict) else []
     scores = [float(r["Calificacion"]) for r in rows if _num(r.get("Calificacion"))]

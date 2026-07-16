@@ -83,12 +83,24 @@ async def _llm_plan(schema: NormalizedSchema) -> dict | None:
 
 def _build_from_plan(plan: dict, schema: NormalizedSchema, metrics: dict):
     tiles: list[WidgetConfig] = []
+    tile_keys: set[str] = set()
     for key in plan.get("tiles", []):
         m = metrics.get(key)
-        if not m or m.type not in (MetricType.count, MetricType.score, MetricType.rate):
+        if not m or m.type not in (MetricType.count, MetricType.score, MetricType.rate) or key in tile_keys:
             continue  # enforce: real metric only
+        tile_keys.add(key)
         tiles.append(WidgetConfig(id=f"tile_{key}", type=WidgetType.kpi_tile, title=m.label,
                                   metric_key=key, source_kind=m.source_kind, source_action=m.source_action))
+    # Gemini picks which tiles to feature/order, but every count/score/rate
+    # metric that schema_discovery genuinely confirmed real (e.g. Sanfer's
+    # certification stats) must still show up — an LLM's own summarization
+    # picking "3-5 typical KPIs" is not grounds to silently drop a real one.
+    for m in schema.metrics:
+        if m.key in tile_keys or m.type not in (MetricType.count, MetricType.score, MetricType.rate):
+            continue
+        tile_keys.add(m.key)
+        tiles.append(WidgetConfig(id=f"tile_{m.key}", type=WidgetType.kpi_tile, title=m.label,
+                                  metric_key=m.key, source_kind=m.source_kind, source_action=m.source_action))
 
     # DEDUP GUARD: every connector's preview layer implements at most ONE real
     # query per widget TYPE (one trend series, one dimension breakdown) — see
