@@ -8,7 +8,7 @@ from .. import jobs
 from ..agents import company_discovery, publish
 from ..agents.service_discovery import pick_primary
 from ..agents import service_discovery, schema_discovery
-from ..knowledge import get_knowledge, put_knowledge
+from ..knowledge import delete_knowledge, get_knowledge, put_knowledge
 from ..models import CompanyKnowledge, DashboardConfig, GenerateRequest, JobState
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -45,6 +45,14 @@ async def discover_services(body: CompanyIn) -> CompanyKnowledge:
 @router.post("/generate-dashboard", response_model=JobState, response_model_by_alias=True)
 async def generate_dashboard(req: GenerateRequest) -> JobState:
     return jobs.create_job(req)
+
+
+@router.delete("/knowledge/{slug}")
+async def forget_company(slug: str) -> dict:
+    """Drop a company's cached discovery so the next generate-dashboard run
+    re-probes every connector fresh — for correcting a stale/wrong cache entry."""
+    await delete_knowledge(slug)
+    return {"cleared": slug}
 
 
 @router.get("/status/{job_id}", response_model=JobState, response_model_by_alias=True)

@@ -38,3 +38,12 @@ async def put_knowledge(k: CompanyKnowledge) -> None:
                  payload=EXCLUDED.payload, updated_at=NOW()""",
             k.slug, k.company, k.model_dump_json(),
         )
+
+
+async def delete_knowledge(slug: str) -> None:
+    """Drop a company's cached discovery (memory + DB) so the next run re-probes
+    everything from scratch — for correcting a stale/wrong cached entry."""
+    _MEM.pop(slug, None)
+    pool = await get_pool()
+    if pool:
+        await pool.execute("DELETE FROM agent_memory WHERE slug = $1", slug)
