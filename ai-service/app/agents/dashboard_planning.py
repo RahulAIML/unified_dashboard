@@ -53,9 +53,13 @@ async def _llm_plan(schema: NormalizedSchema) -> dict | None:
         "dimensions ALREADY DISCOVERED for a company, design a clean executive "
         "dashboard. HARD RULES: only use the exact metric `key` values and "
         "dimension names provided — never invent metrics, widgets, or data. "
-        "Prefer 3-5 KPI tiles, one trend chart if a timeseries metric exists, "
-        "and one breakdown (bar + table) if a dimension metric exists. "
-        "Return STRICT JSON only."
+        "Prefer 3-5 KPI tiles, AT MOST ONE trend chart (only if a timeseries "
+        "metric exists), and AT MOST ONE breakdown chart plus AT MOST ONE table "
+        "(only if a dimension metric exists). Each data source in this system "
+        "backs exactly one real query per widget type — proposing two charts "
+        "of the same type (e.g. two bar_charts) would render IDENTICAL data "
+        "under different titles, which is forbidden. Never propose more than "
+        "one widget of the same `type`. Return STRICT JSON only."
     )
     payload = {
         "company": schema.company,
@@ -86,10 +90,22 @@ def _build_from_plan(plan: dict, schema: NormalizedSchema, metrics: dict):
         tiles.append(WidgetConfig(id=f"tile_{key}", type=WidgetType.kpi_tile, title=m.label,
                                   metric_key=key, source_kind=m.source_kind, source_action=m.source_action))
 
+    # DEDUP GUARD: every connector's preview layer implements at most ONE real
+    # query per widget TYPE (one trend series, one dimension breakdown) — see
+    # preview_fetch.py, where any non-tile widget of a given connector routes to
+    # the same underlying rows regardless of its title. Without this cap, an
+    # LLM can propose several differently-titled charts ("usecase performance",
+    # "user engagement", "pass rate breakdown") that all silently render
+    # identical data — exactly the "same numbers relabeled" failure this
+    # pipeline exists to prevent. So: keep at most the FIRST proposed widget of
+    # each type; a bar_chart + a table of the SAME breakdown is fine (that's
+    # one analysis shown two ways, like Apotex's real dashboard), but a second
+    # bar_chart or a second table is dropped, not silently duplicated.
+    seen_types: set[str] = set()
     charts: list[WidgetConfig] = []
     for c in plan.get("charts", []):
         ctype = str(c.get("type", "")).lower()
-        if ctype not in _ALLOWED_CHART:
+        if ctype not in _ALLOWED_CHART or ctype in seen_types:
             continue
         mkey = c.get("metric_key")
         dim = c.get("dimension")
@@ -99,6 +115,7 @@ def _build_from_plan(plan: dict, schema: NormalizedSchema, metrics: dict):
         src_metric = metrics.get(mkey) if mkey in metrics else next(iter(schema.metrics), None)
         if not src_metric:
             continue
+        seen_types.add(ctype)
         charts.append(WidgetConfig(
             id=str(c.get("id") or f"chart_{len(charts)}"),
             type=WidgetType(ctype), title=str(c.get("title") or src_metric.label),
@@ -107,8 +124,9 @@ def _build_from_plan(plan: dict, schema: NormalizedSchema, metrics: dict):
             source_kind=src_metric.source_kind, source_action=src_metric.source_action,
             span=2 if ctype != "histogram" else 2,
         ))
-    # always offer a detail table if a dimension exists
-    if any(m.type == MetricType.dimension for m in schema.metrics):
+    # Always offer a detail table if a dimension exists — but only if the plan
+    # didn't already include one (same dedup rule: one real table query exists).
+    if "table" not in seen_types and any(m.type == MetricType.dimension for m in schema.metrics):
         dm = next(m for m in schema.metrics if m.type == MetricType.dimension)
         charts.append(WidgetConfig(
             id="table_breakdown", type=WidgetType.table, title=f"{dm.label} — detail",
