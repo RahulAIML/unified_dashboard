@@ -115,7 +115,33 @@ interface SimDemorp6Row {
   Calificacion: number
 }
 
+// Overview, trends, breakdown, results and best-performers each independently
+// call fetchSaleExercisesSessions for the same (tenant, range) on one page
+// load — for a tenant with years of history (Sanfer: ~9k rows / tens of MB)
+// that's several concurrent full re-fetches of the identical dataset from the
+// upstream bridge, and under that load one of them can time out even though
+// the others succeed (looks like a random per-widget failure, not a data bug).
+// Coalesce concurrent/near-concurrent calls for the same key into one fetch.
+const _sessionsCache = new Map<string, { promise: Promise<SaleExercisesRow[]>; expiresAt: number }>()
+const SESSIONS_CACHE_TTL_MS = 30_000
+
 async function fetchSaleExercisesSessions(
+  tenant: PharmaTenant,
+  fromIso: string,
+  toIso: string,
+): Promise<SaleExercisesRow[]> {
+  const key = `${tenant}|${fromIso}|${toIso}`
+  const now = Date.now()
+  const hit = _sessionsCache.get(key)
+  if (hit && hit.expiresAt > now) return hit.promise
+
+  const promise = fetchSaleExercisesSessionsUncached(tenant, fromIso, toIso)
+  _sessionsCache.set(key, { promise, expiresAt: now + SESSIONS_CACHE_TTL_MS })
+  promise.catch(() => _sessionsCache.delete(key)) // never cache a failure
+  return promise
+}
+
+async function fetchSaleExercisesSessionsUncached(
   tenant: PharmaTenant,
   fromIso: string,
   toIso: string,
