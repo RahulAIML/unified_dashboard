@@ -8,12 +8,20 @@
  * banco orgs to that Second Brain data instead.
  *
  * Admin-email resolution tries candidates in order and returns the FIRST that
- * actually resolves upstream — critically including the env fallback, because
- * the naively-derived `admin@{domain}` often 404s (e.g. Second Brain's coppel
- * org is owned by `admin1@coppel.com`, not `admin@coppel.com`).
+ * actually resolves upstream. The env fallback (SECOND_BRAIN_ADMIN_EMAIL) is a
+ * REAL organization's admin address (today: admin1@coppel.com) — it must only
+ * ever be offered as a candidate for that same organization's own users
+ * (banco-domain users), never as a blanket last resort for every tenant.
+ *
+ * BUG FIXED: previously the env fallback was pushed unconditionally for every
+ * user. A client whose own admin@{domain} didn't resolve in Second Brain (i.e.
+ * almost every non-banco tenant) fell through to the fallback and silently
+ * received Coppel's real Second Brain profile as if it were their own —
+ * cross-tenant data exposure. Now the fallback is scoped to isBancoOrg(email).
  */
 
 import { fetchSecondBrainProfile, computeSecondBrainKpis, type SecondBrainProfile } from './second-brain-api'
+import { isBancoOrg } from './org-type'
 import type { OverviewApiResponse } from './types'
 
 const GENERIC_DOMAINS = new Set([
@@ -44,7 +52,12 @@ export async function secondBrainAdminCandidates(
   const domain = email.split('@')[1]?.toLowerCase()
   if (domain && !GENERIC_DOMAINS.has(domain)) candidates.push(`admin@${domain}`)
 
-  if (process.env.SECOND_BRAIN_ADMIN_EMAIL) candidates.push(process.env.SECOND_BRAIN_ADMIN_EMAIL)
+  // Scoped fallback: only offer the env default to the organization it
+  // actually belongs to (banco-domain users). Never a blanket default for
+  // other tenants — that would leak Coppel's real data to them.
+  if (isBancoOrg(email) && process.env.SECOND_BRAIN_ADMIN_EMAIL) {
+    candidates.push(process.env.SECOND_BRAIN_ADMIN_EMAIL)
+  }
 
   // De-dupe, preserve order.
   const seen = new Set<string>()

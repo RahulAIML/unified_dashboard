@@ -76,9 +76,11 @@ export async function GET(request: NextRequest) {
     const candidates = await secondBrainAdminCandidates(auth.email, auth.customerId)
 
     if (candidates.length === 0) {
+      // Honest, non-technical: this organization simply has no Second Brain
+      // integration — never a technical failure, so never worded like one.
       return NextResponse.json(
-        { success: false, data: { message: "Second Brain integration is not configured for this customer" }, meta: {} },
-        { status: 404 }
+        { success: false, data: { message: "Second Brain isn't set up for your organization yet.", notConfigured: true }, meta: {} },
+        { status: 200 }
       )
     }
 
@@ -111,24 +113,31 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // No candidate resolved. Map upstream 404 (org not found) → 503 so the
-    // frontend treats it as "service unavailable" rather than a hard error.
+    // No candidate resolved. Distinguish the two genuinely different cases:
+    //  - 404 (org not found upstream) → this organization has no Second Brain
+    //    account. Honest, non-technical, expected — not an error state.
+    //  - anything else (timeout/5xx/network) → a real technical failure.
     console.error("[/api/second-brain/profile] no candidate resolved; lastStatus", lastStatus)
+    if (lastStatus === 404) {
+      return NextResponse.json(
+        { success: false, data: { message: "Second Brain isn't set up for your organization yet.", notConfigured: true }, meta: {} },
+        { status: 200 }
+      )
+    }
     return NextResponse.json(
       {
         success: false,
-        data: { message: `Second Brain profile unavailable` },
+        data: { message: "We couldn't reach Second Brain right now. Please try again in a moment." },
         meta: { timestamp: new Date().toISOString() },
       },
-      { status: lastStatus === 404 ? 503 : 502 }
+      { status: 502 }
     )
   } catch (err) {
     console.error("[/api/second-brain/profile]", err)
-    const message = err instanceof Error ? err.message : "Unknown error"
     return NextResponse.json(
       {
         success: false,
-        data: { message: `Failed to reach Second Brain API: ${message}` },
+        data: { message: "We couldn't reach Second Brain right now. Please try again in a moment." },
         meta: { timestamp: new Date().toISOString() },
       },
       { status: 502 }
