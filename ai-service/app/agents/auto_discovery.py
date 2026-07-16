@@ -141,6 +141,14 @@ async def run(schema: NormalizedSchema, service: ServiceDescriptor, exercise_ids
         await log("schema_discovery", "success", f"'{action}' → real table data confirmed ({len(rows)} row(s))")
 
 
+# A dict with more numeric fields than this isn't a set of named KPI fields —
+# it's a keyed collection (e.g. Apotex's kpi.coach_scores: {"scores":
+# {"<session_id>": <score>, ...}} — one entry per session, not per metric).
+# Recognize that shape and skip it rather than exploding into one "metric"
+# per key.
+_MAX_SCALARS_PER_DICT = 15
+
+
 def _extract_shapes(body: dict) -> tuple[dict[str, float], dict[str, list[dict]]]:
     """Scan up to 2 levels deep for numeric scalars and list-of-dict tables.
 
@@ -153,6 +161,7 @@ def _extract_shapes(body: dict) -> tuple[dict[str, float], dict[str, list[dict]]
     tables: dict[str, list[dict]] = {}
 
     def scan(obj: dict, prefix: str = "") -> None:
+        local_scalars: dict[str, float] = {}
         for k, v in obj.items():
             if k in _META_KEYS:
                 continue
@@ -160,11 +169,13 @@ def _extract_shapes(body: dict) -> tuple[dict[str, float], dict[str, list[dict]]
             if isinstance(v, bool):
                 continue
             if isinstance(v, (int, float)):
-                scalars[full_key] = v
+                local_scalars[full_key] = v
             elif isinstance(v, list) and v and isinstance(v[0], dict):
                 tables.setdefault(full_key, v)
             elif isinstance(v, dict) and not prefix:  # one level of nesting only
                 scan(v, k)
+        if len(local_scalars) <= _MAX_SCALARS_PER_DICT:
+            scalars.update(local_scalars)
 
     scan(body)
     return scalars, tables
