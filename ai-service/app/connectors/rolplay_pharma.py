@@ -69,10 +69,18 @@ class RolplayPharmaConnector:
         if not isinstance(overview, dict) or "total_sessions" not in overview:
             return None
         total = int(overview.get("total_sessions") or 0)
-        endpoints = ["kpi.overview"]
-        # confirm the richer actions too
-        for action in ("kpi.activity_summary", "kpi.score_trend", "kpi.leaderboard", "kpi.sessions"):
-            endpoints.append(action)
+        # Apotex's real bridge (and likely others of this kind) genuinely
+        # supports the same "unknown action returns its full action list"
+        # introspection sale_exercises bridges use — it advertises 20+ real
+        # actions (kpi.score_distribution, kpi.coach_scores, list.members,
+        # list.admins, ...) that were previously never even asked about.
+        # Use the real list when available; only fall back to the assumed
+        # handful if a kpi bridge doesn't support introspection.
+        _, intro_body = await post_json(url, {"action": "__introspect__"}, headers={"X-Tenant": slug})
+        real_actions = self._extract_actions(intro_body)
+        endpoints = real_actions if real_actions else [
+            "kpi.overview", "kpi.activity_summary", "kpi.score_trend", "kpi.leaderboard", "kpi.sessions",
+        ]
         return ServiceDescriptor(
             kind=ServiceKind.pharma_kpi,
             name=f"{slug} kpi bridge",

@@ -41,8 +41,17 @@ _KNOWN_ACTIONS: dict[ServiceKind, set[str]] = {
 
 # Action-name conventions this bridge family uses for internal/debug tooling —
 # never real business content, so never worth surfacing regardless of shape.
-_EXCLUDED_SUFFIXES = (".raw", ".explore", ".lookup", ".tables", ".columns")
+_EXCLUDED_PREFIXES = ("schema.",)
+_EXCLUDED_SUFFIXES = (".raw", ".explore", ".lookup")
 _EXCLUDED_EXACT = {"ping", "__introspect__"}
+
+
+def _is_excluded(action: str) -> bool:
+    return (
+        action in _EXCLUDED_EXACT
+        or action.startswith(_EXCLUDED_PREFIXES)
+        or action.endswith(_EXCLUDED_SUFFIXES)
+    )
 
 # No silent caps: if a tenant's bridge advertises more than this, we probe the
 # first N and log exactly what was skipped rather than pretending it isn't there.
@@ -56,10 +65,7 @@ async def run(schema: NormalizedSchema, service: ServiceDescriptor, exercise_ids
     if known is None:
         return  # exceltis_rest and others don't self-report an action list to explore
 
-    candidates = [
-        a for a in service.endpoints
-        if a not in known and a not in _EXCLUDED_EXACT and not a.endswith(_EXCLUDED_SUFFIXES)
-    ]
+    candidates = [a for a in service.endpoints if a not in known and not _is_excluded(a)]
     if not candidates:
         return
 
