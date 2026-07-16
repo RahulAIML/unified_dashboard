@@ -8,20 +8,26 @@
  * banco orgs to that Second Brain data instead.
  *
  * Admin-email resolution tries candidates in order and returns the FIRST that
- * actually resolves upstream. The env fallback (SECOND_BRAIN_ADMIN_EMAIL) is a
- * REAL organization's admin address (today: admin1@coppel.com) — it must only
- * ever be offered as a candidate for that same organization's own users
- * (banco-domain users), never as a blanket last resort for every tenant.
+ * actually resolves upstream.
  *
- * BUG FIXED: previously the env fallback was pushed unconditionally for every
- * user. A client whose own admin@{domain} didn't resolve in Second Brain (i.e.
- * almost every non-banco tenant) fell through to the fallback and silently
- * received Coppel's real Second Brain profile as if it were their own —
- * cross-tenant data exposure. Now the fallback is scoped to isBancoOrg(email).
+ * CONVENTION (confirmed against the live API): every Second Brain organization's
+ * admin account is provisioned as `admin1@{company-domain}` — e.g. Coppel's is
+ * admin1@coppel.com. This is a genuine self-service pattern: any NEW company
+ * onboarded into Second Brain resolves automatically the moment their own
+ * admin1@{domain} account exists — no code change, no env var, no per-tenant
+ * hardcoding required.
+ *
+ * BUG FIXED (previous version): a hardcoded env fallback (SECOND_BRAIN_ADMIN_EMAIL
+ * = admin1@coppel.com) was offered as a candidate for every user. Any tenant
+ * whose own derived address didn't yet resolve (i.e. almost everyone, since
+ * Coppel is so far the only company actually provisioned) silently fell
+ * through to that fallback and received COPPEL's real Second Brain profile —
+ * cross-tenant data exposure. The fix below derives admin1@{their-own-domain}
+ * for every tenant and stops there — no shared fallback of any kind, so one
+ * tenant's data can never stand in for another's.
  */
 
 import { fetchSecondBrainProfile, computeSecondBrainKpis, type SecondBrainProfile } from './second-brain-api'
-import { isBancoOrg } from './org-type'
 import type { OverviewApiResponse } from './types'
 
 const GENERIC_DOMAINS = new Set([
@@ -31,9 +37,12 @@ const GENERIC_DOMAINS = new Set([
 
 /**
  * Ordered, de-duped list of admin emails to try for a user:
- *   1. explicit per-tenant integration (tenant_integrations table)
- *   2. derived admin@{company-domain}
- *   3. env global fallback (SECOND_BRAIN_ADMIN_EMAIL)
+ *   1. explicit per-tenant override (tenant_integrations table) — for the rare
+ *      org whose admin account doesn't follow the admin1@{domain} convention
+ *   2. derived admin1@{company-domain} — the real, general provisioning pattern
+ *
+ * No global env fallback: each tenant only ever resolves to ITS OWN Second
+ * Brain org (or none at all), never another tenant's.
  */
 export async function secondBrainAdminCandidates(
   email: string,
@@ -46,18 +55,11 @@ export async function secondBrainAdminCandidates(
     const integration = await getTenantIntegration(customerId)
     if (integration?.second_brain_admin_email) candidates.push(integration.second_brain_admin_email)
   } catch {
-    // non-fatal — fall through to derived/env
+    // non-fatal — fall through to the derived candidate
   }
 
   const domain = email.split('@')[1]?.toLowerCase()
-  if (domain && !GENERIC_DOMAINS.has(domain)) candidates.push(`admin@${domain}`)
-
-  // Scoped fallback: only offer the env default to the organization it
-  // actually belongs to (banco-domain users). Never a blanket default for
-  // other tenants — that would leak Coppel's real data to them.
-  if (isBancoOrg(email) && process.env.SECOND_BRAIN_ADMIN_EMAIL) {
-    candidates.push(process.env.SECOND_BRAIN_ADMIN_EMAIL)
-  }
+  if (domain && !GENERIC_DOMAINS.has(domain)) candidates.push(`admin1@${domain}`)
 
   // De-dupe, preserve order.
   const seen = new Set<string>()
