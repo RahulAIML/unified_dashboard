@@ -68,10 +68,10 @@ async def run(schema: NormalizedSchema, service: ServiceDescriptor, exercise_ids
         skipped = candidates[MAX_AUTO_PROBE:]
         candidates = candidates[:MAX_AUTO_PROBE]
 
-    await log("auto_discovery", "info",
+    await log("schema_discovery", "info",
               f"Probing {len(candidates)} undocumented action(s) this bridge advertises: {', '.join(candidates)}")
     if skipped:
-        await log("auto_discovery", "warn",
+        await log("schema_discovery", "warn",
                   f"{len(skipped)} additional action(s) not probed this run (cap={MAX_AUTO_PROBE}): {', '.join(skipped)}")
 
     slug = service.handle.get("tenant", schema.slug)
@@ -102,7 +102,7 @@ async def run(schema: NormalizedSchema, service: ServiceDescriptor, exercise_ids
             found_scalars.append((action, scalars))
 
     if not found_scalars and not found_tables:
-        await log("auto_discovery", "info", "None of the undocumented actions returned real data — nothing added")
+        await log("schema_discovery", "info", "None of the undocumented actions returned real data — nothing added")
         return
 
     labels = await _label_actions(schema.company, found_scalars, found_tables)
@@ -119,7 +119,7 @@ async def run(schema: NormalizedSchema, service: ServiceDescriptor, exercise_ids
             ))
         if module not in schema.modules:
             schema.modules.append(module)
-        await log("auto_discovery", "success", f"'{action}' → {len(scalars)} real metric(s) confirmed")
+        await log("schema_discovery", "success", f"'{action}' → {len(scalars)} real metric(s) confirmed")
 
     for action, field_path, rows in found_tables:
         info = labels.get(action, {})
@@ -132,7 +132,7 @@ async def run(schema: NormalizedSchema, service: ServiceDescriptor, exercise_ids
         ))
         if module not in schema.modules:
             schema.modules.append(module)
-        await log("auto_discovery", "success", f"'{action}' → real table data confirmed ({len(rows)} row(s))")
+        await log("schema_discovery", "success", f"'{action}' → real table data confirmed ({len(rows)} row(s))")
 
 
 def _extract_shapes(body: dict) -> tuple[dict[str, float], dict[str, list[dict]]]:
