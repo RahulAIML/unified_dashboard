@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { DashboardRenderer, type DashboardConfig, type WidgetPreview } from '@/components/DashboardRenderer'
+import { DashboardRenderer, humanizeConnector, type DashboardConfig, type WidgetPreview } from '@/components/DashboardRenderer'
 
 interface RenderResponse { config: DashboardConfig; preview: { widgets: WidgetPreview[] } }
 
@@ -55,7 +55,7 @@ export default function PublishedDashboardPage() {
     <div className="max-w-6xl mx-auto px-4 py-8">
       <header className="mb-6">
         <h1 className="text-2xl font-bold text-foreground">{data.config.title}</h1>
-        <p className="text-sm text-muted-foreground">Live data · {data.config.connector.replace(/_/g, ' ')}</p>
+        <p className="text-sm text-muted-foreground">Live data · {humanizeConnector(data.config.connector)}</p>
       </header>
       <DashboardRenderer config={data.config} preview={data.preview} />
       {data.config.recommendations?.length > 0 && (

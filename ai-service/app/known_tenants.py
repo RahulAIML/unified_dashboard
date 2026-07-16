@@ -25,13 +25,14 @@ KNOWN_EXERCISE_IDS: dict[str, list[int]] = {
     "weser": [235, 236, 237],
     "adium": [145, 146, 208, 231],
     "heineken": [137, 159, 173],
-    "m8": [12, 113, 142],
-    # "lacoste" deliberately omitted: kept unregistered here so the builder's
+    # "m8" deliberately omitted: kept unregistered here so the builder's
     # needs_ids pause can be demonstrated end-to-end against a real, live
     # connector that has never been run through this pipeline before (so
-    # there's no stale agent-memory cache to fight). This does NOT affect the
-    # real Lacoste dashboard at all — that's served by the separate Next.js
-    # app (lib/pharma-tenant.ts), untouched.
+    # there's no stale agent-memory cache to fight — lacoste and chiesi both
+    # got auto-learned during earlier verification testing tonight). This does
+    # NOT affect the real M8 dashboard at all — that's served by the separate
+    # Next.js app (lib/pharma-tenant.ts), untouched.
+    "lacoste": [375, 379],
     "lacoste_asistentes": [167],
     "chiesi": [75, 76, 139, 140],
     "labomed": [458, 463],

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { DashboardRenderer } from '@/components/DashboardRenderer'
+import { DashboardRenderer, humanizeConnector } from '@/components/DashboardRenderer'
 
 // ── Types mirroring the AI service JobState ─────────────────────────────────────
 type Phase =
@@ -239,7 +239,7 @@ export default function DashboardBuilderPage() {
             <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
               <p className="text-sm font-semibold text-foreground mb-1">We need a bit more information</p>
               <p className="text-xs text-muted-foreground mb-3">
-                We found your data source ({job.pending_connector?.replace(/_/g, ' ')}), but this type of system
+                We found your data source ({humanizeConnector(job.pending_connector)}), but this type of system
                 doesn&apos;t let us list its exercise/usecase IDs automatically. If you know them, enter them below —
                 otherwise ask whoever manages your training platform.
               </p>
@@ -289,7 +289,7 @@ export default function DashboardBuilderPage() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-lg font-bold text-foreground">{job.dashboard.title}</h2>
-              <p className="text-xs text-muted-foreground">Live preview · connector: {job.dashboard.connector} · real data</p>
+              <p className="text-xs text-muted-foreground">Live preview · source: {humanizeConnector(job.dashboard.connector)} · real data</p>
             </div>
             {job.validation && (
               <span className={`text-xs font-semibold px-2 py-1 rounded-full ${job.validation.ok ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-destructive/10 text-destructive'}`}>

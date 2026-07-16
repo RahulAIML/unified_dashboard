@@ -18,6 +18,25 @@ export function fmt(v: unknown): string {
   return String(v)
 }
 
+// "pharma_*" connector kinds are an internal technical label (this data-fetch
+// pattern was first built for pharma clients) — it has no bearing on what
+// industry a company is actually in. Heineken (beverages), Lacoste (apparel),
+// M8, etc. use these exact same connectors. Never show the raw internal name
+// to a manager; always show what it actually is.
+const CONNECTOR_LABELS: Record<string, string> = {
+  pharma_kpi: 'Structured analytics feed',
+  pharma_sale_exercises: 'Practice session log',
+  pharma_exceltis_rest: 'Activity tracking system',
+  coach_app_sql: 'Coaching database',
+  second_brain: 'Second Brain',
+  rolplay_app_sql: 'Session log (counts only)',
+}
+
+export function humanizeConnector(connector: string | null | undefined): string {
+  if (!connector) return 'Unknown'
+  return CONNECTOR_LABELS[connector] ?? connector.replace(/_/g, ' ')
+}
+
 export function DashboardRenderer({ config, preview }: { config: DashboardConfig; preview: { widgets: WidgetPreview[] } }) {
   const pv = new Map(preview.widgets.map(w => [w.widget_id, w]))
   return (

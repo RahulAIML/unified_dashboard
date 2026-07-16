@@ -36,7 +36,10 @@ async def run(knowledge: CompanyKnowledge, exercise_ids: list[int], log: LogFn) 
         effective_ids = exercise_ids or known_ids_for(slug)
         if effective_ids and not exercise_ids:
             await log("service_discovery", "info", f"Auto-filled {len(effective_ids)} known exercise ID(s) for '{slug}'")
-        await log("service_discovery", "info", f"Probing pharma bridge for '{slug}'…")
+        # "Pharma bridge" is this connector's internal codename (first built
+        # for pharma clients) — every industry uses the identical mechanism,
+        # so the manager-facing message never says "pharma".
+        await log("service_discovery", "info", f"Probing data source for '{slug}'…")
         svc = await pharma.probe(slug, effective_ids)
         if svc:
             services.append(svc)
