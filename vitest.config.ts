@@ -6,6 +6,15 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./vitest.setup.ts'],
+    // Git worktrees under .claude/worktrees/ are physically nested directories
+    // on disk — without this exclude, vitest's default glob picks up sibling
+    // worktrees' (possibly stale/in-progress) test files as if they were this
+    // checkout's own, producing false failures unrelated to this codebase.
+    // 'dashboard/' is a git submodule containing a full nested checkout of this
+    // same repo at an older commit (self-referential — vestigial from earlier
+    // tooling). Its tests run against its own older, version-skewed code and
+    // are not relevant to this checkout, which is what actually gets deployed.
+    exclude: ['**/node_modules/**', '**/.claude/**', '**/dist/**', '**/dashboard/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],

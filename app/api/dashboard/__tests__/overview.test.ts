@@ -3,7 +3,7 @@
  *
  * Verifies the three org-type branches:
  *   'none'      → empty success response
- *   'banco'     → calls bancoDashboardOverview
+ *   'banco'     → calls bancoOverviewFromSecondBrain
  *   'analytics' → calls getDashboardOverview (existing pipeline)
  */
 
@@ -18,8 +18,8 @@ vi.mock('@/lib/server-auth', () => ({
 vi.mock('@/lib/org-type', () => ({
   resolveOrgType: vi.fn(),
 }))
-vi.mock('@/lib/bridge-banco-analytics', () => ({
-  bancoDashboardOverview: vi.fn(),
+vi.mock('@/lib/banco-second-brain', () => ({
+  bancoOverviewFromSecondBrain: vi.fn(),
 }))
 vi.mock('@/lib/data-provider', () => ({
   getDashboardOverview: vi.fn(),
@@ -31,7 +31,7 @@ vi.mock('@/lib/dynamic-usecase-resolver', () => ({
 import { GET } from '../overview/route'
 import { getAuthContextFromRequest } from '@/lib/server-auth'
 import { resolveOrgType } from '@/lib/org-type'
-import { bancoDashboardOverview } from '@/lib/bridge-banco-analytics'
+import { bancoOverviewFromSecondBrain } from '@/lib/banco-second-brain'
 import { getDashboardOverview } from '@/lib/data-provider'
 
 const mockAuth = { email: 'user@test.com', customerId: 5, userId: 1 }
@@ -44,7 +44,7 @@ function makeRequest(extra = '') {
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(getAuthContextFromRequest).mockResolvedValue(mockAuth)
-  vi.mocked(bancoDashboardOverview).mockResolvedValue({
+  vi.mocked(bancoOverviewFromSecondBrain).mockResolvedValue({
     totalEvaluations: 0, avgScore: null, passRate: null,
     passedEvaluations: 0, prevTotalEvaluations: 0,
     prevAvgScore: null, prevPassRate: null,
@@ -79,7 +79,7 @@ describe("GET /api/dashboard/overview — orgType 'none'", () => {
     expect(body.success).toBe(true)
     expect(body.data.totalEvaluations).toBe(0)
     expect(body.data.avgScore).toBeNull()
-    expect(bancoDashboardOverview).not.toHaveBeenCalled()
+    expect(bancoOverviewFromSecondBrain).not.toHaveBeenCalled()
     expect(getDashboardOverview).not.toHaveBeenCalled()
   })
 })
@@ -87,12 +87,12 @@ describe("GET /api/dashboard/overview — orgType 'none'", () => {
 // ── 'banco' org type ──────────────────────────────────────────────────────────
 
 describe("GET /api/dashboard/overview — orgType 'banco'", () => {
-  it('calls bancoDashboardOverview and returns its data', async () => {
+  it('calls bancoOverviewFromSecondBrain and returns its data', async () => {
     vi.mocked(resolveOrgType).mockResolvedValue('banco')
-    vi.mocked(bancoDashboardOverview).mockResolvedValue({
-      totalEvaluations: 50, avgScore: 72.5, passRate: 80,
-      passedEvaluations: 40, prevTotalEvaluations: 30,
-      prevAvgScore: 68, prevPassRate: 75,
+    vi.mocked(bancoOverviewFromSecondBrain).mockResolvedValue({
+      totalEvaluations: 50, avgScore: null, passRate: null,
+      passedEvaluations: 0, prevTotalEvaluations: 0,
+      prevAvgScore: null, prevPassRate: null,
     })
 
     const res  = await GET(makeRequest())
@@ -100,20 +100,24 @@ describe("GET /api/dashboard/overview — orgType 'banco'", () => {
 
     expect(res.status).toBe(200)
     expect(body.data.totalEvaluations).toBe(50)
-    expect(body.data.avgScore).toBe(72.5)
-    expect(bancoDashboardOverview).toHaveBeenCalledOnce()
+    expect(bancoOverviewFromSecondBrain).toHaveBeenCalledOnce()
     expect(getDashboardOverview).not.toHaveBeenCalled()
   })
 
-  it('returns 500 when banco bridge throws', async () => {
+  it('returns an empty overview (never 500) when Second Brain has no profile for this user', async () => {
     vi.mocked(resolveOrgType).mockResolvedValue('banco')
-    vi.mocked(bancoDashboardOverview).mockRejectedValue(new Error('bridge down'))
+    vi.mocked(bancoOverviewFromSecondBrain).mockResolvedValue({
+      totalEvaluations: 0, avgScore: null, passRate: null,
+      passedEvaluations: 0, prevTotalEvaluations: 0,
+      prevAvgScore: null, prevPassRate: null,
+    })
 
     const res  = await GET(makeRequest())
     const body = await res.json()
 
-    expect(res.status).toBe(500)
-    expect(body.success).toBe(false)
+    expect(res.status).toBe(200)
+    expect(body.success).toBe(true)
+    expect(body.data.totalEvaluations).toBe(0)
   })
 })
 
@@ -134,7 +138,7 @@ describe("GET /api/dashboard/overview — orgType 'analytics'", () => {
     expect(res.status).toBe(200)
     expect(body.data.totalEvaluations).toBe(120)
     expect(getDashboardOverview).toHaveBeenCalledOnce()
-    expect(bancoDashboardOverview).not.toHaveBeenCalled()
+    expect(bancoOverviewFromSecondBrain).not.toHaveBeenCalled()
   })
 
   it('returns empty when solution=second-brain', async () => {
