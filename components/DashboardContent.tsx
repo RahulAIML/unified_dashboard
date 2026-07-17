@@ -207,8 +207,20 @@ export function DashboardContent() {
     ? buildApiUrl("/api/dashboard/best-performers", dateRange.from, dateRange.to, { limit: 10, solution: selectedSolution, rk: refreshKey })
     : null
 
+  // The "Certified Users" KPI card must show real certification data (Sanfer's
+  // cert.stats.certified, a separate authoritative source), never the default
+  // view's passedEvaluations (session pass/fail count) — those are genuinely
+  // different numbers and showing the session count under a "Certified" label
+  // is factually wrong, not just a duplicate-looking tile. Only needed on the
+  // unfiltered "All" view — a solution-filtered overview (e.g. Certifier Coach)
+  // already IS the certification-specific data.
+  const overviewCertUrl = (dbReady && !selectedSolution)
+    ? buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to, { solution: "certification", rk: refreshKey })
+    : null
+
   // ALL useApi calls are unconditional — urls may be null (hook ignores them safely)
   const { data: overview,       loading: overviewLoading, error: overviewError }  = useApi<OverviewApiResponse>(overviewUrl)
+  const { data: overviewCert }                                                    = useApi<OverviewApiResponse>(overviewCertUrl)
   const { data: trends,         loading: trendsLoading,   error: trendsError }    = useApi<TrendsApiResponse>(trendsUrl)
   const { data: ucBreakdown,    loading: ucLoading,       error: ucError }        = useApi<UsecaseBreakdownApiResponse>(ucUrl)
   const { data: results,        loading: resultsLoading,  error: resultsError }   = useApi<ResultsApiResponse>(resultsUrl)
@@ -248,15 +260,22 @@ export function DashboardContent() {
       },
       {
         label: "Certified Users", labelKey: "certifiedUsers" as const,
-        value: overview!.passedEvaluations,
-        delta: d(
-          overview!.passedEvaluations,
-          estimatePassedSessions(overview!.prevTotalEvaluations, overview!.prevPassRate)
-        ),
+        // cert.stats is a current-state snapshot with no date range, so there
+        // is no real "previous period" to diff against — 0 is honest, not a
+        // fabricated comparison.
+        value: (overviewCert && overviewCert.totalEvaluations > 0)
+          ? overviewCert.passedEvaluations
+          : overview!.passedEvaluations,
+        delta: (overviewCert && overviewCert.totalEvaluations > 0)
+          ? 0
+          : d(
+              overview!.passedEvaluations,
+              estimatePassedSessions(overview!.prevTotalEvaluations, overview!.prevPassRate)
+            ),
         tier: "A" as const,
       },
     ]
-  }, [overview, hasOverviewData, isSecondBrain])
+  }, [overview, overviewCert, hasOverviewData, isSecondBrain])
 
   const secondBrainKpis = useMemo(() => {
     if (!isSecondBrain || !sbProfile) return []
