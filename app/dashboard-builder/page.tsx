@@ -47,6 +47,8 @@ export default function DashboardBuilderPage() {
   const [pendingIdsText, setPendingIdsText] = useState('')
   const [selectedModules, setSelectedModules] = useState<Set<string>>(new Set())
   const [resuming, setResuming] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [acknowledgedEmpty, setAcknowledgedEmpty] = useState(false)
   const seededModulesFor = useRef<string | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const logEndRef = useRef<HTMLDivElement | null>(null)
@@ -144,6 +146,17 @@ export default function DashboardBuilderPage() {
     } finally { setPublishing(false) }
   }
 
+  function requestTemplate(): string {
+    return `Hi — we're setting up an analytics dashboard for ${company || 'our company'} and need one piece of info from you.\n\nCould you send us the list of "exercise" or "use case" IDs (numbers) used in our training platform? These identify each training scenario in the system. Once we have that list, the dashboard can go live.\n\nThanks!`
+  }
+  async function copyTemplate() {
+    try {
+      await navigator.clipboard.writeText(requestTemplate())
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch { /* clipboard unavailable — silently ignore */ }
+  }
+
   const PAUSED_PHASES: Phase[] = ['needs_ids', 'review_services']
   const isPaused = !!job && PAUSED_PHASES.includes(job.phase)
   const running = !!job && job.phase !== 'done' && job.phase !== 'error' && !isPaused
@@ -218,31 +231,63 @@ export default function DashboardBuilderPage() {
               style={{ width: `${job.percent}%` }} />
           </div>
 
-          {/* Live logs */}
-          <div className="mt-4 max-h-52 overflow-y-auto rounded-lg bg-background border border-border/60 p-3 font-mono text-xs space-y-1">
+          {/* Progress feed — plain-language activity list, not a developer console */}
+          <div className="mt-4 max-h-52 overflow-y-auto rounded-lg bg-background border border-border/60 p-3 text-xs space-y-1.5">
             {job.logs.map((l, i) => (
-              <div key={i} className={
+              <div key={i} className={`flex items-start gap-2 ${
                 l.level === 'error' ? 'text-destructive'
                 : l.level === 'warn' ? 'text-amber-600 dark:text-amber-400'
                 : l.level === 'success' ? 'text-emerald-600 dark:text-emerald-400'
-                : 'text-muted-foreground'}>
-                {l.level === 'success' ? '✓' : l.level === 'error' ? '✗' : l.level === 'warn' ? '!' : '·'} {l.message}
+                : 'text-muted-foreground'}`}>
+                <span className="shrink-0">{l.level === 'success' ? '✓' : l.level === 'error' ? '✗' : l.level === 'warn' ? '!' : '•'}</span>
+                <span>{l.message}</span>
               </div>
             ))}
             <div ref={logEndRef} />
           </div>
-          {job.error && <p className="mt-3 text-sm text-destructive">{job.error}</p>}
+
+          {/* Error — a clear, actionable card, never a raw exception string */}
+          {job.phase === 'error' && (
+            <div className="mt-4 rounded-xl border border-destructive/30 bg-destructive/5 p-4">
+              <p className="text-sm font-semibold text-foreground mb-1">We couldn&apos;t find this company&apos;s data yet</p>
+              <p className="text-xs text-muted-foreground mb-3">
+                This usually means the company hasn&apos;t been connected to any of our systems yet — it&apos;s not
+                necessarily a problem on your end. Double-check the company name for typos and try again, or reach
+                out to support if you believe this company should already be connected.
+              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <button onClick={() => { setJob(null); setCompany('') }}
+                  className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:opacity-90">
+                  Try again
+                </button>
+                <a href="mailto:info@rolplay.ai?subject=Dashboard%20builder%20-%20company%20not%20found"
+                  className="text-xs font-semibold text-primary hover:underline">
+                  Contact support
+                </a>
+              </div>
+            </div>
+          )}
 
           {/* Pause: connector found, but this bridge has no way to list its own
-              exercise/usecase IDs — genuinely need the manager to supply them. */}
+              exercise/usecase IDs — genuinely need someone with system access
+              to supply them. Not a failure — a normal one-time setup step. */}
           {job.phase === 'needs_ids' && (
             <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
-              <p className="text-sm font-semibold text-foreground mb-1">We need a bit more information</p>
+              <p className="text-sm font-semibold text-foreground mb-1">One more thing needed — this is normal, not an error</p>
               <p className="text-xs text-muted-foreground mb-3">
-                We found your data source ({humanizeConnector(job.pending_connector)}), but this type of system
-                doesn&apos;t let us list its exercise/usecase IDs automatically. If you know them, enter them below —
-                otherwise ask whoever manages your training platform.
+                We found your company&apos;s data ({humanizeConnector(job.pending_connector)}), but this particular system
+                doesn&apos;t let us automatically list the ID numbers for each training scenario. If you already know them,
+                enter them below. If not, that&apos;s fine — copy the message below and send it to whoever manages your
+                training platform (usually your IT team or platform admin). Once you have the numbers, come back and paste
+                them in.
               </p>
+              <div className="mb-3 rounded-lg border border-border bg-background p-3">
+                <p className="text-xs text-muted-foreground whitespace-pre-wrap">{requestTemplate()}</p>
+                <button onClick={copyTemplate} type="button"
+                  className="mt-2 text-xs font-semibold text-primary hover:underline">
+                  {copied ? '✓ Copied' : 'Copy this message'}
+                </button>
+              </div>
               <div className="flex flex-col sm:flex-row gap-3">
                 <input value={pendingIdsText} onChange={e => setPendingIdsText(e.target.value)}
                   placeholder="e.g. 137, 159, 173" disabled={resuming}
@@ -306,8 +351,34 @@ export default function DashboardBuilderPage() {
             </ul>
           )}
 
+          {/* A dashboard can pass validation while genuinely showing nothing —
+              the source connects fine but has no data yet for this scope. That
+              looks identical to "broken" to a non-technical viewer, so make it
+              impossible to publish this without seeing it spelled out first. */}
+          {job.validation?.issues.some(i => i.code === 'no_data') && (
+            <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+              <p className="text-sm font-semibold text-foreground mb-1">Heads up — this dashboard will look empty</p>
+              <p className="text-xs text-muted-foreground mb-3">
+                We connected to {company || 'this company'}&apos;s system successfully, but it has no data yet for the
+                current view. If you publish now, whoever looks at it will see blank charts and zeros — that&apos;s
+                expected for a brand-new company with no activity yet, but worth confirming before you go ahead.
+              </p>
+              <label className="flex items-center gap-2 text-xs font-medium text-foreground cursor-pointer">
+                <input type="checkbox" checked={acknowledgedEmpty} onChange={e => setAcknowledgedEmpty(e.target.checked)}
+                  className="rounded border-border" />
+                I understand this will publish with no visible data yet
+              </label>
+            </div>
+          )}
+
           <div className="mt-6 flex items-center gap-3">
-            <button onClick={publish} disabled={publishing || job.published || (job.validation ? !job.validation.ok : false)}
+            <button
+              onClick={publish}
+              disabled={
+                publishing || job.published ||
+                (job.validation ? !job.validation.ok : false) ||
+                (!!job.validation?.issues.some(i => i.code === 'no_data') && !acknowledgedEmpty)
+              }
               className="px-5 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50">
               {job.published ? '✓ Published — live' : publishing ? 'Publishing…' : 'Publish dashboard'}
             </button>
