@@ -168,8 +168,8 @@ export const translations = {
     // ── Second Brain KPI labels ──────────────────────────────
     sbTotalInteractions:   'Total Interactions',
     sbActiveMembers:       'Active Members',
-    sbCoachingSessions:    'Coaching Sessions',
-    sbScenarios:           'Scenarios',
+    sbCoachingSessions:    'Second Brain Sessions',
+    sbScenarios:           'Second Brain Scenarios',
     sbTotalMembers:        'Total Members',
     sbDocumentsIndexed:    'Documents Indexed',
     sbWhatsAppMessages:    'WhatsApp Messages',
@@ -262,10 +262,10 @@ export const translations = {
     statusInactive:      'Inactive',
 
     // ── Second Brain chart titles ─────────────────────────────
-    sbSessionsPerDay:       'Sessions per Day',
-    sbSessionsPerDaySub:    'Daily coaching session activity',
-    sbSessionsByScenario:   'Sessions by Scenario',
-    sbSessionsByScenarioSub:'Distribution of coaching sessions',
+    sbSessionsPerDay:       'Second Brain Sessions per Day',
+    sbSessionsPerDaySub:    'Daily Second Brain session activity',
+    sbSessionsByScenario:   'Second Brain Sessions by Scenario',
+    sbSessionsByScenarioSub:'Distribution of Second Brain sessions',
     sbMembersByRole:        'Members by Role',
     sbMembersByRoleSub:     'Breakdown of member roles',
     sbMessageTypes:         'Message Types',
@@ -787,8 +787,8 @@ export const translations = {
     // ── Second Brain KPI labels ──────────────────────────────
     sbTotalInteractions:   'Interacciones Totales',
     sbActiveMembers:       'Miembros Activos',
-    sbCoachingSessions:    'Sesiones de Coaching',
-    sbScenarios:           'Escenarios',
+    sbCoachingSessions:    'Sesiones de Second Brain',
+    sbScenarios:           'Escenarios de Second Brain',
     sbTotalMembers:        'Miembros Totales',
     sbDocumentsIndexed:    'Documentos Indexados',
     sbWhatsAppMessages:    'Mensajes WhatsApp',
@@ -881,10 +881,10 @@ export const translations = {
     statusInactive:      'Inactivo',
 
     // ── Second Brain chart titles ─────────────────────────────
-    sbSessionsPerDay:       'Sesiones por Día',
-    sbSessionsPerDaySub:    'Actividad diaria de sesiones de coaching',
-    sbSessionsByScenario:   'Sesiones por Escenario',
-    sbSessionsByScenarioSub:'Distribución de sesiones de coaching',
+    sbSessionsPerDay:       'Sesiones de Second Brain por Día',
+    sbSessionsPerDaySub:    'Actividad diaria de sesiones de Second Brain',
+    sbSessionsByScenario:   'Sesiones de Second Brain por Escenario',
+    sbSessionsByScenarioSub:'Distribución de sesiones de Second Brain',
     sbMembersByRole:        'Miembros por Rol',
     sbMembersByRoleSub:     'Distribución de roles de miembros',
     sbMessageTypes:         'Tipos de Mensaje',
