@@ -233,6 +233,11 @@ class JobLog(BaseModel):
 class GenerateRequest(BaseModel):
     company: str = Field(..., min_length=1)
     exercise_ids: list[int] = Field(default_factory=list)
+    # Optional manager-provided email domain(s), e.g. "sanfer.com.mx". When set,
+    # these seed login-routing directly instead of relying on a guess derived
+    # from the company name — the guess is often wrong (e.g. "sanfer.com" when
+    # reps are actually on "sanfer.com.mx"), which silently breaks logins.
+    domains: list[str] = Field(default_factory=list)
     manager_request: str = ""
     auto_publish: bool = False
 

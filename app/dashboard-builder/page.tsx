@@ -39,6 +39,7 @@ const ORDER = PHASE_STEPS.map(s => s.key)
 
 export default function DashboardBuilderPage() {
   const [company, setCompany] = useState('')
+  const [domainText, setDomainText] = useState('')
   const [idsText, setIdsText] = useState('')
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [job, setJob] = useState<JobState | null>(null)
@@ -123,10 +124,11 @@ export default function DashboardBuilderPage() {
     if (!company.trim()) return
     setStarting(true); setJob(null)
     const exercise_ids = idsText.split(/[,\s]+/).map(s => parseInt(s, 10)).filter(n => !isNaN(n))
+    const domains = domainText.split(/[,\s]+/).map(s => s.trim()).filter(Boolean)
     try {
       const res = await fetch('/api/ai/generate-dashboard', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ company: company.trim(), exercise_ids }),
+        body: JSON.stringify({ company: company.trim(), exercise_ids, domains }),
       })
       const j: JobState = await res.json()
       setJob(j); poll(j.job_id)
@@ -179,7 +181,7 @@ export default function DashboardBuilderPage() {
         <label className="text-sm font-semibold text-foreground mb-2 block">Company name</label>
         <div className="flex flex-col sm:flex-row gap-3">
           <input value={company} onChange={e => setCompany(e.target.value)}
-            placeholder="e.g. Apotex" disabled={running}
+            placeholder="e.g. Acme Pharma" disabled={running}
             onKeyDown={e => { if (e.key === 'Enter' && company.trim() && !running) generate() }}
             className="flex-1 rounded-lg border border-border bg-background px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-primary" />
           <button onClick={generate} disabled={running || starting || !company.trim()}
@@ -187,6 +189,21 @@ export default function DashboardBuilderPage() {
             {running ? 'Generating…' : '✨ Generate Dashboard'}
           </button>
         </div>
+
+        {/* Company email domain — optional but strongly recommended. This is
+            what decides which logins can see the finished dashboard, so a
+            correct value here avoids the "guessed the wrong domain, nobody can
+            log in" problem. */}
+        <label className="text-sm font-semibold text-foreground mt-4 mb-2 block">
+          Company email domain <span className="font-normal text-muted-foreground">(recommended)</span>
+        </label>
+        <input value={domainText} onChange={e => setDomainText(e.target.value)}
+          placeholder="e.g. acmepharma.com — the domain their team uses to log in" disabled={running}
+          className="w-full rounded-lg border border-border bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+        <p className="text-xs text-muted-foreground mt-1">
+          Everyone who logs in with an email at this domain will see this dashboard. Ask the client which domain
+          their team uses. Leave blank only if you&apos;re not sure — you can set it later.
+        </p>
 
         <button type="button" onClick={() => setShowAdvanced(v => !v)}
           className="mt-3 text-xs text-muted-foreground hover:text-foreground">

@@ -67,7 +67,8 @@ async def n_plan(state: GState) -> dict:
 
 async def n_company(state: GState) -> dict:
     await _set(state, JobPhase.company_discovery, 18)
-    k = await company_discovery.run(state["job"].request.company, state["job"].request.exercise_ids, _mk_log(state))
+    req = state["job"].request
+    k = await company_discovery.run(req.company, req.exercise_ids, _mk_log(state), getattr(req, "domains", None))
     state["job"].knowledge = k
     return {"knowledge": k}
 
