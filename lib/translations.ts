@@ -92,14 +92,15 @@ export const translations = {
     avgQuizScore:         'Avg Quiz Score',
     modulesCompleted:     'Modules Completed',
     vsPrior:              'vs prior period',
+    noHistoricalComparison: 'no historical comparison',
 
     // ── Chart titles ─────────────────────────────────────────
     activityTrend:        'Activity Trend',
     activityTrendSub:     'Daily sessions',
-    moduleDistribution:   'Module Distribution',
-    moduleDistSub:        'Sessions by solution',
-    sessionsByModule:     'Sessions by Module',
-    sessionsByModuleSub:  'Total vs passed per solution',
+    moduleDistribution:   'Use Case Distribution',
+    moduleDistSub:        'Sessions by use case',
+    sessionsByModule:     'Sessions by Use Case',
+    sessionsByModuleSub:  'Total vs passed per use case',
     useCaseDeployment:    'Use Case Deployment Over Time',
     useCaseDeploymentSub: 'Cumulative use cases configured',
     scoreTrend:           'Average Score Trend',
@@ -185,6 +186,16 @@ export const translations = {
     sourceSim:        'Source: rolplay_pro_analytics · report_field_current',
     sourceCert:       'Source: rolplay_pro_analytics · report_field_current',
     sourceSB:         'Source: segment_contents + usecase_segment + coach_usecases',
+
+    // ── Coaching insights (Master Coach page) ────────────────
+    coachingStrengths:    'Top Performers',
+    coachingImprove:      'Needs Improvement',
+    coachingTips:         'Coaching Focus',
+    coachingAllAbove:     'Everyone is performing above the pass threshold',
+    coachingNoData:       'Not enough sessions yet to surface coaching insights',
+    coachingTipWeakUc:    'Lowest pass rates:',
+    coachingTipAvgScore:  'Team average is',
+    coachingTipAvgScore2: 'pts — aim for',
 
     // ── Loading / error / empty states ───────────────────────
     loading:          'Loading…',
@@ -711,14 +722,15 @@ export const translations = {
     avgQuizScore:         'Puntuación Media de Cuestionario',
     modulesCompleted:     'Módulos Completados',
     vsPrior:              'vs período anterior',
+    noHistoricalComparison: 'sin comparación histórica',
 
     // ── Chart titles ─────────────────────────────────────────
     activityTrend:        'Tendencia de Actividad',
     activityTrendSub:     'Sesiones diarias',
-    moduleDistribution:   'Distribución por Módulo',
-    moduleDistSub:        'Sesiones por solución',
-    sessionsByModule:     'Sesiones por Módulo',
-    sessionsByModuleSub:  'Total vs aprobadas por solución',
+    moduleDistribution:   'Distribución por Caso de Uso',
+    moduleDistSub:        'Sesiones por caso de uso',
+    sessionsByModule:     'Sesiones por Caso de Uso',
+    sessionsByModuleSub:  'Total vs aprobadas por caso de uso',
     useCaseDeployment:    'Despliegue de Casos de Uso',
     useCaseDeploymentSub: 'Casos de uso configurados acumulados',
     scoreTrend:           'Tendencia de Puntuación Media',
@@ -804,6 +816,16 @@ export const translations = {
     sourceSim:        'Fuente: rolplay_pro_analytics · report_field_current',
     sourceCert:       'Fuente: rolplay_pro_analytics · report_field_current',
     sourceSB:         'Fuente: segment_contents + usecase_segment + coach_usecases',
+
+    // ── Coaching insights (Master Coach page) ────────────────
+    coachingStrengths:    'Mejores Desempeños',
+    coachingImprove:      'Necesitan Mejorar',
+    coachingTips:         'Enfoque de Coaching',
+    coachingAllAbove:     'Todos están por encima del umbral de aprobación',
+    coachingNoData:       'Aún no hay suficientes sesiones para generar información de coaching',
+    coachingTipWeakUc:    'Tasas de aprobación más bajas:',
+    coachingTipAvgScore:  'El promedio del equipo es',
+    coachingTipAvgScore2: 'pts — el objetivo es',
 
     // ── Loading / error / empty states ───────────────────────
     loading:          'Cargando…',

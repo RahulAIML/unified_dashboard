@@ -261,8 +261,8 @@ export function DashboardContent() {
       {
         label: "Certified Users", labelKey: "certifiedUsers" as const,
         // cert.stats is a current-state snapshot with no date range, so there
-        // is no real "previous period" to diff against — 0 is honest, not a
-        // fabricated comparison.
+        // is no real "previous period" to diff against — show "no comparison"
+        // rather than a fabricated-looking 0% trend.
         value: (overviewCert && overviewCert.totalEvaluations > 0)
           ? overviewCert.passedEvaluations
           : overview!.passedEvaluations,
@@ -272,6 +272,7 @@ export function DashboardContent() {
               overview!.passedEvaluations,
               estimatePassedSessions(overview!.prevTotalEvaluations, overview!.prevPassRate)
             ),
+        noComparison: overviewCert != null && overviewCert.totalEvaluations > 0,
         tier: "A" as const,
       },
     ]

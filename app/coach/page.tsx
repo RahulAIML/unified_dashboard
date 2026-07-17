@@ -1,45 +1,22 @@
 "use client"
 
 import { useMemo } from "react"
-import { BrainCircuit, TrendingUp, PlayCircle, CheckCircle2, BarChart2, AlertTriangle } from "lucide-react"
+import { TrendingUp, AlertTriangle, Lightbulb } from "lucide-react"
 import { DashboardHeader } from "@/components/DashboardHeader"
-import { SummaryCard } from "@/components/SummaryCard"
-import { ChartCard } from "@/components/ChartCard"
-import { ActivityLineChart } from "@/components/charts/ActivityLineChart"
 import { DataTable, type Column } from "@/components/DataTable"
 import { ExportButton } from "@/components/ExportButton"
 import { useDashboardStore } from "@/lib/store"
 import { useT } from "@/lib/lang-store"
 import { useApi, buildApiUrl } from "@/lib/hooks/useApi"
-import { useClientBrand } from "@/lib/hooks/useClientBrand"
-import { calcDeltaPct, estimatePassedSessions } from "@/lib/kpi-builder"
+import { calcDeltaPct } from "@/lib/kpi-builder"
 import { csvFilename } from "@/lib/csv-export"
 import { cn } from "@/lib/utils"
 import type {
-  OverviewApiResponse,
-  TrendsApiResponse,
   UsecaseBreakdownApiResponse,
-  UsecaseApiRow,
+  BestPerformersApiResponse,
   ObjectionsApiResponse,
   ObjectionRow,
 } from "@/lib/types"
-
-const icons = [
-  <BrainCircuit key="b"  className="w-4 h-4" />,
-  <TrendingUp   key="t"  className="w-4 h-4" />,
-  <PlayCircle   key="p"  className="w-4 h-4" />,
-  <CheckCircle2 key="c"  className="w-4 h-4" />,
-]
-
-function EmptyState() {
-  const t = useT()
-  return (
-    <div className="h-48 flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
-      <BarChart2 className="w-8 h-8 opacity-30" />
-      <span>{t.noDataAvailable}</span>
-    </div>
-  )
-}
 
 function ErrorBanner({ message }: { message: string }) {
   return (
@@ -75,95 +52,42 @@ function PassRateBar({ value }: { value: number }) {
 
 export default function CoachPage() {
   const { dateRange, refreshKey } = useDashboardStore()
-  const t     = useT()
-  const brand = useClientBrand()
-  const days = Math.round((dateRange.to.getTime() - dateRange.from.getTime()) / 86_400_000)
+  const t = useT()
 
-  const overviewUrl   = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to, { solution: "coach", rk: refreshKey })
-  const trendsUrl     = buildApiUrl("/api/dashboard/trends",   dateRange.from, dateRange.to, { solution: "coach", rk: refreshKey })
-  const ucUrl         = buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to, { solution: "coach", rk: refreshKey })
-  const objectionsUrl = buildApiUrl("/api/dashboard/objections", dateRange.from, dateRange.to, { rk: refreshKey })
+  const ucUrl          = buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to, { solution: "coach", rk: refreshKey })
+  const bestUrl        = buildApiUrl("/api/dashboard/best-performers",   dateRange.from, dateRange.to, { limit: 50, solution: "coach", rk: refreshKey })
+  const objectionsUrl  = buildApiUrl("/api/dashboard/objections", dateRange.from, dateRange.to, { rk: refreshKey })
 
-  const { data: overview, loading: overviewLoading, error: overviewError } = useApi<OverviewApiResponse>(overviewUrl)
-  const { data: trends,   loading: trendsLoading,   error: trendsError }   = useApi<TrendsApiResponse>(trendsUrl)
-  const { data: ucBreakdown, loading: ucLoading,    error: ucError }       = useApi<UsecaseBreakdownApiResponse>(ucUrl)
-  const { data: objections, loading: objectionsLoading }                  = useApi<ObjectionsApiResponse>(objectionsUrl)
+  const { data: ucBreakdown,    loading: ucLoading }         = useApi<UsecaseBreakdownApiResponse>(ucUrl)
+  const { data: bestPerformers, loading: bestLoading, error: bestError } = useApi<BestPerformersApiResponse>(bestUrl)
+  const { data: objections,     loading: objectionsLoading } = useApi<ObjectionsApiResponse>(objectionsUrl)
 
-  const hasData = overview && overview.totalEvaluations > 0
+  const loading = ucLoading || bestLoading
+  const hasData = (bestPerformers?.data?.length ?? 0) > 0 || (ucBreakdown?.data?.length ?? 0) > 0
 
-  const kpis = useMemo(() => {
-    if (!hasData) return []
-    return [
-      {
-        label: "Practice Sessions", labelKey: "practiceSessions" as const,
-        value: overview!.totalEvaluations,
-        delta: calcDeltaPct(overview!.totalEvaluations, overview!.prevTotalEvaluations),
-        tier: "A" as const,
-      },
-      {
-        label: "Pass Rate", labelKey: "passRate" as const,
-        value: overview!.passRate ?? 0, unit: "%",
-        delta: calcDeltaPct(overview!.passRate ?? 0, overview!.prevPassRate ?? 0),
-        tier: "B" as const,
-      },
-      {
-        label: "Avg Score", labelKey: "avgScore" as const,
-        value: overview!.avgScore ?? 0, unit: "pts",
-        delta: calcDeltaPct(overview!.avgScore ?? 0, overview!.prevAvgScore ?? 0),
-        tier: "B" as const,
-      },
-      {
-        label: "Passed Sessions", labelKey: "passedSessions" as const,
-        value: overview!.passedEvaluations,
-        delta: calcDeltaPct(
-          overview!.passedEvaluations,
-          estimatePassedSessions(overview!.prevTotalEvaluations, overview!.prevPassRate)
-        ),
-        tier: "A" as const,
-      },
-    ]
-  }, [overview, hasData])
-
-  const activityData  = useMemo(() => trends?.evalCountTrend ?? [], [trends])
-  const scoreTrend    = useMemo(() => trends?.scoreTrend ?? [],      [trends])
-
-  const ucColumns: Column<UsecaseApiRow>[] = useMemo(() => [
-    {
-      key: "usecaseId", header: t.colScenario,
-      render: r => (
-        <span className="font-medium text-sm">
-          {r.usecase_name?.trim() || `UC-${r.usecaseId}`}
-        </span>
-      ),
-    },
-    {
-      key: "totalEvaluations", header: t.colSessions,
-      render: r => <span className="tabular-nums font-medium">{r.totalEvaluations}</span>,
-    },
-    {
-      key: "avgScore", header: t.colAvgScore,
-      render: r => r.avgScore != null ? (
-        <span className={cn(
-          "tabular-nums font-semibold",
-          r.avgScore >= 80 ? "text-primary"
-            : r.avgScore >= 60 ? "text-foreground"
-            : "text-amber-600"
-        )}>
-          {r.avgScore} pts
-        </span>
-      ) : <span className="text-muted-foreground">—</span>,
-    },
-    {
-      key: "passRate", header: t.colPassRate,
-      render: r => r.passRate != null
-        ? <PassRateBar value={r.passRate} />
-        : <span className="text-muted-foreground">—</span>,
-    },
-    {
-      key: "passed", header: t.colPassed,
-      render: r => <span className="tabular-nums text-primary font-semibold">{r.passed}</span>,
-    },
-  ], [t])
+  // Same underlying session data as Simulator — this page deliberately does
+  // NOT repeat those headline totals (that read as "the dashboard is broken,
+  // every tab looks the same"). Instead it surfaces coaching-actionable
+  // insights derived from the same rows, matching the real Sanfer product's
+  // own Coaching page (top performers / improvement areas / focus areas),
+  // not a second copy of the KPI tiles.
+  const strengths = useMemo(
+    () => [...(bestPerformers?.data ?? [])].sort((a, b) => b.avg_score - a.avg_score).slice(0, 5),
+    [bestPerformers],
+  )
+  const improvementAreas = useMemo(
+    () => [...(bestPerformers?.data ?? [])].filter(u => u.avg_score < 60).sort((a, b) => a.avg_score - b.avg_score).slice(0, 5),
+    [bestPerformers],
+  )
+  const weakUsecases = useMemo(
+    () => (ucBreakdown?.data ?? []).filter(u => (u.passRate ?? 100) < 60).slice(0, 3),
+    [ucBreakdown],
+  )
+  const teamAvgScore = useMemo(() => {
+    const rows = bestPerformers?.data ?? []
+    if (!rows.length) return null
+    return Math.round((rows.reduce((s, r) => s + r.avg_score, 0) / rows.length) * 10) / 10
+  }, [bestPerformers])
 
   const objectionColumns: Column<ObjectionRow>[] = useMemo(() => [
     {
@@ -192,87 +116,74 @@ export default function CoachPage() {
       <DashboardHeader title={t.coachTitle} subtitle={t.coachSub} />
       <div className="w-full max-w-[1400px] mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
 
-        {overviewError && <ErrorBanner message={`${t.errorLoading}: ${overviewError}`} />}
+        {bestError && <ErrorBanner message={`${t.errorLoading}: ${bestError}`} />}
 
-        {/* KPI cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {overviewLoading
-            ? Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
-                  <div className="h-[3px] bg-primary" />
-                  <div className="p-5 space-y-3 animate-pulse">
-                    <div className="h-3 w-24 rounded bg-muted" />
-                    <div className="h-8 w-20 rounded bg-muted" />
-                    <div className="h-5 w-16 rounded bg-muted" />
-                  </div>
-                </div>
-              ))
-            : kpis.length > 0
-              ? kpis.map((kpi, i) => <SummaryCard key={kpi.label} kpi={kpi} index={i} icon={icons[i]} />)
-              : Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-                    <div className="h-[3px] bg-primary" />
-                    <div className="p-5 text-center text-sm text-muted-foreground py-8">{t.noDataAvailable}</div>
-                  </div>
-                ))
-          }
-        </div>
-
-        {/* Charts row: score trend + activity count */}
-        {trendsError && <ErrorBanner message={`${t.errorLoading}: ${trendsError}`} />}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-          <ChartCard title={t.scoreTrend} subtitle={`${t.last} ${days} ${t.days}`}>
-            {trendsLoading
-              ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
-              : scoreTrend.length > 0
-                ? <ActivityLineChart data={scoreTrend} label={t.avgScore} color={brand.chartColors[0]} />
-                : <EmptyState />
-            }
-          </ChartCard>
-          <ChartCard title={t.useCaseDeployment} subtitle={`${t.last} ${days} ${t.days}`}>
-            {trendsLoading
-              ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
-              : activityData.length > 0
-                ? <ActivityLineChart data={activityData} label="Sessions" color={brand.chartColors[1] ?? brand.chartColors[0]} />
-                : <EmptyState />
-            }
-          </ChartCard>
-        </div>
-
-        {/* Usecase breakdown table */}
-        {ucError && <ErrorBanner message={`${t.errorLoading}: ${ucError}`} />}
-        <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-4 flex-wrap">
-            <div>
-              <h3 className="text-sm font-semibold">{t.usecaseBreakdown}</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {ucLoading
-                  ? t.loading
-                  : `${ucBreakdown?.data?.length ?? 0} ${t.usecaseBreakdownSub}`}
-                <span className="ml-2 text-[10px] font-medium bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">
-                  {t.sourceCoach}
-                </span>
-              </p>
+        {/* Coaching insights — derived from the same session data as Simulator,
+            presented as actionable coaching content instead of duplicate KPI tiles */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="rounded-xl border border-border bg-card shadow-sm p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <TrendingUp className="w-4 h-4 text-primary" />
+              <h3 className="text-sm font-semibold">{t.coachingStrengths}</h3>
             </div>
-            <ExportButton
-              data={ucBreakdown?.data ?? []}
-              filename={csvFilename("coach-usecase-breakdown")}
-              columns={[
-                { header: "Use Case",        value: r => r.usecase_name ?? `UC-${r.usecaseId}` },
-                { header: "Use Case ID",     value: r => r.usecaseId },
-                { header: "Total Sessions",  value: r => r.totalEvaluations },
-                { header: "Avg Score (pts)", value: r => r.avgScore },
-                { header: "Pass Rate (%)",   value: r => r.passRate },
-                { header: "Passed",          value: r => r.passed },
-              ]}
-            />
+            {loading
+              ? <div className="py-8 text-center text-sm text-muted-foreground">{t.loading}</div>
+              : strengths.length > 0
+                ? (
+                  <div className="space-y-2">
+                    {strengths.map(u => (
+                      <div key={u.user_email} className="flex items-center justify-between p-2 rounded-lg bg-primary/5 border border-primary/10">
+                        <span className="text-xs truncate flex-1 min-w-0">{u.user_name || u.user_email}</span>
+                        <span className="text-xs font-bold text-primary">{u.avg_score}%</span>
+                      </div>
+                    ))}
+                  </div>
+                )
+                : <p className="text-xs text-muted-foreground text-center py-4">{t.coachingNoData}</p>
+            }
           </div>
-          <div className="p-5">
-            {ucLoading
-              ? <div className="py-10 text-center text-sm text-muted-foreground">{t.loading}</div>
-              : ucBreakdown?.data?.length
-                ? <DataTable data={ucBreakdown.data} columns={ucColumns} pageSize={8} />
-                : <div className="py-10 text-center text-sm text-muted-foreground">{t.noDataAvailable}</div>
+
+          <div className="rounded-xl border border-border bg-card shadow-sm p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <AlertTriangle className="w-4 h-4 text-amber-500" />
+              <h3 className="text-sm font-semibold">{t.coachingImprove}</h3>
+            </div>
+            {loading
+              ? <div className="py-8 text-center text-sm text-muted-foreground">{t.loading}</div>
+              : improvementAreas.length > 0
+                ? (
+                  <div className="space-y-2">
+                    {improvementAreas.map(u => (
+                      <div key={u.user_email} className="flex items-center justify-between p-2 rounded-lg bg-amber-500/5 border border-amber-500/10">
+                        <span className="text-xs truncate flex-1 min-w-0">{u.user_name || u.user_email}</span>
+                        <span className="text-xs font-bold text-amber-600">{u.avg_score}%</span>
+                      </div>
+                    ))}
+                  </div>
+                )
+                : <p className="text-xs text-muted-foreground text-center py-4">{hasData ? t.coachingAllAbove : t.coachingNoData}</p>
+            }
+          </div>
+
+          <div className="rounded-xl border border-border bg-card shadow-sm p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Lightbulb className="w-4 h-4 text-accent" />
+              <h3 className="text-sm font-semibold">{t.coachingTips}</h3>
+            </div>
+            {loading
+              ? <div className="py-8 text-center text-sm text-muted-foreground">{t.loading}</div>
+              : !hasData
+                ? <p className="text-xs text-muted-foreground text-center py-4">{t.coachingNoData}</p>
+                : (
+                  <div className="space-y-2 text-xs text-muted-foreground">
+                    {weakUsecases.length > 0 && (
+                      <p>{t.coachingTipWeakUc} {weakUsecases.map(u => u.usecase_name || `UC-${u.usecaseId}`).join(', ')}.</p>
+                    )}
+                    {teamAvgScore != null && (
+                      <p>{t.coachingTipAvgScore} {teamAvgScore}{t.coachingTipAvgScore2} {Math.min(100, Math.round(teamAvgScore + 10))}%.</p>
+                    )}
+                  </div>
+                )
             }
           </div>
         </div>

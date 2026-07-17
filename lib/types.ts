@@ -48,6 +48,10 @@ export interface KpiCard {
   delta: number          // % change vs prior period
   unit?: string          // '%', 'pts', etc.
   tier: 'A' | 'B'
+  /** True when there is no real previous-period value to compare against
+   *  (e.g. a current-state snapshot with no date range) — renders a neutral
+   *  "no comparison" badge instead of a real-looking "+0%" delta. */
+  noComparison?: boolean
 }
 
 export interface TimeSeriesPoint {
@@ -227,7 +231,7 @@ export interface ResultsApiResponse {
 /** A single row from GET /api/dashboard/usecase-breakdown */
 export interface UsecaseApiRow {
   usecaseId:        number
-  usecase_name:     string | null   // real display name from coach_app.usecases
+  usecase_name:     string | null   // real display name — source varies by org type (coach_app.usecases, activities.demorp6, kpi.activity_summary, ...)
   totalEvaluations: number
   avgScore:         number | null
   passRate:         number | null

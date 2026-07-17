@@ -78,32 +78,32 @@ export default function CertificationPage() {
 
   const kpis = useMemo(() => {
     if (!hasData) return []
+    // cert.stats is a current-state snapshot with no date range — there is no
+    // real "previous period" to diff against, so every delta here would be a
+    // fabricated 0% that looks identical to a real "no change" trend.
     return [
       {
         label: "Candidates Evaluated", labelKey: "candidatesEvaluated" as const,
         value: overview!.totalEvaluations,
-        delta: calcDeltaPct(overview!.totalEvaluations, overview!.prevTotalEvaluations),
+        delta: 0, noComparison: true,
         tier: "A" as const,
       },
       {
         label: "Pass Rate", labelKey: "passRate" as const,
         value: overview!.passRate ?? 0, unit: "%",
-        delta: calcDeltaPct(overview!.passRate ?? 0, overview!.prevPassRate ?? 0),
+        delta: 0, noComparison: true,
         tier: "B" as const,
       },
       {
         label: "Avg Score", labelKey: "avgScore" as const,
         value: overview!.avgScore ?? 0, unit: "pts",
-        delta: calcDeltaPct(overview!.avgScore ?? 0, overview!.prevAvgScore ?? 0),
+        delta: 0, noComparison: true,
         tier: "B" as const,
       },
       {
         label: "Certified Users", labelKey: "certifiedUsers" as const,
         value: overview!.passedEvaluations,
-        delta: calcDeltaPct(
-          overview!.passedEvaluations,
-          estimatePassedSessions(overview!.prevTotalEvaluations, overview!.prevPassRate)
-        ),
+        delta: 0, noComparison: true,
         tier: "A" as const,
       },
     ]
@@ -116,13 +116,17 @@ export default function CertificationPage() {
     {
       key: "savedReportId",
       header: t.colReportId,
-      render: r => (
+      render: r => r.savedReportId > 0 ? (
         <Link
           href={`/drilldown/${r.savedReportId}`}
           className="font-medium font-mono text-xs hover:underline underline-offset-2 text-primary"
         >
           #{r.savedReportId}
         </Link>
+      ) : (
+        // Negative IDs are synthesized for certification rows (profiles_assigned
+        // has no per-event ID) — no real drilldown exists, so don't link one.
+        <span className="font-medium font-mono text-xs text-muted-foreground">—</span>
       ),
     },
     {

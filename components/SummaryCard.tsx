@@ -14,10 +14,10 @@ interface Props {
 
 export function SummaryCard({ kpi, index = 0, icon }: Props) {
   const t = useT()
-  const { labelKey, label, value, delta, unit } = kpi
+  const { labelKey, label, value, delta, unit, noComparison } = kpi
   const displayLabel = t[labelKey] ?? label
-  const isPositive = delta > 0
-  const isNegative = delta < 0
+  const isPositive = !noComparison && delta > 0
+  const isNegative = !noComparison && delta < 0
 
   return (
     <motion.div
@@ -65,8 +65,8 @@ export function SummaryCard({ kpi, index = 0, icon }: Props) {
         <div className="flex items-center gap-2">
           <div className={cn(
             "inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold",
-            isPositive 
-              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" 
+            isPositive
+              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
               : isNegative
                 ? "bg-rose-500/10 text-rose-600 dark:text-rose-400"
                 : "bg-muted text-muted-foreground"
@@ -74,9 +74,9 @@ export function SummaryCard({ kpi, index = 0, icon }: Props) {
             {isPositive && <TrendingUp className="w-3 h-3" />}
             {isNegative && <TrendingDown className="w-3 h-3" />}
             {!isPositive && !isNegative && <Minus className="w-3 h-3" />}
-            <span>{isPositive ? "+" : ""}{delta}%</span>
+            <span>{noComparison ? "—" : `${isPositive ? "+" : ""}${delta}%`}</span>
           </div>
-          <span className="text-xs text-muted-foreground/70">{t.vsPrior}</span>
+          <span className="text-xs text-muted-foreground/70">{noComparison ? t.noHistoricalComparison : t.vsPrior}</span>
         </div>
       </div>
     </motion.div>

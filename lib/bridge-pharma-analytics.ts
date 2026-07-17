@@ -571,12 +571,14 @@ async function apotexCoachLeaderboard(fromIso: string, toIso: string, limit: num
       date_from: isoToDate(fromIso), date_to: isoToDate(toIso), limit: 500, activity_id: id,
     }).catch(() => ({ leaderboard: [] as ApotexLeaderRow[] }))
   ))
-  const byEmail = new Map<string, { name: string | null; sessions: number; scoreWeighted: number }>()
+  const byEmail = new Map<string, { name: string | null; sessions: number; scoreWeighted: number; passWeighted: number }>()
   for (const resp of resps) {
     for (const r of resp.leaderboard ?? []) {
       const sessions = Number(r.sessions)
-      const b = byEmail.get(r.email) ?? { name: r.name, sessions: 0, scoreWeighted: 0 }
-      b.sessions += sessions; b.scoreWeighted += (r.avg_score ?? 0) * sessions
+      const b = byEmail.get(r.email) ?? { name: r.name, sessions: 0, scoreWeighted: 0, passWeighted: 0 }
+      b.sessions += sessions
+      b.scoreWeighted += (r.avg_score ?? 0) * sessions
+      b.passWeighted += (r.pass_rate_pct ?? 0) * sessions // weighted across merged activity_ids, same pattern as avg_score
       byEmail.set(r.email, b)
     }
   }
@@ -584,7 +586,7 @@ async function apotexCoachLeaderboard(fromIso: string, toIso: string, limit: num
     .map(([email, b]) => ({
       user_email: email, user_name: b.name,
       sessions: b.sessions, avg_score: b.sessions ? Math.round((b.scoreWeighted / b.sessions) * 100) / 100 : 0,
-      pass_rate: 0, // not tracked per-merge; individual kpi.leaderboard calls don't expose sessions_pass
+      pass_rate: b.sessions ? Math.round((b.passWeighted / b.sessions) * 100) / 100 : 0,
     }))
     .sort((a, b) => b.avg_score - a.avg_score || b.sessions - a.sessions)
     .slice(0, limit)
