@@ -115,6 +115,7 @@ export async function rolplayAppResults(clientId: number, limit: number): Promis
   const data: EvaluationApiRow[] = rows.map((r) => ({
     savedReportId: Number(r.id),
     usecaseId: r.simulator_id != null ? Number(r.simulator_id) : null,
+    usecaseName: null,    // not captured on this platform
     score: null,          // not captured on this platform
     result: null,
     passed: false,

@@ -442,6 +442,7 @@ async function sanferCertificationResults(limit: number): Promise<ResultsApiResp
       return {
         savedReportId: -(i + 1), // negative = certification-sourced, not a real bridge session id
         usecaseId: r.profile_id,
+        usecaseName: null, // profiles_assigned has no name source for profile_id
         score: Math.round(avg),
         result: r.finalized ? 'passed' : 'failed',
         passed: r.finalized === 1,
@@ -592,19 +593,24 @@ async function apotexCoachLeaderboard(fromIso: string, toIso: string, limit: num
 
 async function apotexCoachSessions(fromIso: string, toIso: string, limit: number): Promise<ResultsApiResponse> {
   const ids = TENANT_CONFIG.apotex.coachActivityIds ?? []
-  const resps = await Promise.all(ids.map(id =>
-    bridgeCall<{ sessions: ApotexSessionRow[] }>('apotex', 'kpi.sessions', {
-      date_from: isoToDate(fromIso), date_to: isoToDate(toIso), limit, activity_id: id,
-    }).catch(() => ({ sessions: [] as ApotexSessionRow[] }))
-  ))
+  const [resps, { coach, simulator }] = await Promise.all([
+    Promise.all(ids.map(id =>
+      bridgeCall<{ sessions: ApotexSessionRow[] }>('apotex', 'kpi.sessions', {
+        date_from: isoToDate(fromIso), date_to: isoToDate(toIso), limit, activity_id: id,
+      }).catch(() => ({ sessions: [] as ApotexSessionRow[] }))
+    )),
+    apotexActivityGroups(fromIso, toIso).catch(() => ({ coach: [], simulator: [] })),
+  ])
+  const nameById = new Map([...coach, ...simulator].map(a => [a.activity_id, a.activity_name]))
   const rows = resps.flatMap(r => r.sessions ?? [])
   const data: EvaluationApiRow[] = rows
     .sort((a, b) => (a.fecha < b.fecha ? 1 : -1))
     .slice(0, limit)
     .map(r => {
       const score = Number(r.score); const passed = score >= PASS_THRESHOLD
+      const usecaseId = Number(r.usecase_id ?? r.activity_id)
       return {
-        savedReportId: Number(r.id), usecaseId: Number(r.usecase_id ?? r.activity_id),
+        savedReportId: Number(r.id), usecaseId, usecaseName: nameById.get(usecaseId) ?? null,
         score, result: passed ? 'passed' : 'failed', passed, date: r.fecha.slice(0, 10),
       }
     })
@@ -892,15 +898,23 @@ export async function pharmaDashboardResults(
 
   if (TENANT_CONFIG[tenant].kind === 'kpi') {
     if (params.solution === 'coach') return apotexCoachSessions(params.fromIso, params.toIso, limit)
-    const resp = await bridgeCall<{ sessions: ApotexSessionRow[] }>(tenant, 'kpi.sessions', {
-      date_from: isoToDate(params.fromIso), date_to: isoToDate(params.toIso), limit,
-    })
+    const [resp, { coach, simulator }] = await Promise.all([
+      bridgeCall<{ sessions: ApotexSessionRow[] }>(tenant, 'kpi.sessions', {
+        date_from: isoToDate(params.fromIso), date_to: isoToDate(params.toIso), limit,
+      }),
+      apotexActivityGroups(params.fromIso, params.toIso).catch(() => ({ coach: [], simulator: [] })),
+    ])
+    const nameById = new Map(
+      [...coach, ...simulator].map(a => [a.activity_id, a.activity_name]),
+    )
     const data: EvaluationApiRow[] = (resp.sessions ?? []).map(r => {
       const score  = Number(r.score)
       const passed = score >= PASS_THRESHOLD
+      const usecaseId = Number(r.usecase_id ?? r.activity_id)
       return {
         savedReportId: Number(r.id),
-        usecaseId:     Number(r.usecase_id ?? r.activity_id),
+        usecaseId,
+        usecaseName:   nameById.get(usecaseId) ?? null,
         score,
         result:        passed ? 'passed' : 'failed',
         passed,
@@ -919,6 +933,7 @@ export async function pharmaDashboardResults(
       return {
         savedReportId: r.id,
         usecaseId:     r.usecase_id,
+        usecaseName:   r.usecase_name || null,
         score:         r.score,
         result:        passed ? 'passed' : 'failed',
         passed,

@@ -168,7 +168,20 @@ export default function CoachPage() {
   const objectionColumns: Column<ObjectionRow>[] = useMemo(() => [
     {
       key: "objectionText", header: t.colObjectionText,
-      render: r => <span className="text-sm max-w-md block truncate" title={r.objectionText}>{r.objectionText}</span>,
+      render: r => (
+        <div className="max-w-md space-y-1.5 py-1">
+          <span className="text-sm block whitespace-normal break-words">{r.objectionText}</span>
+          {r.topAnswers.length > 0 && (
+            <ul className="space-y-0.5">
+              {r.topAnswers.slice(0, 3).map((a, i) => (
+                <li key={i} className="text-xs text-muted-foreground italic whitespace-normal break-words">
+                  &ldquo;{a.text}&rdquo; <span className="not-italic font-medium">— {a.name}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ),
     },
     { key: "count", header: t.colTimesEncountered, render: r => <span className="tabular-nums font-medium">{r.count}</span> },
     { key: "passRate", header: t.colSuccessRate, render: r => <PassRateBar value={r.passRate} /> },

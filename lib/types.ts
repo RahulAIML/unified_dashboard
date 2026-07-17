@@ -212,6 +212,7 @@ export interface TrendsApiResponse {
 export interface EvaluationApiRow {
   savedReportId: number
   usecaseId:     number | null
+  usecaseName:   string | null
   score:         number | null
   result:        string | null
   passed:        boolean

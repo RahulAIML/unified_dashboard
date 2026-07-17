@@ -41,7 +41,7 @@ describe('GET /api/dashboard/results', () => {
   it("calls bancoDashboardResults for orgType 'banco'", async () => {
     vi.mocked(resolveOrgType).mockResolvedValue('banco')
     vi.mocked(bancoDashboardResults).mockResolvedValue({
-      data: [{ savedReportId: 1, usecaseId: 11, score: 75, result: 'passed', passed: true, date: '2026-04-15' }],
+      data: [{ savedReportId: 1, usecaseId: 11, usecaseName: null, score: 75, result: 'passed', passed: true, date: '2026-04-15' }],
     })
     const body = await (await GET(makeReq())).json()
     expect(body.data.data[0].passed).toBe(true)

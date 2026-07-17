@@ -130,7 +130,7 @@ export default function CertificationPage() {
       header: t.colUsecaseId,
       render: r => (
         <span className="text-muted-foreground text-xs">
-          {r.usecaseId != null ? `UC-${r.usecaseId}` : "—"}
+          {r.usecaseName || (r.usecaseId != null ? `UC-${r.usecaseId}` : "—")}
         </span>
       ),
     },
@@ -274,12 +274,13 @@ export default function CertificationPage() {
               data={results?.data ?? []}
               filename={csvFilename("certification-results")}
               columns={[
-                { header: "Report ID",   value: r => r.savedReportId },
-                { header: "Use Case ID", value: r => r.usecaseId },
-                { header: "Score (pts)", value: r => r.score },
-                { header: "Result",      value: r => r.passed ? "PASS" : "FAIL" },
-                { header: "Segment",     value: r => r.result },
-                { header: "Date",        value: r => r.date },
+                { header: "Report ID",     value: r => r.savedReportId },
+                { header: "Exercise Name", value: r => r.usecaseName ?? "" },
+                { header: "Use Case ID",   value: r => r.usecaseId },
+                { header: "Score (pts)",   value: r => r.score },
+                { header: "Result",        value: r => r.passed ? "PASS" : "FAIL" },
+                { header: "Segment",       value: r => r.result },
+                { header: "Date",          value: r => r.date },
               ]}
             />
           </div>

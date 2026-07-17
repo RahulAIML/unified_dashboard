@@ -363,6 +363,7 @@ export async function bancoDashboardResults(params: {
     return {
       savedReportId: Number(r.savedReportId),
       usecaseId:     r.usecaseId != null ? Number(r.usecaseId) : null,
+      usecaseName:   null, // no name source verified for banco sessions
       score:         r.score     != null ? Number(r.score)     : null,
       result:        passed ? 'passed' : 'failed',
       passed,
