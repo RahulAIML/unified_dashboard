@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import {
   LayoutDashboard, BookOpen, BrainCircuit, Gamepad2,
-  BadgeCheck, Database, Sun, Moon, Settings, LogOut, ShieldCheck,
+  BadgeCheck, Database, Sun, Moon, Settings, LogOut,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useTheme } from "./ThemeProvider"
@@ -55,7 +55,7 @@ export function Sidebar() {
   const t     = useT()
   const brand = useClientBrand()
   const { platformName } = usePlatformName()
-  const { clearAuth, user } = useAuthContext()
+  const { clearAuth } = useAuthContext()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
 
@@ -91,6 +91,10 @@ export function Sidebar() {
   }, [loggingOut, clearAuth, router])
 
   // Same nav for every organisation — data source is resolved server-side.
+  // /admin/tenants (manual tenant wizard) is intentionally NOT listed here —
+  // the AI Dashboard Builder is the primary onboarding path now. The page
+  // and its API still work at their direct URL for internal admin use
+  // (e.g. manually deactivating a tenant), just not surfaced in client nav.
   const nav = [
     { href: "/",              label: t.navOverview,      icon: LayoutDashboard },
     { href: "/lms",           label: t.navLms,           icon: BookOpen        },
@@ -99,9 +103,6 @@ export function Sidebar() {
     { href: "/certification", label: t.navCertification, icon: BadgeCheck      },
     { href: "/second-brain",  label: t.navSecondBrain,   icon: Database        },
     { href: "/settings",      label: t.navSettings,      icon: Settings        },
-    ...(user?.role === "admin"
-      ? [{ href: "/admin/tenants", label: t.navAdminTenants, icon: ShieldCheck }]
-      : []),
   ]
 
   // Close sidebar on route change (mobile)

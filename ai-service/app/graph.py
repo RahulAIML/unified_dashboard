@@ -164,7 +164,19 @@ async def n_no_service(state: GState) -> dict:
     job = state["job"]
     job.phase = JobPhase.error
     job.error = f"No live data service found for '{job.request.company}'."
-    await _mk_log(state)("error", "error", job.error)
+    # This is a genuine "nobody's built this yet" case, not a bug — surface a
+    # concrete developer handoff instead of a bare failure, since fixing it
+    # means writing a new bridge endpoint outside this app, which no agent
+    # here has credentials or scope to do safely on its own.
+    await _mk_log(state)("error", "error",
+        f"{job.error} Tried every known domain/bridge-kind pattern for this company and found nothing live. "
+        "This company's raw training data likely isn't wired to any bridge endpoint yet — that's a one-time "
+        "backend task, not something this pipeline can create on its own (it only reads existing bridges, never "
+        "writes new backend code or touches production databases directly). To onboard this company: a developer "
+        "needs to (1) find which database/table holds their practice-session records, (2) add a bridge endpoint "
+        "following the same {action, ...} JSON-dispatch protocol every other tenant uses (see any existing bridge "
+        "as a reference), then (3) re-run this generator — discovery, schema understanding, KPI selection, and "
+        "publishing all still happen automatically from there.")
     await state["update"](job)
     return {}
 
