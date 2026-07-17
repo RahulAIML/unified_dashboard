@@ -537,8 +537,7 @@ function activityRowsToUsecaseRows(rows: ApotexActivityRow[]): UsecaseApiRow[] {
 }
 
 /** Coach Maestro trends/leaderboard/sessions — merges per-id calls (only 3 ids, cheap). */
-async function apotexCoachTrend(fromIso: string, toIso: string): Promise<TrendsApiResponse> {
-  const ids = TENANT_CONFIG.apotex.coachActivityIds ?? []
+async function apotexActivityTrend(ids: number[], fromIso: string, toIso: string): Promise<TrendsApiResponse> {
   const resps = await Promise.all(ids.map(id =>
     bridgeCall<{ trend: ApotexTrendRow[] }>('apotex', 'kpi.score_trend', {
       date_from: isoToDate(fromIso), date_to: isoToDate(toIso), granularity: 'day', activity_id: id,
@@ -564,8 +563,7 @@ async function apotexCoachTrend(fromIso: string, toIso: string): Promise<TrendsA
   return { scoreTrend, passFailTrend, evalCountTrend }
 }
 
-async function apotexCoachLeaderboard(fromIso: string, toIso: string, limit: number): Promise<BestPerformersApiResponse> {
-  const ids = TENANT_CONFIG.apotex.coachActivityIds ?? []
+async function apotexActivityLeaderboard(ids: number[], fromIso: string, toIso: string, limit: number): Promise<BestPerformersApiResponse> {
   const resps = await Promise.all(ids.map(id =>
     bridgeCall<{ leaderboard: ApotexLeaderRow[] }>('apotex', 'kpi.leaderboard', {
       date_from: isoToDate(fromIso), date_to: isoToDate(toIso), limit: 500, activity_id: id,
@@ -716,12 +714,13 @@ export async function pharmaDashboardTrends(
   if (tenant === 'sanfer' && params.solution === 'certification') return EMPTY_TRENDS
 
   if (TENANT_CONFIG[tenant].kind === 'kpi') {
-    if (params.solution === 'coach') return apotexCoachTrend(params.fromIso, params.toIso)
-    // NOTE: 'simulator' still returns the unfiltered (Coach Maestro-inclusive)
-    // trend here — per-id-merging every non-coach activity would mean ~9
-    // extra bridge calls for this one view. Overview/Breakdown ARE correctly
-    // split; this is a scoped, documented gap for Trends/BestPerformers/
-    // Results specifically.
+    if (params.solution === 'coach') {
+      return apotexActivityTrend(TENANT_CONFIG.apotex.coachActivityIds ?? [], params.fromIso, params.toIso)
+    }
+    if (params.solution === 'simulator') {
+      const { simulator } = await apotexActivityGroups(params.fromIso, params.toIso)
+      return apotexActivityTrend(simulator.map(a => a.activity_id), params.fromIso, params.toIso)
+    }
     const resp = await bridgeCall<{ trend: ApotexTrendRow[] }>(tenant, 'kpi.score_trend', {
       date_from: isoToDate(params.fromIso), date_to: isoToDate(params.toIso), granularity: 'day',
     })
@@ -829,8 +828,13 @@ export async function pharmaDashboardBestPerformers(
   if (tenant === 'sanfer' && params.solution === 'certification') return sanferCertificationBestPerformers(limit)
 
   if (TENANT_CONFIG[tenant].kind === 'kpi') {
-    if (params.solution === 'coach') return apotexCoachLeaderboard(params.fromIso, params.toIso, limit)
-    // 'simulator' — see Trends comment above re: the same documented scope gap.
+    if (params.solution === 'coach') {
+      return apotexActivityLeaderboard(TENANT_CONFIG.apotex.coachActivityIds ?? [], params.fromIso, params.toIso, limit)
+    }
+    if (params.solution === 'simulator') {
+      const { simulator } = await apotexActivityGroups(params.fromIso, params.toIso)
+      return apotexActivityLeaderboard(simulator.map(a => a.activity_id), params.fromIso, params.toIso, limit)
+    }
     const resp = await bridgeCall<{ leaderboard: ApotexLeaderRow[] }>(tenant, 'kpi.leaderboard', {
       date_from: isoToDate(params.fromIso), date_to: isoToDate(params.toIso), limit,
     })
@@ -909,7 +913,15 @@ export async function pharmaDashboardResults(
     const nameById = new Map(
       [...coach, ...simulator].map(a => [a.activity_id, a.activity_name]),
     )
-    const data: EvaluationApiRow[] = (resp.sessions ?? []).map(r => {
+    // 'simulator' must exclude Coach Maestro sessions, matching the split
+    // Overview/Breakdown already apply — kpi.sessions itself doesn't filter
+    // by activity_id here, so filter the already-fetched rows locally instead
+    // of the N-extra-calls-per-activity-id cost of re-fetching per id.
+    const coachIds = new Set((TENANT_CONFIG.apotex.coachActivityIds ?? []))
+    const sessions = params.solution === 'simulator'
+      ? (resp.sessions ?? []).filter(r => !coachIds.has(Number(r.usecase_id ?? r.activity_id)))
+      : (resp.sessions ?? [])
+    const data: EvaluationApiRow[] = sessions.map(r => {
       const score  = Number(r.score)
       const passed = score >= PASS_THRESHOLD
       const usecaseId = Number(r.usecase_id ?? r.activity_id)
@@ -1075,9 +1087,17 @@ export async function pharmaDashboardOrganization(tenant: PharmaTenant): Promise
   const EMPTY: OrganizationApiResponse = { totalMembers: 0, totalAdmins: 0, totalSupervisors: 0, members: [], admins: [] }
   if (!TENANT_CONFIG[tenant].hasOrganization) return EMPTY
 
+  // Same bridge protocol, same row field names (mb_*/rpa_*) — kpi-kind
+  // tenants (Apotex) just use different action names and a different
+  // top-level response key ("members"/"admins" vs "data"), verified live.
+  const isKpi = TENANT_CONFIG[tenant].kind === 'kpi'
   const [membersResp, adminsResp] = await Promise.all([
-    bridgeCall<{ data: SanferMemberRow[]; count: number }>(tenant, 'org.members'),
-    bridgeCall<{ data: SanferAdminRow[]; count: number }>(tenant, 'org.admins'),
+    isKpi
+      ? bridgeCall<{ members: SanferMemberRow[]; count: number }>(tenant, 'list.members').then(r => ({ data: r.members, count: r.count }))
+      : bridgeCall<{ data: SanferMemberRow[]; count: number }>(tenant, 'org.members'),
+    isKpi
+      ? bridgeCall<{ admins: SanferAdminRow[]; count: number }>(tenant, 'list.admins').then(r => ({ data: r.admins, count: r.count }))
+      : bridgeCall<{ data: SanferAdminRow[]; count: number }>(tenant, 'org.admins'),
   ])
 
   const members: OrgMemberRow[] = (membersResp.data ?? []).map(m => ({

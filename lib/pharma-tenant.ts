@@ -184,6 +184,12 @@ if (apotexBridgeUrl) {
     url: apotexBridgeUrl,
     xTenant: 'apotex',
     coachActivityIds: [8, 9, 10],
+    // Verified live: list.members/list.admins return real rows (61 members,
+    // 21 admins) using the exact same field names as Sanfer's org.members/
+    // org.admins (mb_fullname, mb_email, mb_admin, rpa_full_name, rpa_email,
+    // rpa_profile_type) — same underlying bridge protocol, different action
+    // name and response wrapper key ("members"/"admins" vs "data").
+    hasOrganization: true,
   }
 }
 
