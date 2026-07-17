@@ -476,6 +476,7 @@ interface ApotexTrendRow {
 interface ApotexActivityRow {
   activity_id: number
   activity_name: string | null
+  activity_type: string | null // e.g. "Coach maestro", "Coach evaluador", "Visita Médica APECS" — the real module tag
   sessions: number
   avg_score: number | null
   pass_rate_pct: number
@@ -498,16 +499,28 @@ interface ApotexSessionRow {
   score: number
 }
 
-/** kpi.activity_summary rows split into Coach Maestro (verified ids) vs everything else. */
+/** kpi.activity_summary rows split into Coach Maestro vs everything else.
+ *
+ * The bridge tags each activity with a real activity_type ("Coach maestro",
+ * "Coach evaluador", "Visita Médica APECS", ...) — verified live. We split on
+ * that field so a NEW Coach-maestro activity added later is picked up
+ * automatically, instead of relying on a hardcoded id list that silently goes
+ * stale (which would drop the new activity into "Simulator" by mistake). The
+ * configured coachActivityIds remain a fallback only for the (older) case
+ * where a row has no activity_type at all. */
 async function apotexActivityGroups(fromIso: string, toIso: string) {
   const resp = await bridgeCall<{ activities: ApotexActivityRow[] }>('apotex', 'kpi.activity_summary', {
     date_from: isoToDate(fromIso), date_to: isoToDate(toIso),
   })
-  const coachIds = new Set(TENANT_CONFIG.apotex.coachActivityIds ?? [])
+  const coachIdFallback = new Set(TENANT_CONFIG.apotex.coachActivityIds ?? [])
+  const isCoach = (a: ApotexActivityRow) =>
+    a.activity_type
+      ? a.activity_type.trim().toLowerCase() === 'coach maestro'
+      : coachIdFallback.has(a.activity_id)
   const all = (resp.activities ?? []).filter(a => Number(a.sessions) > 0)
   return {
-    coach: all.filter(a => coachIds.has(a.activity_id)),
-    simulator: all.filter(a => !coachIds.has(a.activity_id)),
+    coach: all.filter(isCoach),
+    simulator: all.filter(a => !isCoach(a)),
   }
 }
 
