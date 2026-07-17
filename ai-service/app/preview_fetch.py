@@ -15,6 +15,26 @@ from .models import DashboardConfig, ServiceKind, WidgetConfig, WidgetPreview, W
 PASS_THRESHOLD = 70
 
 
+def _norm_score(row: dict) -> float | None:
+    """Normalize a sim.demorp6 row's score to a 0-100 percentage.
+
+    The "Calificacion" field is 0-100 for some clients (Sanfer: 90/95/100) but
+    a raw points scale for others (Weser: 1600/1000, whose 0-100 percentage is
+    in "Puntos_Totales"=80). Averaging Calificacion blindly gave Weser an
+    "avg score" of 1400. Trust Calificacion when it's already <=100; otherwise
+    fall back to Puntos_Totales when that's a valid percentage. Leaves Sanfer
+    unchanged; fixes Weser/Adium; works for a new client on either scale with
+    no config. Mirrors normalizeSimScore() in lib/bridge-pharma-analytics.ts.
+    """
+    cal = row.get("Calificacion")
+    if _num(cal) and float(cal) <= 100:
+        return float(cal)
+    pts = row.get("Puntos_Totales")
+    if _num(pts) and float(pts) <= 100:
+        return float(pts)
+    return float(cal) if _num(cal) else None
+
+
 def _date_range(cfg: DashboardConfig) -> tuple[str, str]:
     dr = cfg.connector_handle.get("date_range")
     if isinstance(dr, list) and len(dr) == 2:
@@ -119,7 +139,7 @@ async def _exceltis_rows(cfg: DashboardConfig) -> list[dict]:
 
 async def _exceltis(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
     rows = await _exceltis_rows(cfg)
-    scored = [float(r["Calificacion"]) for r in rows if _num(r.get("Calificacion"))]
+    scored = [s for s in (_norm_score(r) for r in rows) if s is not None]
     if w.type == WidgetType.kpi_tile:
         if w.metric_key == "total_sessions":
             return WidgetPreview(widget_id=w.id, ok=True, value=len(rows))
@@ -161,7 +181,7 @@ async def _sale_exercises(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPrevie
         return WidgetPreview(widget_id=w.id, ok=v is not None, value=v)
     _, body = await post_json(base, {"action": "sim.demorp6", "ids": ",".join(map(str, ids)), "date_from": frm, "date_to": to}, {"X-Tenant": slug})
     rows = (body or {}).get("data", []) if isinstance(body, dict) else []
-    scores = [float(r["Calificacion"]) for r in rows if _num(r.get("Calificacion"))]
+    scores = [s for s in (_norm_score(r) for r in rows) if s is not None]
     if w.metric_key == "total_sessions":
         return WidgetPreview(widget_id=w.id, ok=True, value=len(rows))
     if w.metric_key == "avg_score":

@@ -113,6 +113,27 @@ interface SimDemorp6Row {
   Usuario_Nombre: string
   Fecha_y_Hora: string
   Calificacion: number
+  Puntos_Totales?: number
+}
+
+// Normalize a sim.demorp6 row's score to a 0-100 percentage.
+//
+// The same "Calificacion" field means different things per client, verified
+// live: Sanfer's is already 0-100 (90, 95, 100), but Weser's is a raw points
+// scale (1600, 1000, ...) whose 0-100 percentage lives in Puntos_Totales (80).
+// Using Calificacion blindly gave Weser an "avg score" of 1400.
+//
+// Rule: trust Calificacion when it's already a plausible percentage (<=100);
+// otherwise fall back to Puntos_Totales when THAT is a plausible percentage.
+// This leaves Sanfer completely unchanged (its Calificacion is always <=100,
+// so the fallback never triggers) while fixing Weser/Adium — and a brand-new
+// client on either scale gets the right number with zero configuration.
+function normalizeSimScore(row: { Calificacion: number; Puntos_Totales?: number }): number {
+  const cal = Number(row.Calificacion)
+  if (Number.isFinite(cal) && cal <= 100) return cal
+  const pts = Number(row.Puntos_Totales)
+  if (Number.isFinite(pts) && pts <= 100) return pts
+  return Number.isFinite(cal) ? cal : 0
 }
 
 // Overview, trends, breakdown, results and best-performers each independently
@@ -171,7 +192,7 @@ async function fetchSaleExercisesSessionsUncached(
     return (sessionsResp.data ?? []).map(r => ({
       id: r.ID_Sim, usecase_id: r.ID_Caso_de_Uso,
       usecase_name: nameById.get(r.ID_Caso_de_Uso) ?? '',
-      email: r.Usuario, name: r.Usuario_Nombre, date: r.Fecha_y_Hora, score: r.Calificacion,
+      email: r.Usuario, name: r.Usuario_Nombre, date: r.Fecha_y_Hora, score: normalizeSimScore(r),
     }))
   }
 
@@ -193,7 +214,7 @@ async function fetchSaleExercisesSessionsUncached(
     email:        r.Usuario,
     name:         r.Usuario_Nombre,
     date:         r.Fecha_y_Hora,
-    score:        r.Calificacion,
+    score:        normalizeSimScore(r),
   }))
 }
 
