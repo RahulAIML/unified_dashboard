@@ -109,6 +109,19 @@ export const translations = {
     passFailSub:          'Daily evaluations',
     documentUploads:      'Document Uploads Over Time',
     documentUploadsSub:   'New docs added',
+    approvalSplit:        'Approval vs. Disapproval',
+    approvalSplitSub:     'Passed vs failed sessions',
+    approved:             'Approved',
+    disapproved:          'Disapproved',
+
+    // ── AI insights (auto-derived, capability-driven) ────────
+    insightsTitle:        'AI Insights',
+    insightsSub:          'Automated signals from this period',
+    insightsFocusAreas:   'Focus training on the activities with the lowest pass rates',
+    insightsStrongest:    'Strongest activity',
+    insightsRecommendation: 'Recommendation',
+    insightsRecoText:     'Assign more practice on the areas above; the current platform average is',
+    insightsAllStrong:    'All activities are passing above target — keep reinforcing to sustain performance.',
 
     // ── Section headers ──────────────────────────────────────
     userSummary:          'User Summary',
@@ -739,6 +752,19 @@ export const translations = {
     passFailSub:          'Evaluaciones diarias',
     documentUploads:      'Documentos Subidos en el Tiempo',
     documentUploadsSub:   'Nuevos documentos añadidos',
+    approvalSplit:        'Aprobación vs. Reprobación',
+    approvalSplitSub:     'Sesiones aprobadas vs reprobadas',
+    approved:             'Aprobados',
+    disapproved:          'Reprobados',
+
+    // ── AI insights (auto-derived, capability-driven) ────────
+    insightsTitle:        'Perspectivas IA',
+    insightsSub:          'Señales automáticas de este período',
+    insightsFocusAreas:   'Enfoca el entrenamiento en las actividades con menor tasa de aprobación',
+    insightsStrongest:    'Actividad más fuerte',
+    insightsRecommendation: 'Recomendación',
+    insightsRecoText:     'Asigna más práctica en las áreas anteriores; el promedio actual de la plataforma es',
+    insightsAllStrong:    'Todas las actividades aprueban por encima de la meta — sigue reforzando para sostener el desempeño.',
 
     // ── Section headers ──────────────────────────────────────
     userSummary:          'Resumen de Usuarios',

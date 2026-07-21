@@ -2,7 +2,7 @@
 
 import { useMemo, useEffect, useReducer, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Target, PlayCircle, TrendingUp, BadgeCheck, BarChart2, AlertTriangle, Trophy, MessageSquare, Users, Search, FileText } from "lucide-react"
+import { Target, PlayCircle, TrendingUp, BadgeCheck, BarChart2, AlertTriangle, Trophy, MessageSquare, Users, Search, FileText, Lightbulb, CheckCircle2 } from "lucide-react"
 import { DashboardHeader }    from "@/components/DashboardHeader"
 import { SummaryCard }        from "@/components/SummaryCard"
 import { MetricCard } from "@/components/MetricCard"
@@ -363,6 +363,35 @@ export function DashboardContent() {
     return m
   }, [ucBreakdown])
 
+  // Approval vs disapproval — pure derivation from the overview totals, so it
+  // works for any tenant that reports sessions + a pass count. No client-specific
+  // logic; the panel simply hides itself when there are no sessions.
+  const approvalData = useMemo(() => {
+    if (!overview || overview.totalEvaluations <= 0) return []
+    const approved    = Math.max(overview.passedEvaluations ?? 0, 0)
+    const disapproved = Math.max(overview.totalEvaluations - approved, 0)
+    return [
+      { name: t.approved,    value: approved,    color: "#10b981" },
+      { name: t.disapproved, value: disapproved, color: "#ef4444" },
+    ]
+  }, [overview, t])
+
+  // Auto-derived insights — weakest/strongest activities by pass rate, straight
+  // from the per-activity breakdown any tenant already returns. Generic: renders
+  // only when there is at least one activity with sessions.
+  const insights = useMemo(() => {
+    const rows = (ucBreakdown?.data ?? []).filter(r => Number(r.totalEvaluations) > 0)
+    if (!rows.length) return null
+    const withRate = rows.map(r => ({
+      name: r.usecase_name?.trim() || `UC-${r.usecaseId}`,
+      rate: (Number(r.passed) / Number(r.totalEvaluations)) * 100,
+    }))
+    const sorted    = [...withRate].sort((a, b) => a.rate - b.rate)
+    const weakest   = sorted.filter(r => r.rate < 60).slice(0, 3)
+    const strongest = sorted[sorted.length - 1]
+    return { weakest, strongest, avgScore: overview?.avgScore ?? null }
+  }, [ucBreakdown, overview])
+
   // ── Evaluation results table columns ─────────────────────────────────────
   const evalColumns: Column<EvaluationApiRow>[] = [
     {
@@ -710,6 +739,83 @@ export function DashboardContent() {
                   : <EmptyState />
               }
             </ChartCard>
+
+            {/* Approval split + AI insights — both auto-derived, render only when
+                their source data exists so the row adapts per tenant. */}
+            {(approvalData.length > 0 || insights) && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-6">
+                {approvalData.length > 0 && (
+                  <ChartCard title={t.approvalSplit} subtitle={`${t.approvalSplitSub} — ${t.last} ${days} ${t.days}`}>
+                    {shimmer || overviewLoading ? <ChartSkeleton /> : <DonutChart data={approvalData} />}
+                  </ChartCard>
+                )}
+
+                {insights && (
+                  <div className="rounded-[16px] border border-border/60 bg-card p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)] hover:shadow-[0_10px_15px_-3px_rgba(0,0,0,0.06),0_4px_6px_-4px_rgba(0,0,0,0.04)] transition-all duration-200">
+                    <div className="mb-5">
+                      <h3 className="text-base sm:text-lg font-semibold flex items-center gap-2">
+                        <div
+                          className="w-8 h-8 rounded-xl flex items-center justify-center"
+                          style={{ background: "linear-gradient(135deg, hsl(var(--primary)/0.12), hsl(var(--accent)/0.08))" }}
+                        >
+                          <Lightbulb className="w-4 h-4 text-primary" />
+                        </div>
+                        {t.insightsTitle}
+                      </h3>
+                      <p className="text-xs sm:text-sm text-muted-foreground mt-1.5 ml-10">{t.insightsSub}</p>
+                    </div>
+
+                    <div className="space-y-4 text-sm">
+                      {insights.weakest.length > 0 ? (
+                        <div className="rounded-xl border border-red-200/60 dark:border-red-900/40 bg-red-50/60 dark:bg-red-950/20 p-4">
+                          <div className="flex items-start gap-2.5">
+                            <AlertTriangle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+                            <div>
+                              <p className="font-medium text-foreground">{t.insightsFocusAreas}:</p>
+                              <ul className="mt-1.5 space-y-1">
+                                {insights.weakest.map((w) => (
+                                  <li key={w.name} className="flex items-center justify-between gap-3 text-muted-foreground">
+                                    <span className="truncate">{w.name}</span>
+                                    <span className="font-semibold text-red-600 dark:text-red-400 tabular-nums shrink-0">{w.rate.toFixed(0)}%</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="rounded-xl border border-emerald-200/60 dark:border-emerald-900/40 bg-emerald-50/60 dark:bg-emerald-950/20 p-4 flex items-start gap-2.5">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
+                          <p className="text-muted-foreground">{t.insightsAllStrong}</p>
+                        </div>
+                      )}
+
+                      {insights.strongest && (
+                        <div className="flex items-center justify-between gap-3 px-1">
+                          <span className="flex items-center gap-2 text-muted-foreground">
+                            <TrendingUp className="w-4 h-4 text-emerald-500 shrink-0" />
+                            {t.insightsStrongest}
+                          </span>
+                          <span className="font-semibold text-foreground truncate max-w-[55%] text-right">
+                            {insights.strongest.name} <span className="text-emerald-600 dark:text-emerald-400 tabular-nums">{insights.strongest.rate.toFixed(0)}%</span>
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="rounded-xl bg-muted/40 p-4">
+                        <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium mb-1">{t.insightsRecommendation}</p>
+                        <p className="text-muted-foreground">
+                          {t.insightsRecoText}
+                          {insights.avgScore != null && (
+                            <span className="font-semibold text-foreground"> {Number(insights.avgScore).toFixed(0)} pts</span>
+                          )}.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Best Performers */}
             {(bestLoading || (bestPerformers?.data?.length ?? 0) > 0) && (
