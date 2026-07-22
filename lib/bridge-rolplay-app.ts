@@ -5,11 +5,16 @@
  * tables in rolplay.app), reached ONLY through the read-only raw-SQL endpoint
  * ROLPLAY_APP_SQL_URL (SELECT-only, enforced server-side).
  *
- * COUNTS-ONLY, on purpose: on this platform r_user_session.score is essentially
- * never populated (e.g. Siigo: 0 of 89 sessions have a score). So this adapter
- * reports real session/user counts and dates, and leaves avgScore/passRate
- * honestly null — it never invents a score. Per-turn transcripts live in
- * r_user_session_details (not surfaced here yet).
+ * SCORES: the legacy r_user_session.score column is essentially never populated
+ * on this platform, but the real overall score IS available per session:
+ *   1. raw_closing_data (JSON) → "overall_score"  (recent sessions)
+ *   2. closing_analysis (HTML) → a score <div>     (all sessions, incl. old ones)
+ * The HTML marker differs per simulator family, so we try both known markers:
+ *   - Siigo:  <div class="rp-sim-report-score-number">NN</div>
+ *   - M8:     <div class="rpt-score-num">NN</div>
+ * Extraction happens in SQL (SCORE_SQL below) so avg/pass-rate aggregate server
+ * side; JSON is preferred and HTML is the fallback, covering ~100% of sessions.
+ * Per-turn transcripts live in r_user_session_details (not surfaced here yet).
  *
  * Tenant resolution is by explicit login → client_id map (NOT email domain):
  * these clients share domains (Siigo, Diego, M8 ARCERA all use audioweb.com.mx),
@@ -61,25 +66,98 @@ export function resolveRolplayAppClientId(email: string): number | null {
   return loginMap().get(email.toLowerCase().trim()) ?? null
 }
 
-// ── Adapters ─────────────────────────────────────────────────────────────────
+// ── Score extraction (SQL) ────────────────────────────────────────────────────
 
-const EMPTY_OVERVIEW: OverviewApiResponse = {
-  totalEvaluations: 0, prevTotalEvaluations: 0,
-  avgScore: null, prevAvgScore: null,
-  passRate: null, prevPassRate: null,
-  passedEvaluations: 0,
+const PASS_THRESHOLD = 70 // platform-wide pass convention (matches every tenant)
+
+/**
+ * SQL expression yielding a 0-100 score per r_user_session row `s`, or NULL.
+ * Precedence: raw_closing_data JSON → Siigo HTML div → M8 HTML div. Each HTML
+ * branch is guarded by LOCATE so a marker that isn't present never yields the
+ * whole (non-numeric) blob. SUBSTRING_INDEX(x, marker, -1) takes the text after
+ * the marker; the inner SUBSTRING_INDEX(..,'<',1) stops at the closing tag.
+ */
+const SCORE_SQL = `CASE
+  WHEN JSON_VALID(s.raw_closing_data)
+       AND JSON_EXTRACT(s.raw_closing_data, '$.overall_score') IS NOT NULL
+       AND JSON_UNQUOTE(JSON_EXTRACT(s.raw_closing_data, '$.overall_score')) REGEXP '^[0-9]+(\\\\.[0-9]+)?$'
+    THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(s.raw_closing_data, '$.overall_score')) AS DECIMAL(6,2))
+  WHEN LOCATE('rp-sim-report-score-number">', s.closing_analysis) > 0
+    THEN CAST(TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(s.closing_analysis, 'rp-sim-report-score-number">', -1), '<', 1)) AS DECIMAL(6,2))
+  WHEN LOCATE('rpt-score-num">', s.closing_analysis) > 0
+    THEN CAST(TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(s.closing_analysis, 'rpt-score-num">', -1), '<', 1)) AS DECIMAL(6,2))
+  ELSE NULL
+END`
+
+/** ISO → 'YYYY-MM-DD HH:MM:SS', stripped to digits/space/colon/dash so it is
+ *  safe to inline (callers already pass Date.toISOString() output). */
+function toSqlDt(iso: string): string {
+  return iso.slice(0, 19).replace('T', ' ').replace(/[^0-9 :-]/g, '')
 }
 
-/** Overview = real session count for the client. Scores are honestly null. */
-export async function rolplayAppOverview(clientId: number): Promise<OverviewApiResponse> {
-  const cid = Math.trunc(clientId)
-  const rows = await remoteSelect<{ sessions: number | string }>(
-    `SELECT COUNT(s.ID) AS sessions
-       FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
-      WHERE u.client_id = ${cid}`,
+function dateClause(fromIso?: string, toIso?: string): string {
+  if (!fromIso || !toIso) return ''
+  return ` AND s.date_created BETWEEN '${toSqlDt(fromIso)}' AND '${toSqlDt(toIso)}'`
+}
+
+interface ScoreStats { total: number; scored: number; avg: number | null; passed: number }
+
+async function fetchScoreStats(cid: number, fromIso?: string, toIso?: string): Promise<ScoreStats> {
+  const rows = await remoteSelect<{ total: number | string; scored: number | string; avg_score: string | null; passed: number | string }>(
+    `SELECT COUNT(*) AS total,
+            COUNT(sc) AS scored,
+            ROUND(AVG(sc), 2) AS avg_score,
+            SUM(CASE WHEN sc >= ${PASS_THRESHOLD} THEN 1 ELSE 0 END) AS passed
+       FROM (
+         SELECT ${SCORE_SQL} AS sc
+           FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
+          WHERE u.client_id = ${cid}${dateClause(fromIso, toIso)}
+       ) t`,
   ).catch(() => [])
-  const sessions = Number(rows[0]?.sessions ?? 0)
-  return { ...EMPTY_OVERVIEW, totalEvaluations: sessions }
+  const r = rows[0]
+  return {
+    total:  Number(r?.total ?? 0),
+    scored: Number(r?.scored ?? 0),
+    avg:    r?.avg_score != null ? Number(r.avg_score) : null,
+    passed: Number(r?.passed ?? 0),
+  }
+}
+
+// ── Adapters ─────────────────────────────────────────────────────────────────
+
+/** Overview with real scores extracted from raw_closing_data / closing_analysis. */
+export async function rolplayAppOverview(
+  clientId: number,
+  range?: { fromIso: string; toIso: string },
+): Promise<OverviewApiResponse> {
+  const cid = Math.trunc(clientId)
+
+  // Previous period = the equal-length window immediately before `from`.
+  let prevRange: { fromIso: string; toIso: string } | undefined
+  if (range) {
+    const from = new Date(range.fromIso).getTime()
+    const to   = new Date(range.toIso).getTime()
+    if (Number.isFinite(from) && Number.isFinite(to) && to > from) {
+      prevRange = { fromIso: new Date(from - (to - from)).toISOString(), toIso: range.fromIso }
+    }
+  }
+
+  const [cur, prev] = await Promise.all([
+    fetchScoreStats(cid, range?.fromIso, range?.toIso),
+    prevRange ? fetchScoreStats(cid, prevRange.fromIso, prevRange.toIso) : Promise.resolve<ScoreStats | null>(null),
+  ])
+
+  const passRate = (s: ScoreStats) => s.total > 0 ? Math.round((s.passed / s.total) * 1000) / 10 : null
+
+  return {
+    totalEvaluations:     cur.total,
+    prevTotalEvaluations: prev?.total ?? 0,
+    avgScore:             cur.avg,
+    prevAvgScore:         prev?.avg ?? null,
+    passRate:             passRate(cur),
+    prevPassRate:         prev ? passRate(prev) : null,
+    passedEvaluations:    cur.passed,
+  }
 }
 
 export async function rolplayAppDataBounds(
@@ -96,30 +174,39 @@ export async function rolplayAppDataBounds(
   return { min: String(r.min_date), max: String(r.max_date) }
 }
 
-/** Recent sessions as rows — real id/simulator/date; score/result null (not captured). */
-export async function rolplayAppResults(clientId: number, limit: number): Promise<ResultsApiResponse> {
+/** Recent sessions as rows, with real extracted score + pass/fail result. */
+export async function rolplayAppResults(
+  clientId: number,
+  limit: number,
+  range?: { fromIso: string; toIso: string },
+): Promise<ResultsApiResponse> {
   const cid = Math.trunc(clientId)
   const lim = Math.max(1, Math.min(200, Math.trunc(limit)))
   const rows = await remoteSelect<{
     id: number | string
     simulator_id: number | string | null
     date_created: string
+    sc: string | null
   }>(
-    `SELECT s.ID AS id, s.simulator_id, s.date_created
+    `SELECT s.ID AS id, s.simulator_id, s.date_created, ${SCORE_SQL} AS sc
        FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
-      WHERE u.client_id = ${cid}
+      WHERE u.client_id = ${cid}${dateClause(range?.fromIso, range?.toIso)}
       ORDER BY s.date_created DESC
       LIMIT ${lim}`,
   ).catch(() => [])
 
-  const data: EvaluationApiRow[] = rows.map((r) => ({
-    savedReportId: Number(r.id),
-    usecaseId: r.simulator_id != null ? Number(r.simulator_id) : null,
-    usecaseName: null,    // not captured on this platform
-    score: null,          // not captured on this platform
-    result: null,
-    passed: false,
-    date: String(r.date_created).slice(0, 10),
-  }))
+  const data: EvaluationApiRow[] = rows.map((r) => {
+    const score = r.sc != null ? Number(r.sc) : null
+    const passed = score != null && score >= PASS_THRESHOLD
+    return {
+      savedReportId: Number(r.id),
+      usecaseId: r.simulator_id != null ? Number(r.simulator_id) : null,
+      usecaseName: null,    // simulator display name not joined here
+      score,
+      result: score != null ? (passed ? 'pass' : 'fail') : null,
+      passed,
+      date: String(r.date_created).slice(0, 10),
+    }
+  })
   return { data }
 }

@@ -75,11 +75,13 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // ── Rolplay-app platform (counts-only; sessions listed, no scores) ────────
+    // ── Rolplay-app platform (real scores via raw_closing_data/closing_analysis) ──
     if (orgType === 'rolplay-app') {
       const clientId = resolveRolplayAppClientId(ctx.email)
       if (!clientId) return buildApiError('Rolplay-app client could not be resolved', 500)
-      const data = await rolplayAppResults(clientId, limit)
+      const data = await rolplayAppResults(clientId, limit, {
+        fromIso: range.from.toISOString(), toIso: range.to.toISOString(),
+      })
       return buildSuccess(data, {
         from: range.from.toISOString(), to: range.to.toISOString(),
         source: `rolplay-app-${clientId}`, limit,
