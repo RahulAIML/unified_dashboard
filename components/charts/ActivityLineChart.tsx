@@ -3,7 +3,7 @@
 import { motion } from "framer-motion"
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis,
-  CartesianGrid, Tooltip, Legend
+  CartesianGrid, Tooltip, Legend, ReferenceLine
 } from "recharts"
 import type { TimeSeriesPoint } from "@/lib/types"
 
@@ -13,6 +13,9 @@ interface Props {
   label2?: string
   color?: string
   color2?: string
+  /** Optional dashed target line (e.g. the 70-pt pass mark) with a right-aligned label. */
+  goal?: number
+  goalLabel?: string
 }
 
 type TooltipItem = {
@@ -54,6 +57,8 @@ export function ActivityLineChart({
   label2,
   color  = "var(--chart-1)",
   color2 = "var(--chart-5)",
+  goal,
+  goalLabel,
 }: Props) {
   const formatted = data.map(d => ({
     ...d,
@@ -115,6 +120,21 @@ export function ActivityLineChart({
             cursor={{ stroke: "currentColor", strokeOpacity: 0.1, strokeWidth: 2 }}
           />
           {label2 && <Legend wrapperStyle={{ paddingTop: 16 }} />}
+          {goal != null && (
+            <ReferenceLine
+              y={goal}
+              stroke="#10b981"
+              strokeDasharray="5 5"
+              strokeOpacity={0.7}
+              label={{
+                value: goalLabel ?? `${goal}`,
+                position: "insideTopRight",
+                fill: "#10b981",
+                fontSize: 11,
+                fontWeight: 600,
+              }}
+            />
+          )}
           <Area
             type="monotone"
             dataKey="value"

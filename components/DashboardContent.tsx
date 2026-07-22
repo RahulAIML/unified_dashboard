@@ -333,6 +333,7 @@ export function DashboardContent() {
   }, [overview, selectedSolution, dateRange.from, dateRange.to])
 
   const activityData = useMemo(() => trends?.evalCountTrend ?? [], [trends])
+  const scoreTrendData = useMemo(() => trends?.scoreTrend ?? [], [trends])
 
   const donutData = useMemo(() => {
     if (!ucBreakdown?.data?.length) return []
@@ -699,6 +700,23 @@ export function DashboardContent() {
                     ))
               }
             </div>
+
+            {/* Score Trend — hero chart matching the reference dashboards, with
+                the universal 70-pt pass mark as a goal line. Renders only when
+                the tenant returns a score series. */}
+            {(trendsLoading || scoreTrendData.length > 0) && (
+              <ChartCard
+                title={t.scoreTrend}
+                subtitle={`${t.scoreTrendSub} — ${t.last} ${days} ${t.days}`}
+              >
+                {shimmer || trendsLoading
+                  ? <ChartSkeleton />
+                  : scoreTrendData.length > 0
+                    ? <ActivityLineChart data={scoreTrendData} label={t.avgSessionScore} color={brand.chartColors[0]} goal={70} goalLabel={t.passGoalLabel} />
+                    : <EmptyState />
+                }
+              </ChartCard>
+            )}
 
             {/* Main Charts Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 sm:gap-6">
