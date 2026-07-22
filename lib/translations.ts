@@ -154,6 +154,24 @@ export const translations = {
     blSims:               'Sessions',
     blAvgScore:           'Avg Score',
 
+    // ── Reports ──────────────────────────────────────────────
+    navReports:           'Reports',
+    repTitle:             'Reports',
+    repSub:               'Export and generate executive reports',
+    repExportData:        'Export data',
+    repExportAllTitle:    'Export all data',
+    repExportAllSub:      'Full CSV export across every solution for the selected period',
+    repTemplates:         'Report templates',
+    repComingSoon:        'Soon',
+    repTplExecutive:      'Weekly Executive Report',
+    repTplExecutiveSub:   'KPIs, trends and top performers for the period',
+    repTplByLine:         'Analysis by Business Line',
+    repTplByLineSub:      'Performance comparison across organizational lines',
+    repTplByAdmin:        'Performance by Administrator',
+    repTplByAdminSub:     'Comparison of supervisors and sales teams',
+    repTplProgress:       'Advisor Progression',
+    repTplProgressSub:    'Individual score evolution over time',
+
     // ── Organization ─────────────────────────────────────────
     navOrganization:      'Organization',
     orgTitle:             'Organization',
@@ -838,6 +856,24 @@ export const translations = {
     blActiveUsers:        'Activos',
     blSims:               'Sesiones',
     blAvgScore:           'Puntaje Prom.',
+
+    // ── Reports ──────────────────────────────────────────────
+    navReports:           'Reportes',
+    repTitle:             'Reportes',
+    repSub:               'Exportación y generación de reportes ejecutivos',
+    repExportData:        'Exportar datos',
+    repExportAllTitle:    'Exportar todos los datos',
+    repExportAllSub:      'Exportación CSV completa de todas las soluciones para el período seleccionado',
+    repTemplates:         'Plantillas de reporte',
+    repComingSoon:        'Próximamente',
+    repTplExecutive:      'Reporte Ejecutivo Semanal',
+    repTplExecutiveSub:   'KPIs, tendencias y mejores desempeños del período',
+    repTplByLine:         'Análisis por Línea de Negocio',
+    repTplByLineSub:      'Comparativa de rendimiento por línea organizacional',
+    repTplByAdmin:        'Rendimiento por Administrador',
+    repTplByAdminSub:     'Comparativa de supervisores y equipos comerciales',
+    repTplProgress:       'Progresión de Asesores',
+    repTplProgressSub:    'Evolución individual de puntajes en el tiempo',
 
     // ── Organization ─────────────────────────────────────────
     navOrganization:      'Organización',

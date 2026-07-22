@@ -7,7 +7,7 @@ import { motion } from "framer-motion"
 import {
   LayoutDashboard, BookOpen, BrainCircuit, Gamepad2,
   BadgeCheck, Database, Sun, Moon, Settings, LogOut, MessageSquare,
-  GitBranch, Building2, Activity,
+  GitBranch, Building2, Activity, FileText,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useTheme } from "./ThemeProvider"
@@ -121,6 +121,8 @@ export function Sidebar() {
     ] : []),
     { href: "/certification", label: t.navCertification, icon: BadgeCheck      },
     { href: "/second-brain",  label: t.navSecondBrain,   icon: Database        },
+    ...((access?.hasCoachData || access?.hasPharmaAccess || access?.hasBancoAccess)
+      ? [{ href: "/reports", label: t.navReports, icon: FileText }] : []),
     { href: "/settings",      label: t.navSettings,      icon: Settings        },
   ]
 
