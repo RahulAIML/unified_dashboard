@@ -258,17 +258,29 @@ async function loadDynamicTenants(): Promise<void> {
   previouslyLoadedDynamicKeys = currentKeys
 
   for (const t of tenants) {
+    // A built-in tenant (sanfer/apotex/…) already has a hand-verified static
+    // config in TENANT_CONFIG at this point. The pharma_tenants columns default
+    // to FALSE, so a DB row that was seeded without explicitly setting the
+    // capability flags would otherwise CLOBBER those verified flags and make
+    // Conversational / Business Lines / Organization silently return empty
+    // (overview still works because ucids are populated). Capability flags mean
+    // "this tenant HAS this data", so OR the DB value with any existing static
+    // value: the DB can still ENABLE a capability for a brand-new self-service
+    // tenant (prev is undefined → uses DB flags as-is), but it can never DROP a
+    // built-in's known capability. Same idea for ucids/coachActivityIds: fall
+    // back to the static value when the DB row omits them.
+    const prev = TENANT_CONFIG[t.tenantKey]
     TENANT_CONFIG[t.tenantKey] = {
       kind: t.kind,
       url: t.url,
       xTenant: t.xTenant ?? undefined,
-      ucids: t.ucids,
-      hasCertification: t.hasCertification,
-      hasObjections: t.hasObjections,
-      hasBusinessLines: t.hasBusinessLines,
-      hasOrganization: t.hasOrganization,
-      hasTopStats: t.hasTopStats,
-      coachActivityIds: t.coachActivityIds ?? undefined,
+      ucids: (t.ucids?.length ? t.ucids : prev?.ucids) ?? [],
+      hasCertification: t.hasCertification || (prev?.hasCertification ?? false),
+      hasObjections:    t.hasObjections    || (prev?.hasObjections    ?? false),
+      hasBusinessLines: t.hasBusinessLines || (prev?.hasBusinessLines ?? false),
+      hasOrganization:  t.hasOrganization  || (prev?.hasOrganization  ?? false),
+      hasTopStats:      t.hasTopStats       || (prev?.hasTopStats      ?? false),
+      coachActivityIds: t.coachActivityIds ?? prev?.coachActivityIds ?? undefined,
       authHeaderName: t.authHeaderName ?? undefined,
       authHeaderValue: t.authHeaderValue ?? undefined,
     }
