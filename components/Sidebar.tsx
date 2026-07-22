@@ -7,6 +7,7 @@ import { motion } from "framer-motion"
 import {
   LayoutDashboard, BookOpen, BrainCircuit, Gamepad2,
   BadgeCheck, Database, Sun, Moon, Settings, LogOut, MessageSquare,
+  GitBranch, Building2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useTheme } from "./ThemeProvider"
@@ -110,7 +111,11 @@ export function Sidebar() {
     { href: "/simulator",     label: t.navSimulator,     icon: Gamepad2        },
     // Conversational is pharma-only (objection-handling data). Capability-gated
     // so it appears exactly for the tenants that have it — no hardcoded list.
-    ...(access?.hasPharmaAccess ? [{ href: "/conversational", label: t.navConversational, icon: MessageSquare }] : []),
+    ...(access?.hasPharmaAccess ? [
+      { href: "/conversational", label: t.navConversational, icon: MessageSquare },
+      { href: "/business-lines", label: t.navBusinessLines,  icon: GitBranch     },
+      { href: "/organization",   label: t.navOrganization,   icon: Building2     },
+    ] : []),
     { href: "/certification", label: t.navCertification, icon: BadgeCheck      },
     { href: "/second-brain",  label: t.navSecondBrain,   icon: Database        },
     { href: "/settings",      label: t.navSettings,      icon: Settings        },

@@ -133,6 +133,28 @@ export const translations = {
     convAdvisorAnswers:   'Advisor responses',
     convWorstFirst:       'Objections with the lowest success rate first',
 
+    // ── Business Lines ───────────────────────────────────────
+    navBusinessLines:     'Business Lines',
+    blTitle:              'Business Lines',
+    blSub:                'Analytics segmented by organizational line',
+    blTotalLines:         'Total Lines',
+    blActiveLines:        'Active Lines',
+    blBestLine:           'Best Line',
+    blLine:               'Line',
+    blMembers:            'Members',
+    blActiveUsers:        'Active',
+    blSims:               'Sessions',
+    blAvgScore:           'Avg Score',
+
+    // ── Organization ─────────────────────────────────────────
+    navOrganization:      'Organization',
+    orgTitle:             'Organization',
+    orgSub:               'Hierarchical structure of the organization',
+    orgMembers:           'members',
+    orgAdmins:            'Administrators',
+    orgSupervisors:       'Supervisors',
+    orgUnassigned:        'Unassigned',
+
     // ── Section headers ──────────────────────────────────────
     userSummary:          'User Summary',
     userSummarySub:       'Session activity for the last',
@@ -787,6 +809,28 @@ export const translations = {
     convModelAnswer:      'Respuesta modelo',
     convAdvisorAnswers:   'Respuestas de asesores',
     convWorstFirst:       'Objeciones con menor tasa de éxito primero',
+
+    // ── Business Lines ───────────────────────────────────────
+    navBusinessLines:     'Líneas de Negocio',
+    blTitle:              'Líneas de Negocio',
+    blSub:                'Analítica segmentada por línea organizacional',
+    blTotalLines:         'Total de Líneas',
+    blActiveLines:        'Líneas Activas',
+    blBestLine:           'Mejor Línea',
+    blLine:               'Línea',
+    blMembers:            'Miembros',
+    blActiveUsers:        'Activos',
+    blSims:               'Sesiones',
+    blAvgScore:           'Puntaje Prom.',
+
+    // ── Organization ─────────────────────────────────────────
+    navOrganization:      'Organización',
+    orgTitle:             'Organización',
+    orgSub:               'Estructura jerárquica de la organización',
+    orgMembers:           'miembros',
+    orgAdmins:            'Administradores',
+    orgSupervisors:       'Supervisores',
+    orgUnassigned:        'Sin asignar',
 
     // ── Section headers ──────────────────────────────────────
     userSummary:          'Resumen de Usuarios',
