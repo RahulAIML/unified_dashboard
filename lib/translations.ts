@@ -133,6 +133,14 @@ export const translations = {
     convAdvisorAnswers:   'Advisor responses',
     convWorstFirst:       'Objections with the lowest success rate first',
 
+    // ── Activities ───────────────────────────────────────────
+    navActivities:        'Activities',
+    actTitle:             'Activities',
+    actSub:               'Performance by activity type',
+    actSessions:          'Sessions',
+    actAvgScore:          'Avg',
+    actApprovalRate:      'Approval',
+
     // ── Business Lines ───────────────────────────────────────
     navBusinessLines:     'Business Lines',
     blTitle:              'Business Lines',
@@ -809,6 +817,14 @@ export const translations = {
     convModelAnswer:      'Respuesta modelo',
     convAdvisorAnswers:   'Respuestas de asesores',
     convWorstFirst:       'Objeciones con menor tasa de éxito primero',
+
+    // ── Activities ───────────────────────────────────────────
+    navActivities:        'Actividades',
+    actTitle:             'Actividades',
+    actSub:               'Rendimiento por tipo de actividad',
+    actSessions:          'Sesiones',
+    actAvgScore:          'Prom.',
+    actApprovalRate:      'Aprobación',
 
     // ── Business Lines ───────────────────────────────────────
     navBusinessLines:     'Líneas de Negocio',

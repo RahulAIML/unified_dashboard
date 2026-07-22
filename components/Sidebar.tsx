@@ -7,7 +7,7 @@ import { motion } from "framer-motion"
 import {
   LayoutDashboard, BookOpen, BrainCircuit, Gamepad2,
   BadgeCheck, Database, Sun, Moon, Settings, LogOut, MessageSquare,
-  GitBranch, Building2,
+  GitBranch, Building2, Activity,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useTheme } from "./ThemeProvider"
@@ -18,7 +18,7 @@ import { useAuthContext } from "./AuthProvider"
 import { useApi } from "@/lib/hooks/useApi"
 
 // Minimal capability shape from /api/auth/access-status (only the flag we need).
-interface AccessCaps { hasPharmaAccess?: boolean }
+interface AccessCaps { hasPharmaAccess?: boolean; hasCoachData?: boolean; hasBancoAccess?: boolean }
 
 function LogoImage() {
   const brand = useClientBrand()
@@ -109,6 +109,9 @@ export function Sidebar() {
     { href: "/lms",           label: t.navLms,           icon: BookOpen        },
     { href: "/coach",         label: t.navCoach,         icon: BrainCircuit    },
     { href: "/simulator",     label: t.navSimulator,     icon: Gamepad2        },
+    // Activities works for any tenant with per-activity analytics data.
+    ...((access?.hasCoachData || access?.hasPharmaAccess || access?.hasBancoAccess)
+      ? [{ href: "/activities", label: t.navActivities, icon: Activity }] : []),
     // Conversational is pharma-only (objection-handling data). Capability-gated
     // so it appears exactly for the tenants that have it — no hardcoded list.
     ...(access?.hasPharmaAccess ? [
