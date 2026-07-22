@@ -57,6 +57,60 @@ function isLongText(value: string): boolean {
   return value.length > 180
 }
 
+/** A single turn of the simulated conversation, assembled generically from the
+ *  session report's own fields — no tenant-specific schema assumed. */
+interface Interaction {
+  index:    number
+  question?: string  // evaluator / doctor prompt
+  answer?:   string  // advisor reply
+  feedback?: string  // per-turn coaching note
+  score?:    number
+}
+
+// Matches per-turn field keys any tenant's report may carry, e.g.
+// "pregunta_1", "respuesta_2", "retroalimentacion_3", "question_1", "answer_2".
+// Keys arrive lowercased from the drilldown API.
+const INTERACTION_RE = /^(pregunta|question|prompt|respuesta|answer|reply|retroalimentacion|retro|feedback)[\s_-]*(\d+)$/i
+const TURN_SCORE_RE  = /^(puntos|puntuacion|score|calificacion)[\s_-]*(\d+)$/i
+
+/** Group per-turn fields into an ordered conversation. Returns [] when the
+ *  report has no per-turn fields, so the section simply hides itself. */
+function groupInteractions(fields: DrilldownField[]): { interactions: Interaction[]; consumedKeys: Set<string> } {
+  const map = new Map<number, Interaction>()
+  const consumedKeys = new Set<string>()
+
+  for (const f of fields) {
+    const display = resolveDisplay(f)
+    if (display === "—") continue
+
+    const m = f.fieldKey.match(INTERACTION_RE)
+    if (m) {
+      const kind = m[1].toLowerCase()
+      const idx  = parseInt(m[2], 10)
+      const entry = map.get(idx) ?? { index: idx }
+      if (/pregunta|question|prompt/.test(kind))        entry.question = display
+      else if (/respuesta|answer|reply/.test(kind))     entry.answer   = display
+      else                                              entry.feedback = display
+      map.set(idx, entry)
+      consumedKeys.add(f.fieldKey)
+      continue
+    }
+    const s = f.fieldKey.match(TURN_SCORE_RE)
+    if (s && f.valueNum != null) {
+      const idx = parseInt(s[2], 10)
+      const entry = map.get(idx) ?? { index: idx }
+      entry.score = f.valueNum
+      map.set(idx, entry)
+      consumedKeys.add(f.fieldKey)
+    }
+  }
+
+  const interactions = [...map.values()]
+    .filter(i => i.question || i.answer || i.feedback)
+    .sort((a, b) => a.index - b.index)
+  return { interactions, consumedKeys }
+}
+
 /** Categorize fields for layout */
 function categorizeFields(fields: DrilldownField[]) {
   const scoreFields:   DrilldownField[] = []
@@ -207,10 +261,18 @@ export default function DrilldownPage() {
   const { data, loading, error } = useApi<DrilldownData>(drilldownUrl)
 
   // ── Derived ────────────────────────────────────────────────────────────────
-  const { scoreFields, resultFields, shortFields, longFields } = useMemo(
-    () => (data ? categorizeFields(data.fields) : { scoreFields: [], resultFields: [], shortFields: [], longFields: [] }),
+  // Pull per-turn conversation fields out first, so they render as an ordered
+  // transcript instead of scattered flat fields (and don't show up twice).
+  const { interactions, consumedKeys } = useMemo(
+    () => (data ? groupInteractions(data.fields) : { interactions: [], consumedKeys: new Set<string>() }),
     [data]
   )
+
+  const { scoreFields, resultFields, shortFields, longFields } = useMemo(() => {
+    if (!data) return { scoreFields: [], resultFields: [], shortFields: [], longFields: [] }
+    const cat = categorizeFields(data.fields.filter(f => !consumedKeys.has(f.fieldKey)))
+    return cat
+  }, [data, consumedKeys])
 
   const primaryScore  = scoreFields[0]
   const primaryResult = resultFields[0]
@@ -555,6 +617,50 @@ export default function DrilldownPage() {
                       </p>
                     )}
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Conversation transcript ───────────────────────────────────
+                Ordered per-turn cards, assembled generically from the report's
+                own fields. Renders only when the session has per-turn data. */}
+            {interactions.length > 0 && (
+              <div>
+                <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-muted-foreground" />
+                  {t.drilldownConversation}
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                  {interactions.map((turn) => (
+                    <div
+                      key={turn.index}
+                      className="rounded-[16px] border border-border/60 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)] overflow-hidden flex flex-col"
+                    >
+                      <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/60 bg-muted/30">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          {t.drilldownInteraction} {turn.index}
+                        </span>
+                        {turn.score != null && (
+                          <span className="text-xs font-bold tabular-nums text-primary">{turn.score}</span>
+                        )}
+                      </div>
+                      <div className="p-4 space-y-3 text-sm">
+                        {turn.question && (
+                          <p className="text-foreground leading-relaxed whitespace-pre-wrap">{turn.question}</p>
+                        )}
+                        {turn.answer && (
+                          <div className="border-l-2 border-primary/40 pl-3 text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                            {turn.answer}
+                          </div>
+                        )}
+                        {turn.feedback && (
+                          <p className="text-xs text-muted-foreground/80 italic leading-relaxed whitespace-pre-wrap">
+                            {turn.feedback}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
