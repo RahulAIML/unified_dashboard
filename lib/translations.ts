@@ -124,6 +124,15 @@ export const translations = {
     insightsRecoText:     'Assign more practice on the areas above; the current platform average is',
     insightsAllStrong:    'All activities are passing above target — keep reinforcing to sustain performance.',
 
+    // ── Conversational / objections ──────────────────────────
+    navConversational:    'Conversational',
+    convTitle:            'Conversational Intelligence',
+    convSub:              'Objection handling, interaction by interaction',
+    convTimes:            'times raised',
+    convModelAnswer:      'Model answer',
+    convAdvisorAnswers:   'Advisor responses',
+    convWorstFirst:       'Objections with the lowest success rate first',
+
     // ── Section headers ──────────────────────────────────────
     userSummary:          'User Summary',
     userSummarySub:       'Session activity for the last',
@@ -769,6 +778,15 @@ export const translations = {
     insightsRecommendation: 'Recomendación',
     insightsRecoText:     'Asigna más práctica en las áreas anteriores; el promedio actual de la plataforma es',
     insightsAllStrong:    'Todas las actividades aprueban por encima de la meta — sigue reforzando para sostener el desempeño.',
+
+    // ── Conversational / objections ──────────────────────────
+    navConversational:    'Conversacional',
+    convTitle:            'Inteligencia Conversacional',
+    convSub:              'Manejo de objeciones, interacción por interacción',
+    convTimes:            'veces planteada',
+    convModelAnswer:      'Respuesta modelo',
+    convAdvisorAnswers:   'Respuestas de asesores',
+    convWorstFirst:       'Objeciones con menor tasa de éxito primero',
 
     // ── Section headers ──────────────────────────────────────
     userSummary:          'Resumen de Usuarios',

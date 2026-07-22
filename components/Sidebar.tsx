@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import {
   LayoutDashboard, BookOpen, BrainCircuit, Gamepad2,
-  BadgeCheck, Database, Sun, Moon, Settings, LogOut,
+  BadgeCheck, Database, Sun, Moon, Settings, LogOut, MessageSquare,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useTheme } from "./ThemeProvider"
@@ -14,6 +14,10 @@ import { useT } from "@/lib/lang-store"
 import { useClientBrand } from "@/lib/hooks/useClientBrand"
 import { usePlatformName } from "@/lib/hooks/usePlatformName"
 import { useAuthContext } from "./AuthProvider"
+import { useApi } from "@/lib/hooks/useApi"
+
+// Minimal capability shape from /api/auth/access-status (only the flag we need).
+interface AccessCaps { hasPharmaAccess?: boolean }
 
 function LogoImage() {
   const brand = useClientBrand()
@@ -55,9 +59,13 @@ export function Sidebar() {
   const t     = useT()
   const brand = useClientBrand()
   const { platformName } = usePlatformName()
-  const { clearAuth } = useAuthContext()
+  const { user, clearAuth } = useAuthContext()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
+
+  // Capability probe — used to surface analytics views only for tenants that
+  // actually have that data (e.g. Conversational needs pharma objection data).
+  const { data: access } = useApi<AccessCaps>(user ? "/api/auth/access-status" : null)
 
   // Close on Escape + prevent background scroll when open (mobile)
   useEffect(() => {
@@ -100,6 +108,9 @@ export function Sidebar() {
     { href: "/lms",           label: t.navLms,           icon: BookOpen        },
     { href: "/coach",         label: t.navCoach,         icon: BrainCircuit    },
     { href: "/simulator",     label: t.navSimulator,     icon: Gamepad2        },
+    // Conversational is pharma-only (objection-handling data). Capability-gated
+    // so it appears exactly for the tenants that have it — no hardcoded list.
+    ...(access?.hasPharmaAccess ? [{ href: "/conversational", label: t.navConversational, icon: MessageSquare }] : []),
     { href: "/certification", label: t.navCertification, icon: BadgeCheck      },
     { href: "/second-brain",  label: t.navSecondBrain,   icon: Database        },
     { href: "/settings",      label: t.navSettings,      icon: Settings        },
