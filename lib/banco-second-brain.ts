@@ -10,12 +10,13 @@
  * Admin-email resolution tries candidates in order and returns the FIRST that
  * actually resolves upstream.
  *
- * CONVENTION (confirmed against the live API): every Second Brain organization's
- * admin account is provisioned as `admin1@{company-domain}` — e.g. Coppel's is
- * admin1@coppel.com. This is a genuine self-service pattern: any NEW company
- * onboarded into Second Brain resolves automatically the moment their own
- * admin1@{domain} account exists — no code change, no env var, no per-tenant
- * hardcoding required.
+ * OWNER EMAILS ARE NOT UNIFORM (verified against the live admin panel): orgs use
+ * admin@{domain} (Takeda, Besins, Salinas), admin1@{domain} (Coppel), a cross-
+ * domain address (Asofarma → admin1@palacio.com), or a personal gmail (Rolplay).
+ * So secondBrainAdminCandidates tries both admin@ / admin1@ derivations for
+ * convention-followers and consults an explicit login-domain → owner-email map
+ * (SB_OWNER_OVERRIDES + env) for the exceptions. A new convention-following
+ * company resolves automatically; an exception needs one map/DB entry.
  *
  * BUG FIXED (previous version): a hardcoded env fallback (SECOND_BRAIN_ADMIN_EMAIL
  * = admin1@coppel.com) was offered as a candidate for every user. Any tenant
@@ -36,13 +37,38 @@ const GENERIC_DOMAINS = new Set([
 ])
 
 /**
+ * Second Brain owner emails do NOT follow one rule — verified against the live
+ * admin panel: Takeda=admin@takeda.com, Coppel=admin1@coppel.com,
+ * Besins=admin@besins.com, Salinas=admin@salinas.com, and some don't match
+ * their own domain at all (Asofarma's owner is admin1@palacio.com; Rolplay's is
+ * a personal gmail). So there is no reliable derivation for the exceptions —
+ * they need an explicit login-domain → owner-email mapping. Convention-followers
+ * (admin@ / admin1@ their own domain) are handled by derivation below; only the
+ * exceptions need an entry here. Extend without a deploy via env
+ * SECOND_BRAIN_OWNER_EMAILS ("logindomain:owneremail,logindomain:owneremail").
+ * Per-tenant DB overrides (tenant_integrations) still win over everything.
+ */
+const SB_OWNER_OVERRIDES: Record<string, string> = {
+  'asofarma.com': 'admin1@palacio.com', // Asofarma's SB org owner (cross-domain)
+}
+
+function ownerOverrides(): Record<string, string> {
+  const map: Record<string, string> = { ...SB_OWNER_OVERRIDES }
+  for (const entry of (process.env.SECOND_BRAIN_OWNER_EMAILS ?? '').split(',')) {
+    const [domain, owner] = entry.split(':').map((s) => s?.trim().toLowerCase())
+    if (domain && owner) map[domain] = owner
+  }
+  return map
+}
+
+/**
  * Ordered, de-duped list of admin emails to try for a user:
- *   1. explicit per-tenant override (tenant_integrations table) — for the rare
- *      org whose admin account doesn't follow the admin1@{domain} convention
- *   2. derived admin1@{company-domain} — the real, general provisioning pattern
+ *   1. explicit per-tenant override (tenant_integrations DB) — authoritative
+ *   2. explicit login-domain → owner-email map (for non-convention orgs)
+ *   3. derived admin@{domain} AND admin1@{domain} — the two real conventions
  *
- * No global env fallback: each tenant only ever resolves to ITS OWN Second
- * Brain org (or none at all), never another tenant's.
+ * All candidates are the tenant's OWN override/domain — there is NO shared
+ * global fallback, so one tenant can never resolve to another's org.
  */
 export async function secondBrainAdminCandidates(
   email: string,
@@ -55,11 +81,18 @@ export async function secondBrainAdminCandidates(
     const integration = await getTenantIntegration(customerId)
     if (integration?.second_brain_admin_email) candidates.push(integration.second_brain_admin_email)
   } catch {
-    // non-fatal — fall through to the derived candidate
+    // non-fatal — fall through to the mapped/derived candidates
   }
 
   const domain = email.split('@')[1]?.toLowerCase()
-  if (domain && !GENERIC_DOMAINS.has(domain)) candidates.push(`admin1@${domain}`)
+  if (domain) {
+    const mapped = ownerOverrides()[domain]
+    if (mapped) candidates.push(mapped)
+    if (!GENERIC_DOMAINS.has(domain)) {
+      candidates.push(`admin@${domain}`)
+      candidates.push(`admin1@${domain}`)
+    }
+  }
 
   // De-dupe, preserve order.
   const seen = new Set<string>()
