@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
 import { getAuthContextFromRequest } from "@/lib/server-auth"
 import { buildApiError, buildSuccess } from "@/lib/api-utils"
-import { getBrandingSettings, upsertBrandingSettings } from "@/lib/db-branding"
+import { getBrandingSettings, upsertBrandingSettings, brandingTenantKey } from "@/lib/db-branding"
 import { normalizeBrandingSettings, resolveClientBrand, validateBrandingPayload } from "@/lib/branding"
 
 export const runtime = "nodejs"
@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
   if (!auth) return buildApiError("Unauthorized", 401)
 
   try {
-    const settings = await getBrandingSettings(auth.customerId)
+    const settings = await getBrandingSettings(brandingTenantKey(auth.email, auth.customerId))
     return buildSuccess({
       settings,
       brand: resolveClientBrand(settings),
@@ -31,7 +31,7 @@ export async function PUT(request: NextRequest) {
     const payload = normalizeBrandingSettings(body)
     validateBrandingPayload(payload)
 
-    const settings = await upsertBrandingSettings(auth.customerId, payload)
+    const settings = await upsertBrandingSettings(brandingTenantKey(auth.email, auth.customerId), auth.customerId, payload)
     return buildSuccess({
       settings,
       brand: resolveClientBrand(settings),

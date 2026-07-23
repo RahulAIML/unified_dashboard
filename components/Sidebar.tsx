@@ -24,9 +24,11 @@ function LogoImage() {
   const brand = useClientBrand()
   const [failed, setFailed] = useState(false)
 
-  // Shared container — consistent dimensions and overflow protection
+  // Shared container — white so uploaded logos (usually on white/transparent
+  // backgrounds) sit correctly instead of on a dark panel that looks like an
+  // extra box around the image.
   const containerCls =
-    "shrink-0 w-32 h-12 rounded-xl border border-sidebar-border bg-sidebar-accent flex items-center justify-center px-2 overflow-hidden"
+    "shrink-0 w-32 h-12 rounded-xl border border-sidebar-border bg-white flex items-center justify-center px-2 overflow-hidden"
 
   if (failed) {
     return (
