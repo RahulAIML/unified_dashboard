@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useEffect, useReducer, useRef } from "react"
+import { useMemo, useEffect, useReducer, useRef, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Target, PlayCircle, TrendingUp, BadgeCheck, BarChart2, AlertTriangle, Trophy, MessageSquare, Users, Search, FileText, Lightbulb, CheckCircle2 } from "lucide-react"
 import { DashboardHeader }    from "@/components/DashboardHeader"
@@ -152,6 +152,10 @@ export function DashboardContent() {
   const { user }    = useAuthContext()
   const { exportAllSolutions, loading: exportLoading } = useCombinedExport()
 
+  // Score-trend granularity (daily/weekly/monthly) — drives the /trends query,
+  // which also overlays the previous period (compare=1).
+  const [granularity, setGranularity] = useState<'daily' | 'weekly' | 'monthly'>('daily')
+
   const isSecondBrain = selectedSolution === "second-brain"
 
   // ── Access status — server-side probe via API (env vars unavailable client-side)
@@ -192,7 +196,7 @@ export function DashboardContent() {
     : null
 
   const trendsUrl = dbReady
-    ? buildApiUrl("/api/dashboard/trends", dateRange.from, dateRange.to, { solution: selectedSolution, rk: refreshKey })
+    ? buildApiUrl("/api/dashboard/trends", dateRange.from, dateRange.to, { solution: selectedSolution, rk: refreshKey, granularity, compare: "1" })
     : null
 
   const ucUrl = dbReady
@@ -708,11 +712,31 @@ export function DashboardContent() {
               <ChartCard
                 title={t.scoreTrend}
                 subtitle={`${t.scoreTrendSub} — ${t.last} ${days} ${t.days}`}
+                headerAction={
+                  <select
+                    value={granularity}
+                    onChange={(e) => setGranularity(e.target.value as 'daily' | 'weekly' | 'monthly')}
+                    aria-label={t.granularityLabel}
+                    className="text-xs rounded-lg border border-border/60 bg-muted/60 px-2.5 py-1.5 font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                  >
+                    <option value="daily">{t.granularityDaily}</option>
+                    <option value="weekly">{t.granularityWeekly}</option>
+                    <option value="monthly">{t.granularityMonthly}</option>
+                  </select>
+                }
               >
                 {shimmer || trendsLoading
                   ? <ChartSkeleton />
                   : scoreTrendData.length > 0
-                    ? <ActivityLineChart data={scoreTrendData} label={t.avgSessionScore} color={brand.chartColors[0]} goal={70} goalLabel={t.passGoalLabel} />
+                    ? <ActivityLineChart
+                        data={scoreTrendData}
+                        label={t.avgSessionScore}
+                        label2={scoreTrendData.some(p => p.value2 != null) ? t.previousPeriod : undefined}
+                        color={brand.chartColors[0]}
+                        color2={brand.chartColors[1]}
+                        goal={70}
+                        goalLabel={t.passGoalLabel}
+                      />
                     : <EmptyState />
                 }
               </ChartCard>
