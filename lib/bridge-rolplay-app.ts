@@ -59,6 +59,7 @@ function loginMap(): Map<string, number> {
   const map = new Map<string, number>([
     ['demo@siigo.com', 29],
     ['demo@m8.com', 24],
+    ['demo@takeda.com', 13],
   ])
   const raw = process.env.ROLPLAY_APP_LOGINS ?? ''
   for (const entry of raw.split(',')) {
@@ -80,10 +81,21 @@ const PASS_THRESHOLD = 70 // platform-wide pass convention (matches every tenant
 
 /**
  * SQL expression yielding a 0-100 score per r_user_session row `s`, or NULL.
- * Precedence: raw_closing_data JSON → Siigo HTML div → M8 HTML div. Each HTML
- * branch is guarded by LOCATE so a marker that isn't present never yields the
- * whole (non-numeric) blob. SUBSTRING_INDEX(x, marker, -1) takes the text after
- * the marker; the inner SUBSTRING_INDEX(..,'<',1) stops at the closing tag.
+ *
+ * PRIMARY (generic, all clients): raw_closing_data JSON `$.overall_score`. Every
+ * session created going forward carries this, so a NEW client works with zero
+ * extra config — nothing here is client-specific.
+ *
+ * FALLBACK (legacy sessions with empty raw_closing_data): the score lives in the
+ * closing_analysis HTML, and the markup differs per report template. There is no
+ * SQL-generic way to parse arbitrary HTML (confirmed with the platform owner), so
+ * we keep a short, explicit, easily-extended list of known templates:
+ *   - Siigo:  <div class="rp-sim-report-score-number">NN</div>
+ *   - M8:     <div class="rpt-score-num">NN</div>
+ *   - Takeda: <td class="total-score">NN / 100</td>   (take the part before '/')
+ * Each branch is LOCATE-guarded so a missing marker never yields the whole blob;
+ * SUBSTRING_INDEX(x, marker, -1) takes text after the marker, then '<' stops at
+ * the tag close. To onboard a legacy client with a new template, add one branch.
  */
 const SCORE_SQL = `CASE
   WHEN JSON_VALID(s.raw_closing_data)
@@ -94,6 +106,8 @@ const SCORE_SQL = `CASE
     THEN CAST(TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(s.closing_analysis, 'rp-sim-report-score-number">', -1), '<', 1)) AS DECIMAL(6,2))
   WHEN LOCATE('rpt-score-num">', s.closing_analysis) > 0
     THEN CAST(TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(s.closing_analysis, 'rpt-score-num">', -1), '<', 1)) AS DECIMAL(6,2))
+  WHEN LOCATE('total-score">', s.closing_analysis) > 0
+    THEN CAST(TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(SUBSTRING_INDEX(s.closing_analysis, 'total-score">', -1), '<', 1), '/', 1)) AS DECIMAL(6,2))
   ELSE NULL
 END`
 
