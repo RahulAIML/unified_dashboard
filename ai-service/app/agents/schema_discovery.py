@@ -171,9 +171,15 @@ async def _rolplay_app_schema(svc, schema, log: LogFn) -> None:
                              source_kind=svc.kind, source_action="r_user_session"),
             DiscoveredMetric(key="pass_rate", label="Pass Rate", type=MetricType.rate, unit="%",
                              source_kind=svc.kind, source_action="r_user_session"),
+            # A timeseries metric makes the planner emit a trend line_chart; a
+            # dimension metric makes it emit a per-simulator breakdown + table.
+            DiscoveredMetric(key="score_trend", label="Score Trend", type=MetricType.timeseries, unit="pts",
+                             source_kind=svc.kind, source_action="r_user_session"),
+            DiscoveredMetric(key="by_simulator", label="By Simulator", type=MetricType.dimension,
+                             source_kind=svc.kind, source_action="r_user_session"),
         ]
         schema.note = f"Rolplay-app platform: {scored} scored session(s) (score from raw_closing_data/closing_analysis)."
-        await log("schema_discovery", "success", f"Scores available — {scored} scored session(s)")
+        await log("schema_discovery", "success", f"Scores available — {scored} scored session(s); trend + breakdown enabled")
     else:
         schema.note = "Rolplay-app platform: sessions recorded, no scores found — counts-only."
         await log("schema_discovery", "info", "No scores in this client's sessions — counts-only dashboard")

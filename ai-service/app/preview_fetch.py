@@ -195,32 +195,64 @@ async def _sale_exercises(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPrevie
 
 
 # ── rolplay-app (query endpoint; scores from raw_closing_data/closing_analysis) ──────
+async def _rolplay_app_sql(sql: str) -> list[dict]:
+    _, body = await post_json(get_settings().rolplay_app_sql_url, {"sql": sql})
+    return (body or {}).get("data", []) if isinstance(body, dict) else []
+
+
 async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
-    client_id = int(cfg.connector_handle.get("client_id"))
-    # One round-trip: counts + score aggregates (SCORE_SQL extracts the 0-100
-    # overall score per session — JSON first, HTML fallback).
-    sql = (
+    cid = int(cfg.connector_handle.get("client_id"))
+    base = f"FROM r_user_session s JOIN r_user u ON u.ID=s.user_id WHERE u.client_id={cid}"
+
+    # ── Trend line: monthly avg score ──
+    if w.type == WidgetType.line_chart:
+        rows = await _rolplay_app_sql(
+            "SELECT period, ROUND(AVG(sc),2) value, COUNT(*) sessions FROM ("
+            f"SELECT DATE_FORMAT(s.date_created,'%Y-%m') period, {SCORE_SQL} sc {base}) t "
+            "WHERE sc IS NOT NULL GROUP BY period ORDER BY period"
+        )
+        series = [{"date": r.get("period"), "value": r.get("value"), "sessions": r.get("sessions")} for r in rows]
+        return WidgetPreview(widget_id=w.id, ok=bool(series), series=series)
+
+    # ── Score distribution histogram ──
+    if w.type == WidgetType.histogram:
+        rows = await _rolplay_app_sql(
+            "SELECT LEAST(FLOOR(sc/10)*10,90) bucket, COUNT(*) count FROM ("
+            f"SELECT {SCORE_SQL} sc {base}) t WHERE sc IS NOT NULL GROUP BY bucket ORDER BY bucket"
+        )
+        total = sum(int(r.get("count") or 0) for r in rows) or 1
+        out = [{"range": f"{int(r['bucket'])}-{int(r['bucket'])+9 if int(r['bucket'])<90 else 100}",
+                "count": int(r.get("count") or 0),
+                "pct": round(100 * int(r.get("count") or 0) / total, 1)} for r in rows]
+        return WidgetPreview(widget_id=w.id, ok=bool(out), rows=out)
+
+    # ── Per-simulator breakdown (bar_chart / donut / table) ──
+    if w.type in (WidgetType.bar_chart, WidgetType.donut, WidgetType.table):
+        rows = await _rolplay_app_sql(
+            "SELECT COALESCE(sim.name, CONCAT('Simulator ', s.simulator_id)) simulator, "
+            f"COUNT(*) total_sessions, ROUND(AVG({SCORE_SQL}),2) avg_score, "
+            f"ROUND(100*SUM(CASE WHEN ({SCORE_SQL})>={PASS_THRESHOLD} THEN 1 ELSE 0 END)/COUNT(*),1) pass_rate "
+            "FROM r_user_session s JOIN r_user u ON u.ID=s.user_id "
+            f"LEFT JOIN r_simulator sim ON sim.ID=s.simulator_id WHERE u.client_id={cid} "
+            "GROUP BY s.simulator_id, sim.name ORDER BY total_sessions DESC"
+        )
+        return WidgetPreview(widget_id=w.id, ok=bool(rows), rows=rows)
+
+    # ── KPI tiles (scalar) ──
+    data = await _rolplay_app_sql(
         "SELECT COUNT(s.ID) AS sessions, COUNT(DISTINCT u.ID) AS users, "
         f"ROUND(AVG({SCORE_SQL}),2) AS avg_score, "
-        f"SUM(CASE WHEN ({SCORE_SQL})>={PASS_THRESHOLD} THEN 1 ELSE 0 END) AS passed, "
-        f"SUM(CASE WHEN ({SCORE_SQL}) IS NOT NULL THEN 1 ELSE 0 END) AS scored "
-        "FROM r_user u LEFT JOIN r_user_session s ON s.user_id=u.ID "
-        f"WHERE u.client_id={client_id}"
+        f"SUM(CASE WHEN ({SCORE_SQL})>={PASS_THRESHOLD} THEN 1 ELSE 0 END) AS passed "
+        f"FROM r_user u LEFT JOIN r_user_session s ON s.user_id=u.ID WHERE u.client_id={cid}"
     )
-    _, body = await post_json(get_settings().rolplay_app_sql_url, {"sql": sql})
-    data = (body or {}).get("data", [{}]) if isinstance(body, dict) else [{}]
     row = data[0] if data else {}
-
     sessions = int(row.get("sessions") or 0)
     passed = int(row.get("passed") or 0)
-    avg = float(row["avg_score"]) if row.get("avg_score") is not None else None
-    pass_rate = round(100 * passed / sessions, 1) if sessions else None
-
     metrics = {
         "total_sessions": sessions,
         "total_users": int(row.get("users") or 0),
-        "avg_score": avg,
-        "pass_rate": pass_rate,
+        "avg_score": float(row["avg_score"]) if row.get("avg_score") is not None else None,
+        "pass_rate": round(100 * passed / sessions, 1) if sessions else None,
         "passed": passed,
     }
     val = metrics.get(w.metric_key, sessions)
