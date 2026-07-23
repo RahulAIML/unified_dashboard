@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContextFromRequest } from "@/lib/server-auth"
 import { getTenantIntegration } from "@/lib/db-tenant-integrations"
+import { secondBrainAdminCandidates } from "@/lib/banco-second-brain"
 import { isBancoOrg } from "@/lib/org-type"
 import { resolvePharmaTenant } from "@/lib/pharma-tenant"
 import { isDemoMode } from "@/lib/demo"
@@ -21,39 +22,7 @@ import { demoAccessStatus } from "@/lib/demo/engine"
 export const dynamic = "force-dynamic"
 
 const SECOND_BRAIN_API_URL   = process.env.SECOND_BRAIN_API_URL
-const SECOND_BRAIN_ADMIN_EMAIL = process.env.SECOND_BRAIN_ADMIN_EMAIL
-const SECOND_BRAIN_API_TOKEN   = process.env.SECOND_BRAIN_API_TOKEN
-
-// ── Email → admin-email resolution (mirrors /api/second-brain/profile) ────────
-
-const EXPLICIT_EMAIL_MAP: Record<string, string> = {
-  "admin@salinas.com": "admin@salinas.com",
-}
-
-const GENERIC_DOMAINS = new Set([
-  "gmail.com", "hotmail.com", "outlook.com", "yahoo.com",
-  "icloud.com", "protonmail.com", "live.com", "aol.com",
-])
-
-function resolveAdminEmail(
-  userEmail: string,
-  tenantOverride: string | null | undefined,
-  envFallback: string | null | undefined,
-): string | null {
-  if (tenantOverride) return tenantOverride
-
-  const lower = userEmail.toLowerCase()
-  if (lower in EXPLICIT_EMAIL_MAP) return EXPLICIT_EMAIL_MAP[lower]
-
-  const domain = lower.split("@")[1] ?? ""
-  if (domain && !GENERIC_DOMAINS.has(domain)) {
-    // Preserve the full domain so international TLDs (.com.mx, .co.uk, etc.)
-    // are not stripped — admin@audioweb.com.mx, not admin@audioweb.com
-    return `admin@${domain}`
-  }
-
-  return envFallback ?? null
-}
+const SECOND_BRAIN_API_TOKEN = process.env.SECOND_BRAIN_API_TOKEN
 
 // ── Second Brain reachability probe ──────────────────────────────────────────
 
@@ -66,44 +35,55 @@ const PROBE_FAIL_TTL_MS     = 60_000      // negative result: 1 min (cold starts
 
 const probeCache = new Map<string, { ok: boolean; at: number }>()
 
+/**
+ * True iff the user's OWN Second Brain org resolves upstream. Uses the exact
+ * same candidate resolution as /api/second-brain/profile
+ * (secondBrainAdminCandidates: DB override → admin1@{domain}, NO shared env
+ * fallback) so the probe and the page can never disagree. The previous version
+ * used a different derivation (admin@{domain}) plus a global env fallback to a
+ * shared admin email — that made the probe report "you have Second Brain" for
+ * everyone (via another tenant's org), while the page correctly showed "not set
+ * up", i.e. the module appeared but was empty. Aligning them also removes that
+ * cross-tenant fallback from this path entirely.
+ */
 async function probeSecondBrainAccess(
   customerId: number,
   userEmail: string,
 ): Promise<boolean> {
   if (!SECOND_BRAIN_API_URL) return false
 
+  const cacheKey = userEmail.toLowerCase().trim()
+  const cached = probeCache.get(cacheKey)
+  if (cached) {
+    const ttl = cached.ok ? PROBE_OK_TTL_MS : PROBE_FAIL_TTL_MS
+    if (Date.now() - cached.at < ttl) return cached.ok
+  }
+
   try {
     const integration = await getTenantIntegration(customerId).catch(() => null)
-    const adminEmail  = resolveAdminEmail(
-      userEmail,
-      integration?.second_brain_admin_email,
-      SECOND_BRAIN_ADMIN_EMAIL,
-    )
-    if (!adminEmail) return false
+    const apiToken = integration?.second_brain_api_token || SECOND_BRAIN_API_TOKEN
+    const candidates = await secondBrainAdminCandidates(userEmail, customerId)
 
-    const cached = probeCache.get(adminEmail)
-    if (cached) {
-      const ttl = cached.ok ? PROBE_OK_TTL_MS : PROBE_FAIL_TTL_MS
-      if (Date.now() - cached.at < ttl) return cached.ok
+    for (const adminEmail of candidates) {
+      const url = new URL(`${SECOND_BRAIN_API_URL}/organizations/full-profile`)
+      url.searchParams.set("admin_email", adminEmail)
+      const res = await fetch(url.toString(), {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          ...(apiToken ? { Authorization: `Bearer ${apiToken}` } : {}),
+        },
+        signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+        cache: "no-store",
+      }).catch(() => null)
+      if (res && res.ok) {
+        probeCache.set(cacheKey, { ok: true, at: Date.now() })
+        return true
+      }
     }
 
-    const apiToken = integration?.second_brain_api_token || SECOND_BRAIN_API_TOKEN
-
-    const url = new URL(`${SECOND_BRAIN_API_URL}/organizations/full-profile`)
-    url.searchParams.set("admin_email", adminEmail)
-
-    const res = await fetch(url.toString(), {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        ...(apiToken ? { Authorization: `Bearer ${apiToken}` } : {}),
-      },
-      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-      cache: "no-store",
-    })
-
-    probeCache.set(adminEmail, { ok: res.ok, at: Date.now() })
-    return res.ok
+    probeCache.set(cacheKey, { ok: false, at: Date.now() })
+    return false
   } catch {
     return false
   }
