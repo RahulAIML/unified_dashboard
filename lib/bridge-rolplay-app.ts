@@ -50,8 +50,16 @@ async function remoteSelect<T = Record<string, unknown>>(sql: string): Promise<T
 // ── Login → client_id resolution ────────────────────────────────────────────
 
 function loginMap(): Map<string, number> {
-  // Built-in demo login for Siigo (client_id 29). Extend via env without a deploy.
-  const map = new Map<string, number>([['demo@siigo.com', 29]])
+  // Built-in demo logins: Siigo (client_id 29) and M8 (client_id 24). Extend via
+  // env (ROLPLAY_APP_LOGINS) with the real per-client logins without a deploy.
+  // NOTE: M8 also has a pharma-bridge entry (acino.swiss / arceralifesciences.com
+  // domains). resolveOrgType checks pharma BEFORE rolplay-app, so a real M8 user
+  // on those domains resolves to the pharma pipeline, not client 24 here — the
+  // two M8 configs need reconciling (see report).
+  const map = new Map<string, number>([
+    ['demo@siigo.com', 29],
+    ['demo@m8.com', 24],
+  ])
   const raw = process.env.ROLPLAY_APP_LOGINS ?? ''
   for (const entry of raw.split(',')) {
     const [email, id] = entry.split(':').map((s) => s?.trim())
