@@ -1,4 +1,4 @@
-"""Rolplay-app raw-SQL connector (SELECT-only endpoint). Counts-only source."""
+"""Rolplay-app raw-SQL connector (SELECT-only endpoint). Sessions + scores."""
 from __future__ import annotations
 
 from typing import Any
@@ -6,6 +6,7 @@ from typing import Any
 from ..config import get_settings
 from ..http import post_json
 from ..models import ServiceDescriptor, ServiceKind
+from ..rolplay_score import score_stats_sql
 
 
 class RolplayAppConnector:
@@ -31,6 +32,17 @@ class RolplayAppConnector:
         )
         sessions = int((counts or [{}])[0].get("sessions") or 0)
         users = int((counts or [{}])[0].get("users") or 0)
+
+        # Real score coverage: how many sessions yield a 0-100 score from
+        # raw_closing_data / closing_analysis (not the empty legacy column).
+        stats = await self._sql(score_stats_sql(client_id))
+        srow = (stats or [{}])[0] if stats else {}
+        scored = int(srow.get("scored") or 0)
+        avg = srow.get("avg_score")
+        score_note = (
+            f"avg={avg} ({scored}/{sessions} scored)" if scored > 0 else "no scores → counts-only"
+        )
+
         return ServiceDescriptor(
             kind=ServiceKind.rolplay_app_sql,
             name=f"{rows[0]['name']} (rolplay-app)",
@@ -39,5 +51,5 @@ class RolplayAppConnector:
             has_data=sessions > 0,
             handle={"client_id": client_id, "display_name": rows[0]["name"]},
             endpoints=["r_user_session", "r_user", "r_simulator"],
-            note=f"client_id={client_id} sessions={sessions} users={users} (scores often absent → counts-only)",
+            note=f"client_id={client_id} sessions={sessions} users={users} {score_note}",
         )

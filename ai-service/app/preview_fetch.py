@@ -10,6 +10,7 @@ from typing import Any
 
 from .config import get_settings
 from .http import get_json, post_json
+from .rolplay_score import SCORE_SQL
 from .models import DashboardConfig, ServiceKind, WidgetConfig, WidgetPreview, WidgetType
 
 PASS_THRESHOLD = 70
@@ -193,17 +194,37 @@ async def _sale_exercises(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPrevie
     return WidgetPreview(widget_id=w.id, ok=bool(rows), value=len(rows))
 
 
-# ── rolplay-app (counts-only) ──────────────────────────────────────────────────────
+# ── rolplay-app (query endpoint; scores from raw_closing_data/closing_analysis) ──────
 async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
-    client_id = cfg.connector_handle.get("client_id")
-    sql = ("SELECT COUNT(s.ID) AS sessions, COUNT(DISTINCT u.ID) AS users "
-           "FROM r_user u LEFT JOIN r_user_session s ON s.user_id=u.ID "
-           f"WHERE u.client_id={int(client_id)}")
+    client_id = int(cfg.connector_handle.get("client_id"))
+    # One round-trip: counts + score aggregates (SCORE_SQL extracts the 0-100
+    # overall score per session — JSON first, HTML fallback).
+    sql = (
+        "SELECT COUNT(s.ID) AS sessions, COUNT(DISTINCT u.ID) AS users, "
+        f"ROUND(AVG({SCORE_SQL}),2) AS avg_score, "
+        f"SUM(CASE WHEN ({SCORE_SQL})>={PASS_THRESHOLD} THEN 1 ELSE 0 END) AS passed, "
+        f"SUM(CASE WHEN ({SCORE_SQL}) IS NOT NULL THEN 1 ELSE 0 END) AS scored "
+        "FROM r_user u LEFT JOIN r_user_session s ON s.user_id=u.ID "
+        f"WHERE u.client_id={client_id}"
+    )
     _, body = await post_json(get_settings().rolplay_app_sql_url, {"sql": sql})
     data = (body or {}).get("data", [{}]) if isinstance(body, dict) else [{}]
     row = data[0] if data else {}
-    val = {"total_sessions": row.get("sessions"), "total_users": row.get("users")}.get(w.metric_key, row.get("sessions"))
-    return WidgetPreview(widget_id=w.id, ok=val is not None, value=int(val) if val is not None else None)
+
+    sessions = int(row.get("sessions") or 0)
+    passed = int(row.get("passed") or 0)
+    avg = float(row["avg_score"]) if row.get("avg_score") is not None else None
+    pass_rate = round(100 * passed / sessions, 1) if sessions else None
+
+    metrics = {
+        "total_sessions": sessions,
+        "total_users": int(row.get("users") or 0),
+        "avg_score": avg,
+        "pass_rate": pass_rate,
+        "passed": passed,
+    }
+    val = metrics.get(w.metric_key, sessions)
+    return WidgetPreview(widget_id=w.id, ok=val is not None, value=val)
 
 
 # ── second brain ────────────────────────────────────────────────────────────────

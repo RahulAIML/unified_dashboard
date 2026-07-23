@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from ..config import get_settings
 from ..http import get_json, post_json
+from ..rolplay_score import score_stats_inner
 from ..models import (
     CompanyKnowledge,
     DiscoveredMetric,
@@ -31,7 +32,7 @@ async def run(knowledge: CompanyKnowledge, service: ServiceDescriptor, exercise_
     elif kind == ServiceKind.pharma_exceltis_rest:
         await _exceltis_schema(knowledge, service, schema, exercise_ids, log)
     elif kind == ServiceKind.rolplay_app_sql:
-        _counts_only_schema(service, schema)
+        await _rolplay_app_schema(service, schema, log)
     elif kind == ServiceKind.second_brain:
         _second_brain_schema(service, schema)
     elif kind == ServiceKind.coach_app_sql:
@@ -141,15 +142,43 @@ async def _exceltis_schema(k, svc, schema, exercise_ids, log) -> None:
         await log("schema_discovery", "info", "This client records qualitative results — counts-only dashboard")
 
 
-def _counts_only_schema(svc, schema) -> None:
+async def _rolplay_app_schema(svc, schema, log: LogFn) -> None:
+    """Rolplay-app clients: always counts; add score metrics when the client's
+    sessions actually carry a score (raw_closing_data / closing_analysis), probed
+    live so the dashboard represents everything the data has — client_id only."""
     schema.dimensions = ["simulator", "user"]
-    schema.note = "Rolplay-app platform: sessions recorded, scores not captured (counts-only)."
-    schema.metrics = [
+    metrics = [
         DiscoveredMetric(key="total_sessions", label="Total Sessions", type=MetricType.count,
                          source_kind=svc.kind, source_action="r_user_session"),
         DiscoveredMetric(key="total_users", label="Active Users", type=MetricType.count,
                          source_kind=svc.kind, source_action="r_user"),
     ]
+
+    client_id = int((svc.handle or {}).get("client_id") or 0)
+    scored = 0
+    if client_id:
+        status, body = await post_json(
+            get_settings().rolplay_app_sql_url,
+            {"sql": f"SELECT COUNT(sc) AS scored FROM ({score_stats_inner(client_id)}) t"},
+        )
+        data = (body or {}).get("data") if isinstance(body, dict) else None
+        if data:
+            scored = int(data[0].get("scored") or 0)
+
+    if scored > 0:
+        metrics += [
+            DiscoveredMetric(key="avg_score", label="Average Score", type=MetricType.score, unit="pts",
+                             source_kind=svc.kind, source_action="r_user_session"),
+            DiscoveredMetric(key="pass_rate", label="Pass Rate", type=MetricType.rate, unit="%",
+                             source_kind=svc.kind, source_action="r_user_session"),
+        ]
+        schema.note = f"Rolplay-app platform: {scored} scored session(s) (score from raw_closing_data/closing_analysis)."
+        await log("schema_discovery", "success", f"Scores available — {scored} scored session(s)")
+    else:
+        schema.note = "Rolplay-app platform: sessions recorded, no scores found — counts-only."
+        await log("schema_discovery", "info", "No scores in this client's sessions — counts-only dashboard")
+
+    schema.metrics = metrics
 
 
 def _second_brain_schema(svc, schema) -> None:
