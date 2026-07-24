@@ -70,9 +70,41 @@ function loginMap(): Map<string, number> {
   return map
 }
 
-/** Synchronous, no network — safe to call in the org-type hot path. */
+// Real users log in with their COMPANY email (e.g. adriana.losada@siigo.com),
+// not the demo address — so resolution must be by domain, not exact email, or
+// every real user resolves to no organization. Domain → client_id, verified
+// from r_user. Extend via env ROLPLAY_APP_DOMAINS ("domain:client_id,...").
+// audioweb.com.mx is deliberately excluded: it's the shared staff domain and
+// spans several clients (Takeda/M8/Rowe), so it can't map to one.
+const BUILTIN_DOMAIN_MAP: Record<string, number> = {
+  'siigo.com': 29,
+  'takeda.com': 13,
+  'besins-healthcare.com': 14,
+  'rowe.com.do': 25,
+  'rowe.com': 25,
+  // M8's real domain (arceralifesciences.com) is intentionally NOT here: it is
+  // also the pharma M8 domain and resolveOrgType checks pharma first — the two
+  // M8 configs must be reconciled before M8 can route to the query endpoint.
+}
+
+function domainMap(): Map<string, number> {
+  const map = new Map<string, number>(Object.entries(BUILTIN_DOMAIN_MAP))
+  for (const entry of (process.env.ROLPLAY_APP_DOMAINS ?? '').split(',')) {
+    const [domain, id] = entry.split(':').map((s) => s?.trim().toLowerCase())
+    const n = Number(id)
+    if (domain && Number.isFinite(n) && n > 0) map.set(domain, n)
+  }
+  return map
+}
+
+/** Synchronous, no network — safe to call in the org-type hot path.
+ *  Resolves by exact login first (demo accounts), then by email domain. */
 export function resolveRolplayAppClientId(email: string): number | null {
-  return loginMap().get(email.toLowerCase().trim()) ?? null
+  const clean = email.toLowerCase().trim()
+  const exact = loginMap().get(clean)
+  if (exact) return exact
+  const domain = clean.split('@')[1]
+  return (domain && domainMap().get(domain)) || null
 }
 
 // ── Score extraction (SQL) ────────────────────────────────────────────────────
