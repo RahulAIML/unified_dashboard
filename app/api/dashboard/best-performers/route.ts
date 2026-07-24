@@ -7,6 +7,7 @@ import { resolveOrgType } from '@/lib/org-type'
 import { bancoDashboardBestPerformers } from '@/lib/bridge-banco-analytics'
 import { resolvePharmaTenant } from '@/lib/pharma-tenant'
 import { pharmaDashboardBestPerformers } from '@/lib/bridge-pharma-analytics'
+import { resolveRolplayAppClientId, rolplayAppBestPerformers } from '@/lib/bridge-rolplay-app'
 import { isDemoMode } from '@/lib/demo'
 import { demoBestPerformers } from '@/lib/demo/engine'
 
@@ -69,6 +70,18 @@ export async function GET(request: NextRequest) {
       })
       return buildSuccess(data, {
         from: range.from.toISOString(), to: range.to.toISOString(), solution, source: `pharma-${tenant}`, limit,
+      })
+    }
+
+    // ── Rolplay-app platform (top users by avg score) ─────────────────────────
+    if (orgType === 'rolplay-app') {
+      const clientId = resolveRolplayAppClientId(ctx.email)
+      if (!clientId) return buildApiError('Rolplay-app client could not be resolved', 500)
+      const data = await rolplayAppBestPerformers(clientId, limit, {
+        fromIso: range.from.toISOString(), toIso: range.to.toISOString(),
+      })
+      return buildSuccess(data, {
+        from: range.from.toISOString(), to: range.to.toISOString(), source: `rolplay-app-${clientId}`, limit,
       })
     }
 

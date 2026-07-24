@@ -23,7 +23,11 @@
  * ("email:client_id,email:client_id"); a demo entry is built in.
  */
 
-import type { OverviewApiResponse, ResultsApiResponse, EvaluationApiRow } from './types'
+import type {
+  OverviewApiResponse, ResultsApiResponse, EvaluationApiRow,
+  TrendsApiResponse, ApiTrendPoint, UsecaseBreakdownApiResponse, UsecaseApiRow,
+  BestPerformersApiResponse, BestPerformerRow,
+} from './types'
 
 const DEFAULT_SQL_URL = 'https://rolplay.app/ajax/remote-access.php'
 
@@ -260,6 +264,109 @@ export async function rolplayAppResults(
       result: score != null ? (passed ? 'pass' : 'fail') : null,
       passed,
       date: String(r.date_created).slice(0, 10),
+    }
+  })
+  return { data }
+}
+
+/** Daily trends (score + counts + pass) and a score-distribution histogram. */
+export async function rolplayAppTrends(
+  clientId: number,
+  range?: { fromIso: string; toIso: string },
+): Promise<TrendsApiResponse> {
+  const cid = Math.trunc(clientId)
+  const dc = dateClause(range?.fromIso, range?.toIso)
+
+  const daily = await remoteSelect<{ day: string; sessions: number | string; avg: string | null; passed: number | string }>(
+    `SELECT day, COUNT(*) AS sessions, ROUND(AVG(sc),2) AS avg,
+            SUM(CASE WHEN sc >= ${PASS_THRESHOLD} THEN 1 ELSE 0 END) AS passed
+       FROM (SELECT DATE(s.date_created) AS day, ${SCORE_SQL} AS sc
+               FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
+              WHERE u.client_id = ${cid}${dc}) t
+      GROUP BY day ORDER BY day`,
+  ).catch(() => [])
+
+  const scoreTrend: ApiTrendPoint[] = daily.filter(r => r.avg != null).map(r => ({ date: String(r.day).slice(0, 10), value: Number(r.avg) }))
+  const evalCountTrend: ApiTrendPoint[] = daily.map(r => ({ date: String(r.day).slice(0, 10), value: Number(r.sessions) }))
+  const passFailTrend: ApiTrendPoint[] = daily.map(r => ({ date: String(r.day).slice(0, 10), value: Number(r.passed) }))
+
+  const buckets = await remoteSelect<{ bucket: number | string; count: number | string }>(
+    `SELECT LEAST(FLOOR(sc/10)*10,90) AS bucket, COUNT(*) AS count
+       FROM (SELECT ${SCORE_SQL} AS sc FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
+              WHERE u.client_id = ${cid}${dc}) t
+      WHERE sc IS NOT NULL GROUP BY bucket ORDER BY bucket`,
+  ).catch(() => [])
+  const totalScored = buckets.reduce((s, b) => s + Number(b.count), 0) || 1
+  const scoreDistribution = buckets.map(b => {
+    const lo = Number(b.bucket)
+    return { range: `${lo}-${lo < 90 ? lo + 9 : 100}`, count: Number(b.count), pct: Math.round((Number(b.count) / totalScored) * 1000) / 10 }
+  })
+
+  return { scoreTrend, passFailTrend, evalCountTrend, scoreDistribution }
+}
+
+/** Per-simulator breakdown (the "use cases" for a query-endpoint client). */
+export async function rolplayAppUsecaseBreakdown(
+  clientId: number,
+  range?: { fromIso: string; toIso: string },
+): Promise<UsecaseBreakdownApiResponse> {
+  const cid = Math.trunc(clientId)
+  const dc = dateClause(range?.fromIso, range?.toIso)
+  const rows = await remoteSelect<{ simulator_id: number | string; name: string | null; total: number | string; avg: string | null; passed: number | string }>(
+    `SELECT s.simulator_id, sim.name,
+            COUNT(*) AS total, ROUND(AVG(${SCORE_SQL}),2) AS avg,
+            SUM(CASE WHEN (${SCORE_SQL}) >= ${PASS_THRESHOLD} THEN 1 ELSE 0 END) AS passed
+       FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
+       LEFT JOIN r_simulator sim ON sim.ID = s.simulator_id
+      WHERE u.client_id = ${cid}${dc}
+      GROUP BY s.simulator_id, sim.name ORDER BY total DESC`,
+  ).catch(() => [])
+
+  const data: UsecaseApiRow[] = rows.map(r => {
+    const total = Number(r.total)
+    const passed = Number(r.passed)
+    return {
+      usecaseId: Number(r.simulator_id),
+      usecase_name: r.name?.trim() || `Simulator ${r.simulator_id}`,
+      totalEvaluations: total,
+      avgScore: r.avg != null ? Number(r.avg) : null,
+      passRate: total ? Math.round((passed / total) * 1000) / 10 : null,
+      passed,
+    }
+  })
+  return { data }
+}
+
+/** Top users by average score. */
+export async function rolplayAppBestPerformers(
+  clientId: number,
+  limit: number,
+  range?: { fromIso: string; toIso: string },
+): Promise<BestPerformersApiResponse> {
+  const cid = Math.trunc(clientId)
+  const lim = Math.max(1, Math.min(50, Math.trunc(limit)))
+  const dc = dateClause(range?.fromIso, range?.toIso)
+  const rows = await remoteSelect<{ email: string; name: string | null; sessions: number | string; avg: string | null; passed: number | string }>(
+    `SELECT u.email, u.name,
+            COUNT(*) AS sessions, ROUND(AVG(${SCORE_SQL}),2) AS avg,
+            SUM(CASE WHEN (${SCORE_SQL}) >= ${PASS_THRESHOLD} THEN 1 ELSE 0 END) AS passed
+       FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
+      WHERE u.client_id = ${cid}${dc}
+      GROUP BY u.ID, u.email, u.name
+      HAVING COUNT(${SCORE_SQL}) > 0
+      ORDER BY avg DESC, sessions DESC
+      LIMIT ${lim}`,
+  ).catch(() => [])
+
+  const data: BestPerformerRow[] = rows.map(r => {
+    const sessions = Number(r.sessions)
+    const passed = Number(r.passed)
+    return {
+      user_email: r.email,
+      user_name: r.name?.trim() || null,
+      sessions,
+      avg_score: r.avg != null ? Number(r.avg) : 0,
+      pass_rate: sessions ? Math.round((passed / sessions) * 1000) / 10 : 0,
     }
   })
   return { data }
