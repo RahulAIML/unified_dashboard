@@ -146,7 +146,7 @@ export function Sidebar() {
         <LogoImage />
 
         <div className="min-w-0">
-          <p className="text-sm font-extrabold tracking-tight leading-tight truncate text-sidebar-foreground" title={platformName} translate="no">
+          <p className="text-sm font-extrabold tracking-tight leading-tight break-words text-sidebar-foreground" title={platformName} translate="no">
             {platformName}
           </p>
           <p className="text-[10px] text-sidebar-foreground/50 leading-tight">{t.sidebarSubtitle}</p>
