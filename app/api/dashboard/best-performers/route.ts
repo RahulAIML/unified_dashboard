@@ -7,7 +7,7 @@ import { resolveOrgType } from '@/lib/org-type'
 import { bancoDashboardBestPerformers } from '@/lib/bridge-banco-analytics'
 import { resolvePharmaTenant } from '@/lib/pharma-tenant'
 import { pharmaDashboardBestPerformers } from '@/lib/bridge-pharma-analytics'
-import { resolveRolplayAppClientId, rolplayAppBestPerformers } from '@/lib/bridge-rolplay-app'
+import { resolveRolplayAppAccess, rolplayAppBestPerformers } from '@/lib/bridge-rolplay-app'
 import { isDemoMode } from '@/lib/demo'
 import { demoBestPerformers } from '@/lib/demo/engine'
 
@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
 
     // ── Rolplay-app platform (top users by avg score) ─────────────────────────
     if (orgType === 'rolplay-app') {
-      const clientId = resolveRolplayAppClientId(ctx.email)
+      const clientId = await resolveRolplayAppAccess(ctx.email)
       if (!clientId) return buildApiError('Rolplay-app client could not be resolved', 500)
       const data = await rolplayAppBestPerformers(clientId, limit, {
         fromIso: range.from.toISOString(), toIso: range.to.toISOString(),

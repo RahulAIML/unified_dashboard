@@ -7,7 +7,7 @@ import { resolveOrgType } from '@/lib/org-type'
 import { bancoDashboardResults } from '@/lib/bridge-banco-analytics'
 import { resolvePharmaTenant } from '@/lib/pharma-tenant'
 import { pharmaDashboardResults } from '@/lib/bridge-pharma-analytics'
-import { resolveRolplayAppClientId, rolplayAppResults } from '@/lib/bridge-rolplay-app'
+import { resolveRolplayAppAccess, rolplayAppResults } from '@/lib/bridge-rolplay-app'
 import { isDemoMode } from '@/lib/demo'
 import { demoResults } from '@/lib/demo/engine'
 
@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
 
     // ── Rolplay-app platform (real scores via raw_closing_data/closing_analysis) ──
     if (orgType === 'rolplay-app') {
-      const clientId = resolveRolplayAppClientId(ctx.email)
+      const clientId = await resolveRolplayAppAccess(ctx.email)
       if (!clientId) return buildApiError('Rolplay-app client could not be resolved', 500)
       const data = await rolplayAppResults(clientId, limit, {
         fromIso: range.from.toISOString(), toIso: range.to.toISOString(),

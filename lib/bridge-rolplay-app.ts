@@ -102,13 +102,53 @@ function domainMap(): Map<string, number> {
 }
 
 /** Synchronous, no network — safe to call in the org-type hot path.
- *  Resolves by exact login first (demo accounts), then by email domain. */
+ *  Resolves the candidate client by exact login (demo) then domain. This only
+ *  decides which PIPELINE a user belongs to; it does NOT grant data access —
+ *  use resolveRolplayAppAccess for that (verifies the user is real). */
 export function resolveRolplayAppClientId(email: string): number | null {
   const clean = email.toLowerCase().trim()
   const exact = loginMap().get(clean)
   if (exact) return exact
   const domain = clean.split('@')[1]
   return (domain && domainMap().get(domain)) || null
+}
+
+// ── Authorization (tenant isolation) ──────────────────────────────────────────
+// Domain match is NOT authorization: anyone could register e.g. intruder@siigo.com
+// and would otherwise inherit Siigo's data. Access is granted only if the email
+// is a REAL user of that client in r_user. Verified against live data:
+// adriana.losada@siigo.com → 1 (allowed); a fake @siigo.com → 0 (denied).
+const userExistsCache = new Map<string, { ok: boolean; at: number }>()
+const USER_EXISTS_TTL_MS = 10 * 60_000
+
+async function rolplayAppUserExists(email: string, clientId: number): Promise<boolean> {
+  const cid = Math.trunc(clientId)
+  const clean = email.toLowerCase().trim()
+  const key = `${cid}:${clean}`
+  const cached = userExistsCache.get(key)
+  if (cached && Date.now() - cached.at < USER_EXISTS_TTL_MS) return cached.ok
+
+  const esc = clean.replace(/'/g, "''") // inlined, so escape quotes
+  const rows = await remoteSelect<{ n: number | string }>(
+    `SELECT COUNT(*) AS n FROM r_user WHERE LOWER(email) = '${esc}' AND client_id = ${cid}`,
+  ).catch(() => [])
+  const ok = Number(rows[0]?.n ?? 0) > 0
+  userExistsCache.set(key, { ok, at: Date.now() })
+  return ok
+}
+
+/**
+ * Access-grant resolution. Returns the client_id ONLY for a user actually
+ * authorized on that client (a real r_user), else null — so a domain squatter
+ * is denied even though the domain resolves a tenant. Built-in demo logins
+ * bypass the DB check (intentional test accounts). Use this anywhere data is
+ * served; use resolveRolplayAppClientId only to pick the pipeline.
+ */
+export async function resolveRolplayAppAccess(email: string): Promise<number | null> {
+  const clientId = resolveRolplayAppClientId(email)
+  if (!clientId) return null
+  if (loginMap().has(email.toLowerCase().trim())) return clientId
+  return (await rolplayAppUserExists(email, clientId)) ? clientId : null
 }
 
 // ── Score extraction (SQL) ────────────────────────────────────────────────────

@@ -5,7 +5,7 @@ import { getAuthContextFromRequest } from '@/lib/server-auth'
 import { resolveDynamicUsecaseIds } from '@/lib/dynamic-usecase-resolver'
 import { resolveOrgType } from '@/lib/org-type'
 import { bancoOverviewFromSecondBrain } from '@/lib/banco-second-brain'
-import { resolveRolplayAppClientId, rolplayAppOverview } from '@/lib/bridge-rolplay-app'
+import { resolveRolplayAppAccess, rolplayAppOverview } from '@/lib/bridge-rolplay-app'
 import { resolvePharmaTenant } from '@/lib/pharma-tenant'
 import { pharmaDashboardOverview } from '@/lib/bridge-pharma-analytics'
 import { isDemoMode } from '@/lib/demo'
@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
 
     // ── Rolplay-app platform (counts-only; scores not captured) ───────────────
     if (orgType === 'rolplay-app') {
-      const clientId = resolveRolplayAppClientId(ctx.email)
+      const clientId = await resolveRolplayAppAccess(ctx.email)
       if (!clientId) return buildApiError('Rolplay-app client could not be resolved', 500)
       const data = await rolplayAppOverview(clientId, {
         fromIso: range.from.toISOString(), toIso: range.to.toISOString(),

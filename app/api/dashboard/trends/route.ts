@@ -7,7 +7,7 @@ import { resolveOrgType } from '@/lib/org-type'
 import { bancoDashboardTrends } from '@/lib/bridge-banco-analytics'
 import { resolvePharmaTenant } from '@/lib/pharma-tenant'
 import { pharmaDashboardTrends } from '@/lib/bridge-pharma-analytics'
-import { resolveRolplayAppClientId, rolplayAppTrends } from '@/lib/bridge-rolplay-app'
+import { resolveRolplayAppAccess, rolplayAppTrends } from '@/lib/bridge-rolplay-app'
 import { isDemoMode } from '@/lib/demo'
 import { demoTrends } from '@/lib/demo/engine'
 import { bucketTrends, bucketTrend, attachPreviousScore, isGranularity, type Granularity } from '@/lib/trend-transform'
@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
       source = `pharma-${tenant}`
       fetchTrends = (from, to) => pharmaDashboardTrends(tenant, { fromIso: from.toISOString(), toIso: to.toISOString(), solution })
     } else if (orgType === 'rolplay-app') {
-      const clientId = resolveRolplayAppClientId(ctx.email)
+      const clientId = await resolveRolplayAppAccess(ctx.email)
       if (!clientId) return buildApiError('Rolplay-app client could not be resolved', 500)
       source = `rolplay-app-${clientId}`
       fetchTrends = (from, to) => rolplayAppTrends(clientId, { fromIso: from.toISOString(), toIso: to.toISOString() })
