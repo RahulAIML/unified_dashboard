@@ -15,6 +15,7 @@ import { getAuthContextFromRequest } from "@/lib/server-auth"
 import { getTenantIntegration } from "@/lib/db-tenant-integrations"
 import { secondBrainAdminCandidates } from "@/lib/banco-second-brain"
 import { isBancoOrg } from "@/lib/org-type"
+import { resolveRolplayAppClientId } from "@/lib/bridge-rolplay-app"
 import { resolvePharmaTenant } from "@/lib/pharma-tenant"
 import { isDemoMode } from "@/lib/demo"
 import { demoAccessStatus } from "@/lib/demo/engine"
@@ -113,11 +114,14 @@ export async function GET(request: NextRequest) {
   const hasSecondBrainData = await probeSecondBrainAccess(auth.customerId, auth.email)
   const hasBancoAccess     = isBancoOrg(auth.email)
   const hasPharmaAccess    = await resolvePharmaTenant(auth.email) !== null
-  const hasAnyAccess       = hasCoachData || hasSecondBrainData || hasBancoAccess || hasPharmaAccess
+  // rolplay-app (query-endpoint) clients resolve by login/domain → client_id.
+  // Without this flag the client gates them out and shows "not linked".
+  const hasRolplayAppAccess = resolveRolplayAppClientId(auth.email) !== null
+  const hasAnyAccess       = hasCoachData || hasSecondBrainData || hasBancoAccess || hasPharmaAccess || hasRolplayAppAccess
 
   return NextResponse.json({
     success: true,
-    data: { hasCoachData, hasSecondBrainData, hasBancoAccess, hasPharmaAccess, hasAnyAccess },
+    data: { hasCoachData, hasSecondBrainData, hasBancoAccess, hasPharmaAccess, hasRolplayAppAccess, hasAnyAccess },
     meta: { timestamp: new Date().toISOString() },
   })
 }

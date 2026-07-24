@@ -35,11 +35,12 @@ import type { Module } from "@/lib/types"
 
 // ── Access status (returned by /api/auth/access-status) ───────────────────────
 interface AccessStatus {
-  hasCoachData:       boolean
-  hasSecondBrainData: boolean
-  hasBancoAccess:     boolean
-  hasPharmaAccess:    boolean
-  hasAnyAccess:       boolean
+  hasCoachData:        boolean
+  hasSecondBrainData:  boolean
+  hasBancoAccess:      boolean
+  hasPharmaAccess:     boolean
+  hasRolplayAppAccess: boolean
+  hasAnyAccess:        boolean
 }
 
 // ── Second Brain profile (returned by /api/second-brain/profile) ──────────────
@@ -188,7 +189,8 @@ export function DashboardContent() {
   const dbReady = (
     accessStatus?.hasCoachData === true ||
     accessStatus?.hasBancoAccess === true ||
-    accessStatus?.hasPharmaAccess === true
+    accessStatus?.hasPharmaAccess === true ||
+    accessStatus?.hasRolplayAppAccess === true
   ) && !isSecondBrain
 
   const overviewUrl = dbReady
