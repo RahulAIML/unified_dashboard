@@ -22,6 +22,7 @@ export const translations = {
     logout:          'Sign out',
     phaseLabel:      'v1.0 · Analytics Platform',
     sidebarSubtitle: 'Analytics Dashboard',
+    dashboardWord:   'Dashboard',
 
     // ── Global filter bar ────────────────────────────────────
     filterSolutions: 'Solutions',
@@ -730,6 +731,7 @@ export const translations = {
     logout:          'Cerrar sesión',
     phaseLabel:      'v1.0 · Plataforma Analytics',
     sidebarSubtitle: 'Panel de Analítica',
+    dashboardWord:   'Dashboard',
 
     // ── Global filter bar ────────────────────────────────────
     filterSolutions: 'Soluciones',

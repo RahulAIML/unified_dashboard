@@ -149,7 +149,7 @@ export function Sidebar() {
           <p className="text-sm font-extrabold tracking-tight leading-tight break-words text-sidebar-foreground" title={platformName} translate="no">
             {platformName}
           </p>
-          <p className="text-[10px] text-sidebar-foreground/50 leading-tight">{t.sidebarSubtitle}</p>
+          <p className="text-[10px] text-sidebar-foreground/50 leading-tight break-words" translate="no">{brand.name} {t.dashboardWord}</p>
         </div>
       </div>
 
