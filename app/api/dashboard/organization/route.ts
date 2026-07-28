@@ -4,7 +4,8 @@ import { getAuthContextFromRequest } from '@/lib/server-auth'
 import { resolveOrgType } from '@/lib/org-type'
 import { resolvePharmaTenant } from '@/lib/pharma-tenant'
 import { pharmaDashboardOrganization } from '@/lib/bridge-pharma-analytics'
-import { isDemoMode } from '@/lib/demo'
+import { useDemoData } from '@/lib/demo'
+import { demoOrganization } from '@/lib/demo/engine'
 
 export const runtime = 'nodejs'
 
@@ -16,7 +17,7 @@ export async function GET(request: NextRequest) {
   const ctx = await getAuthContextFromRequest(request)
   if (!ctx) return buildApiError('Unauthorized', 401)
 
-  if (isDemoMode()) return buildSuccess(EMPTY, { source: 'demo' })
+  if (useDemoData(ctx.email)) return buildSuccess(demoOrganization(), { source: 'demo' })
 
   const orgType = await resolveOrgType(ctx.email, ctx.customerId)
   if (orgType !== 'pharma') return buildSuccess(EMPTY)

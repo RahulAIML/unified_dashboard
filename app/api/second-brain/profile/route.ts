@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getAuthContextFromRequest } from "@/lib/server-auth"
 import { getTenantIntegration } from "@/lib/db-tenant-integrations"
 import { secondBrainAdminCandidates } from "@/lib/banco-second-brain"
-import { isDemoMode } from "@/lib/demo"
+import { useDemoData } from "@/lib/demo"
 import { demoSecondBrainProfile } from "@/lib/demo/engine"
 
 const SECOND_BRAIN_API_URL = process.env.SECOND_BRAIN_API_URL
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
   }
 
   // ── DEMO MODE ──────────────────────────────────────────────────────────────
-  if (isDemoMode()) {
+  if (useDemoData(auth.email)) {
     return NextResponse.json({
       success: true,
       data: demoSecondBrainProfile(),

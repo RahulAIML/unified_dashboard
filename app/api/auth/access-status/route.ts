@@ -17,7 +17,7 @@ import { secondBrainAdminCandidates } from "@/lib/banco-second-brain"
 import { isBancoOrg } from "@/lib/org-type"
 import { resolveRolplayAppAccess } from "@/lib/bridge-rolplay-app"
 import { resolvePharmaTenant } from "@/lib/pharma-tenant"
-import { isDemoMode } from "@/lib/demo"
+import { useDemoData } from "@/lib/demo"
 import { demoAccessStatus } from "@/lib/demo/engine"
 
 export const dynamic = "force-dynamic"
@@ -102,7 +102,7 @@ export async function GET(request: NextRequest) {
   }
 
   // ── DEMO MODE ──────────────────────────────────────────────────────────────
-  if (isDemoMode()) {
+  if (useDemoData(auth.email)) {
     return NextResponse.json({
       success: true,
       data: demoAccessStatus(),

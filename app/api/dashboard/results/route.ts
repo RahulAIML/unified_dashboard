@@ -8,7 +8,7 @@ import { bancoDashboardResults } from '@/lib/bridge-banco-analytics'
 import { resolvePharmaTenant } from '@/lib/pharma-tenant'
 import { pharmaDashboardResults } from '@/lib/bridge-pharma-analytics'
 import { resolveRolplayAppAccess, rolplayAppResults } from '@/lib/bridge-rolplay-app'
-import { isDemoMode } from '@/lib/demo'
+import { useDemoData } from '@/lib/demo'
 import { demoResults } from '@/lib/demo/engine'
 
 export const runtime = 'nodejs'
@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
   if (!ctx) return buildApiError('Unauthorized', 401)
 
   // ── DEMO MODE ──────────────────────────────────────────────────────────────
-  if (isDemoMode()) {
+  if (useDemoData(ctx.email)) {
     const sp    = request.nextUrl.searchParams
     const range = parseDateRange(sp)
     if (!range) return buildApiError('Invalid date range', 400)

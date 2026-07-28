@@ -261,12 +261,17 @@ export function demoBestPerformers(from: Date, to: Date, limit = 5, solution: st
 
 // ── Access Status ─────────────────────────────────────────────────────────────
 export function demoAccessStatus() {
+  // The demo dashboard must showcase the FULL Rolplay ecosystem, so every
+  // capability is on: this drives the nav (Activities, Conversational, Business
+  // Lines, Organization, Reports) as well as the module set. Demo data is only
+  // ever served to Rolplay's own domains (see isRolplayDemoTenant).
   return {
-    hasCoachData:       true,
-    hasSecondBrainData: true,
-    hasBancoAccess:     false,
-    hasPharmaAccess:    false,
-    hasAnyAccess:       true,
+    hasCoachData:        true,
+    hasSecondBrainData:  true,
+    hasBancoAccess:      false,
+    hasPharmaAccess:     true,
+    hasRolplayAppAccess: true,
+    hasAnyAccess:        true,
   }
 }
 
@@ -317,4 +322,99 @@ export function demoSecondBrainProfile() {
     },
     members,
   }
+}
+
+// ── Business Lines (demo) ─────────────────────────────────────────────────────
+// So the Certifier Coach page's per-line section is populated in the demo.
+
+const DEMO_LINES = [
+  'Cardiología', 'Respiratorio', 'Dermatología', 'Gastroenterología',
+  'Neurociencias', 'Oncología', 'Pediatría', 'Salud Femenina',
+]
+
+export function demoBusinessLines(from: Date, to: Date) {
+  const rng = seededRng(dateToSeed(from, to, 71))
+  const data = DEMO_LINES.map((name, i) => {
+    const memberCount = 8 + Math.round(rng() * 22)
+    const activeUsers = Math.max(3, memberCount - Math.round(rng() * 5))
+    return {
+      tagId: 200 + i,
+      name,
+      memberCount,
+      simCount: activeUsers * (2 + Math.round(rng() * 4)),
+      avgScore: Math.round((74 + rng() * 20) * 10) / 10,
+      activeUsers,
+    }
+  })
+  // Best line first, matching how the real endpoint is consumed.
+  data.sort((a, b) => (b.avgScore ?? 0) - (a.avgScore ?? 0))
+  return { data }
+}
+
+// ── Organization (demo) ───────────────────────────────────────────────────────
+
+const DEMO_ADMIN_NAMES = [
+  'Alejandra Ruiz', 'Fernando Castillo', 'Patricia Núñez', 'Ricardo Salinas',
+]
+const DEMO_DESIGNATIONS = [
+  'Representante Médico', 'Gerente de Distrito', 'KAM', 'Especialista de Producto',
+]
+
+export function demoOrganization() {
+  const rng = seededRng(20260101)
+  const admins = DEMO_ADMIN_NAMES.map((fullName, i) => ({
+    id: 900 + i,
+    fullName,
+    email: `${fullName.split(' ')[0].toLowerCase()}@demo.rolplay.ai`,
+    profileType: i === 0 ? 'Admin' : 'Supervisor',
+  }))
+  const members = SB_MEMBER_NAMES.map((fullName, i) => ({
+    id: 1000 + i,
+    fullName,
+    email: `${fullName.split(' ')[0].toLowerCase()}${i}@demo.rolplay.ai`,
+    designation: DEMO_DESIGNATIONS[Math.floor(rng() * DEMO_DESIGNATIONS.length)],
+    adminId: admins[i % admins.length].id,
+  }))
+  return {
+    totalMembers: members.length,
+    totalAdmins: admins.length,
+    totalSupervisors: admins.filter(a => a.profileType === 'Supervisor').length,
+    members,
+    admins,
+  }
+}
+
+// ── Objections / Conversational Intelligence (demo) ───────────────────────────
+
+const DEMO_OBJECTIONS: { text: string; model: string }[] = [
+  { text: '¿Por qué debería cambiar el tratamiento actual de mi paciente?',
+    model: 'Reconoce la experiencia del médico, presenta la evidencia diferencial y propone un perfil de paciente concreto donde el cambio aporta más valor.' },
+  { text: 'El precio es más alto que el genérico que ya receto.',
+    model: 'Reencuadra de precio a costo total: adherencia, menos recaídas y menos visitas, sustentado con datos de eficacia.' },
+  { text: 'No tengo tiempo, sea breve.',
+    model: 'Abre con un beneficio en una frase, pide 60 segundos y cierra con un siguiente paso claro.' },
+  { text: 'Ya conozco el producto, no necesito información.',
+    model: 'Valida su conocimiento y aporta un dato nuevo (indicación reciente o subgrupo) que no suele conocerse.' },
+  { text: 'Me preocupan los efectos adversos en adultos mayores.',
+    model: 'Presenta el perfil de seguridad en ese subgrupo y las pautas de ajuste de dosis recomendadas.' },
+  { text: 'Prefiero esperar más evidencia a largo plazo.',
+    model: 'Comparte los datos de extensión disponibles y ofrece iniciar con un paciente de perfil idóneo.' },
+]
+
+export function demoObjections(from: Date, to: Date) {
+  const rng = seededRng(dateToSeed(from, to, 83))
+  const data = DEMO_OBJECTIONS.map((o, i) => ({
+    usecaseId: DEMO_USECASE_IDS[i % DEMO_USECASE_IDS.length],
+    objectionText: o.text,
+    count: 8 + Math.round(rng() * 40),
+    passRate: Math.round(rng() * 100),
+    modelAnswer: o.model,
+    topAnswers: DEMO_USERS.slice(0, 3).map(u => ({
+      name: u.name,
+      text: 'Doctor, entiendo su punto. Considerando el perfil de sus pacientes, la evidencia muestra un beneficio consistente en adherencia y control sintomático; ¿le parece si revisamos un caso concreto?',
+    })),
+  }))
+  // Worst success rate first — how the real endpoint is consumed.
+  data.sort((a, b) => a.passRate - b.passRate)
+  return { data }
 }

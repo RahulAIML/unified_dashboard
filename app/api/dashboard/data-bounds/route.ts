@@ -20,7 +20,7 @@ import { pharmaDataBounds } from '@/lib/bridge-pharma-analytics'
 import { bridgeAnalyticsDataBounds } from '@/lib/bridge-client'
 import { bridgeBancoDataBounds } from '@/lib/bridge-banco'
 import { resolveRolplayAppAccess, rolplayAppDataBounds } from '@/lib/bridge-rolplay-app'
-import { isDemoMode } from '@/lib/demo'
+import { useDemoData } from '@/lib/demo'
 
 export const runtime = 'nodejs'
 
@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
   if (!ctx) return buildApiError('Unauthorized', 401)
 
   // Demo mode has its own fixed dataset — let the client keep its default range.
-  if (isDemoMode()) return buildSuccess(null, { source: 'demo' })
+  if (useDemoData(ctx.email)) return buildSuccess(null, { source: 'demo' })
 
   try {
     const orgType = await resolveOrgType(ctx.email, ctx.customerId)
