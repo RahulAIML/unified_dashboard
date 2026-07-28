@@ -113,6 +113,46 @@ export function resolveRolplayAppClientId(email: string): number | null {
   return (domain && domainMap().get(domain)) || null
 }
 
+// ── DB-backed domain mapping (self-service publishing) ────────────────────────
+// The builder's publish step writes rolplay_app_domains, so a NEWLY published
+// query-endpoint client resolves without a deploy. The code/env maps above stay
+// as a fallback (and for local dev without the table).
+let dbDomainCache: { map: Map<string, number>; at: number } | null = null
+const DB_DOMAIN_TTL_MS = 60_000
+
+async function dbDomainMap(): Promise<Map<string, number>> {
+  if (dbDomainCache && Date.now() - dbDomainCache.at < DB_DOMAIN_TTL_MS) return dbDomainCache.map
+  const map = new Map<string, number>()
+  try {
+    const { authQuery } = await import('./db-auth')
+    const rows = await authQuery<{ domain: string; client_id: number }>(
+      `SELECT domain, client_id FROM rolplay_app_domains WHERE is_active = TRUE`,
+    )
+    for (const r of rows) map.set(String(r.domain).toLowerCase(), Number(r.client_id))
+  } catch {
+    // Table not migrated yet / DB unreachable → fall back to the code+env maps.
+  }
+  dbDomainCache = { map, at: Date.now() }
+  return map
+}
+
+/** Drop the cached DB domain map (call after a publish/admin write). */
+export function invalidateRolplayAppDomainCache(): void {
+  dbDomainCache = null
+}
+
+/**
+ * Pipeline resolution including DB-published domains. Prefer this wherever an
+ * await is possible; resolveRolplayAppClientId stays for sync callers.
+ */
+export async function resolveRolplayAppClientIdAsync(email: string): Promise<number | null> {
+  const sync = resolveRolplayAppClientId(email)
+  if (sync) return sync
+  const domain = email.toLowerCase().trim().split('@')[1]
+  if (!domain) return null
+  return (await dbDomainMap()).get(domain) ?? null
+}
+
 // ── Authorization (tenant isolation) ──────────────────────────────────────────
 // Domain match is NOT authorization: anyone could register e.g. intruder@siigo.com
 // and would otherwise inherit Siigo's data. Access is granted only if the email
@@ -145,7 +185,7 @@ async function rolplayAppUserExists(email: string, clientId: number): Promise<bo
  * served; use resolveRolplayAppClientId only to pick the pipeline.
  */
 export async function resolveRolplayAppAccess(email: string): Promise<number | null> {
-  const clientId = resolveRolplayAppClientId(email)
+  const clientId = await resolveRolplayAppClientIdAsync(email)
   if (!clientId) return null
   if (loginMap().has(email.toLowerCase().trim())) return clientId
   return (await rolplayAppUserExists(email, clientId)) ? clientId : null

@@ -68,6 +68,38 @@ async def run(cfg: DashboardConfig, domains: list[str], log: LogFn) -> bool:
                       f"Live: tenant '{cfg.slug}' ({kind}) + domain '{domain}' — dashboard active within ~30s")
         except Exception as exc:
             await log("publish", "warn", f"Metadata stored; pharma_tenants upsert skipped: {str(exc)[:120]}")
+    elif cfg.connector == ServiceKind.rolplay_app_sql:
+        # BUG FIXED: only pharma connectors were ever registered above, so
+        # publishing a query-endpoint client (Siigo, Rowe, M8, Takeda…) stored
+        # the config, reported success, and left its users at "You're not linked
+        # to any organization" — nothing mapped their login to the client_id.
+        # Write the domain → client_id mapping the runtime reads
+        # (lib/bridge-rolplay-app.ts dbDomainMap), so the dashboard goes live for
+        # real logins immediately, no deploy.
+        client_id = cfg.connector_handle.get("client_id")
+        domain = (domains or [None])[0]
+        if not client_id:
+            await log("publish", "warn", "Config stored, but no client_id on the connector — logins cannot be routed")
+        elif not domain:
+            await log("publish", "warn",
+                      f"Config stored for client_id={client_id}, but no company domain was provided — "
+                      "logins cannot be routed. Re-publish with the client's email domain.")
+        else:
+            try:
+                await pool.execute(
+                    """INSERT INTO rolplay_app_domains (domain, client_id, display_name, is_active, updated_at)
+                       VALUES ($1,$2,$3,TRUE,NOW())
+                       ON CONFLICT (domain) DO UPDATE SET client_id=EXCLUDED.client_id,
+                         display_name=EXCLUDED.display_name, is_active=TRUE, updated_at=NOW()""",
+                    str(domain).lower().strip(), int(client_id), cfg.company,
+                )
+                await log("publish", "success",
+                          f"Live: '{cfg.company}' (client_id={client_id}) + domain '{domain}' — "
+                          "logins route to this dashboard within ~60s")
+            except Exception as exc:
+                await log("publish", "warn",
+                          f"Config stored; login routing NOT registered: {str(exc)[:120]} "
+                          "(run migration 005_rolplay_app_domains.sql)")
     else:
         await log("publish", "success", f"Config published for '{cfg.slug}' (rendered from metadata)")
     return True

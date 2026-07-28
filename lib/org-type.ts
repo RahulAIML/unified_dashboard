@@ -15,7 +15,7 @@
  * Second Brain is probed separately (API call) and does not affect org type.
  */
 import { resolvePharmaTenant } from './pharma-tenant'
-import { resolveRolplayAppClientId } from './bridge-rolplay-app'
+import { resolveRolplayAppClientIdAsync } from './bridge-rolplay-app'
 
 /**
  * Returns true when the given email belongs to the Banco organization.
@@ -44,7 +44,7 @@ export async function resolveOrgType(
   if (await resolvePharmaTenant(email))  return 'pharma'
   // Before analytics: rolplay-app clients can share a domain with a coach_app
   // analytics customer (audioweb.com.mx), so the explicit login map wins.
-  if (resolveRolplayAppClientId(email))  return 'rolplay-app'
+  if (await resolveRolplayAppClientIdAsync(email)) return 'rolplay-app'
   if (customerId > 0)                    return 'analytics'
   return 'none'
 }
