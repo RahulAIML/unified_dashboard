@@ -37,9 +37,30 @@ const PHASE_STEPS: { key: Phase; label: string }[] = [
 ]
 const ORDER = PHASE_STEPS.map(s => s.key)
 
+// Step 1 options. Labels match the dashboard's own module naming.
+const SERVICE_OPTIONS: { id: string; label: string }[] = [
+  { id: 'simulator',     label: 'Simulator'       },
+  { id: 'coach',         label: 'Master Coach'    },
+  { id: 'certification', label: 'Certifier Coach' },
+  { id: 'lms',           label: 'LMS'             },
+  { id: 'second-brain',  label: 'Second Brain'    },
+]
+
 export default function DashboardBuilderPage() {
   const [company, setCompany] = useState('')
   const [domainText, setDomainText] = useState('')
+  // Step 1 — services the client has contracted. Defaults to all selected so a
+  // rushed user can never create an empty dashboard; the platform still checks
+  // which of these actually have data (contracted ∩ has-data = rendered).
+  const [services, setServices] = useState<Set<string>>(
+    () => new Set(['simulator', 'coach', 'certification', 'lms', 'second-brain'])
+  )
+  const toggleService = (id: string) =>
+    setServices(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
   const [idsText, setIdsText] = useState('')
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [job, setJob] = useState<JobState | null>(null)
@@ -128,7 +149,7 @@ export default function DashboardBuilderPage() {
     try {
       const res = await fetch('/api/ai/generate-dashboard', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ company: company.trim(), exercise_ids, domains }),
+        body: JSON.stringify({ company: company.trim(), exercise_ids, domains, services: Array.from(services) }),
       })
       const j: JobState = await res.json()
       setJob(j); poll(j.job_id)
@@ -178,6 +199,37 @@ export default function DashboardBuilderPage() {
 
       {/* Input card — company name is the only thing a manager needs */}
       <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+        {/* Step 1 — contracted services. Big multi-select cards, all on by
+            default; the platform still verifies which ones have data. */}
+        <label className="text-sm font-semibold text-foreground mb-2 block">
+          Which services does this client have?
+        </label>
+        <div className="flex flex-wrap gap-2 mb-2">
+          {SERVICE_OPTIONS.map(({ id, label }) => {
+            const on = services.has(id)
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => toggleService(id)}
+                disabled={running}
+                aria-pressed={on}
+                className={`px-4 py-2.5 rounded-xl border text-sm font-medium transition-colors disabled:opacity-60 ${
+                  on
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border bg-muted/40 text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <span className="mr-1.5">{on ? '✓' : '＋'}</span>{label}
+              </button>
+            )
+          })}
+        </div>
+        <p className="text-xs text-muted-foreground mb-5">
+          Only the selected services appear on their dashboard. Not sure? Leave all selected —
+          we detect which ones actually have data.
+        </p>
+
         <label className="text-sm font-semibold text-foreground mb-2 block">Company name</label>
         <div className="flex flex-col sm:flex-row gap-3">
           <input value={company} onChange={e => setCompany(e.target.value)}

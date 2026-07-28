@@ -238,6 +238,12 @@ class GenerateRequest(BaseModel):
     # from the company name — the guess is often wrong (e.g. "sanfer.com" when
     # reps are actually on "sanfer.com.mx"), which silently breaks logins.
     domains: list[str] = Field(default_factory=list)
+    # Services the client has CONTRACTED (guided config step 1): simulator,
+    # coach, certification, lms, second-brain. Empty = no restriction. Intent
+    # only — the platform still verifies which of these actually have data, so a
+    # contracted-but-empty service is hidden rather than shown as zeros
+    # (contracted ∩ has-data = rendered).
+    services: list[str] = Field(default_factory=list)
     manager_request: str = ""
     auto_publish: bool = False
 
