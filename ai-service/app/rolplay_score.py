@@ -12,6 +12,10 @@ the known ones (Siigo / M8 / Takeda). Kept in sync with the TS version.
 # A SQL expression yielding a 0-100 score for r_user_session row aliased `s`, or NULL.
 SCORE_SQL = """CASE
   WHEN JSON_VALID(s.raw_closing_data)
+       AND JSON_EXTRACT(s.raw_closing_data,'$.score_bar') IS NOT NULL
+       AND JSON_UNQUOTE(JSON_EXTRACT(s.raw_closing_data,'$.score_bar')) REGEXP '^[0-9]+([.][0-9]+)?$'
+    THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(s.raw_closing_data,'$.score_bar')) AS DECIMAL(6,2))
+  WHEN JSON_VALID(s.raw_closing_data)
        AND JSON_EXTRACT(s.raw_closing_data,'$.overall_score') IS NOT NULL
        AND JSON_UNQUOTE(JSON_EXTRACT(s.raw_closing_data,'$.overall_score')) REGEXP '^[0-9]+([.][0-9]+)?$'
     THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(s.raw_closing_data,'$.overall_score')) AS DECIMAL(6,2))
@@ -21,6 +25,10 @@ SCORE_SQL = """CASE
     THEN CAST(TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(s.closing_analysis,'rpt-score-num">',-1),'<',1)) AS DECIMAL(6,2))
   WHEN LOCATE('total-score">', s.closing_analysis) > 0
     THEN CAST(TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(SUBSTRING_INDEX(s.closing_analysis,'total-score">',-1),'<',1),'/',1)) AS DECIMAL(6,2))
+  WHEN LOCATE('score-number">', s.closing_analysis) > 0
+    THEN LEAST(CAST(TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(s.closing_analysis,'score-number">',-1),'<',1)) AS DECIMAL(6,2)) * 10, 100)
+  WHEN LOCATE('rp-huge-grade">', s.closing_analysis) > 0
+    THEN LEAST(CAST(TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(s.closing_analysis,'rp-huge-grade">',-1),'<',1)) AS DECIMAL(6,2)) * 10, 100)
   ELSE NULL
 END"""
 

@@ -158,9 +158,14 @@ const PASS_THRESHOLD = 70 // platform-wide pass convention (matches every tenant
 /**
  * SQL expression yielding a 0-100 score per r_user_session row `s`, or NULL.
  *
- * PRIMARY (generic, all clients): raw_closing_data JSON `$.overall_score`. Every
- * session created going forward carries this, so a NEW client works with zero
- * extra config — nothing here is client-specific.
+ * PRIMARY (generic, all clients): raw_closing_data JSON. Prefer `$.score_bar`
+ * when present, else `$.overall_score`. This matters because the scales differ
+ * per module — verified across all live sessions:
+ *   SIM     overall_score 0-95, no score_bar   → overall_score IS the 0-100 score
+ *   COACH   overall_score 0-9  + score_bar 0-90 (137/137) → score_bar is 0-100
+ *   SEGMENT overall_score 86,  no score_bar    → overall_score
+ * Using overall_score blindly gave Master Coach an avg of 3.95 (a 0-10 scale
+ * averaged as if 0-100). score_bar-first is data-driven, not per-client.
  *
  * FALLBACK (legacy sessions with empty raw_closing_data): the score lives in the
  * closing_analysis HTML, and the markup differs per report template. There is no
@@ -169,11 +174,21 @@ const PASS_THRESHOLD = 70 // platform-wide pass convention (matches every tenant
  *   - Siigo:  <div class="rp-sim-report-score-number">NN</div>
  *   - M8:     <div class="rpt-score-num">NN</div>
  *   - Takeda: <td class="total-score">NN / 100</td>   (take the part before '/')
+ *   - Master Coach (rp-coach-report): <div class="score-number">N</div> with a
+ *     "/ 10" denominator — verified across live sessions (9,6,6,7,4,2 all /10),
+ *     so it is x10 (capped at 100) to reach the 0-100 scale.
+ * ORDER MATTERS: Siigo's marker 'rp-sim-report-score-number">' CONTAINS
+ * 'score-number">', so the Master Coach branch must stay LAST — SIM sessions
+ * match their own branch first and never fall through to the x10 branch.
  * Each branch is LOCATE-guarded so a missing marker never yields the whole blob;
  * SUBSTRING_INDEX(x, marker, -1) takes text after the marker, then '<' stops at
  * the tag close. To onboard a legacy client with a new template, add one branch.
  */
 const SCORE_SQL = `CASE
+  WHEN JSON_VALID(s.raw_closing_data)
+       AND JSON_EXTRACT(s.raw_closing_data, '$.score_bar') IS NOT NULL
+       AND JSON_UNQUOTE(JSON_EXTRACT(s.raw_closing_data, '$.score_bar')) REGEXP '^[0-9]+(\\\\.[0-9]+)?$'
+    THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(s.raw_closing_data, '$.score_bar')) AS DECIMAL(6,2))
   WHEN JSON_VALID(s.raw_closing_data)
        AND JSON_EXTRACT(s.raw_closing_data, '$.overall_score') IS NOT NULL
        AND JSON_UNQUOTE(JSON_EXTRACT(s.raw_closing_data, '$.overall_score')) REGEXP '^[0-9]+(\\\\.[0-9]+)?$'
@@ -184,6 +199,10 @@ const SCORE_SQL = `CASE
     THEN CAST(TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(s.closing_analysis, 'rpt-score-num">', -1), '<', 1)) AS DECIMAL(6,2))
   WHEN LOCATE('total-score">', s.closing_analysis) > 0
     THEN CAST(TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(SUBSTRING_INDEX(s.closing_analysis, 'total-score">', -1), '<', 1), '/', 1)) AS DECIMAL(6,2))
+  WHEN LOCATE('score-number">', s.closing_analysis) > 0
+    THEN LEAST(CAST(TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(s.closing_analysis, 'score-number">', -1), '<', 1)) AS DECIMAL(6,2)) * 10, 100)
+  WHEN LOCATE('rp-huge-grade">', s.closing_analysis) > 0
+    THEN LEAST(CAST(TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(s.closing_analysis, 'rp-huge-grade">', -1), '<', 1)) AS DECIMAL(6,2)) * 10, 100)
   ELSE NULL
 END`
 
@@ -193,6 +212,56 @@ function toSqlDt(iso: string): string {
   return iso.slice(0, 19).replace('T', ' ').replace(/[^0-9 :-]/g, '')
 }
 
+// ── Module (solution) mapping ─────────────────────────────────────────────────
+// r_simulator.category is the platform's own module tag. Dashboard naming is
+// deliberately preserved (per product decision):
+//   COACH   → "Master Coach"      (schema calls it coach)
+//   SEGMENT → "Certifier Coach"   (schema calls it certification/segmented)
+//   SIM     → "Simulator"
+// Verified live: M8 has SIM+COACH+SEGMENT, Siigo SIM only, Rowe COACH+SIM.
+//
+// Second Brain is deliberately NOT sourced here. Even though this schema has an
+// 'SB' category, Second Brain data comes exclusively from the dedicated Second
+// Brain API (lib/second-brain-api.ts, per-org admin_email) — that stays intact.
+// So SB sessions in r_user_session are ignored by this connector.
+const SOLUTION_TO_CATEGORY: Record<string, string> = {
+  coach: 'COACH',
+  simulator: 'SIM',
+  certification: 'SEGMENT',
+}
+
+/** SQL fragment restricting sessions to one dashboard solution, or '' for all.
+ *  Uses a subquery (not a join) so it can be appended to any WHERE without
+ *  colliding with an existing r_simulator alias. */
+function categoryClause(solution?: string | null): string {
+  const cat = solution ? SOLUTION_TO_CATEGORY[solution] : undefined
+  if (!cat) return ''
+  return ` AND s.simulator_id IN (SELECT ID FROM r_simulator WHERE category = '${cat}')`
+}
+
+/**
+ * Which dashboard modules this client actually has data for — drives dynamic
+ * rendering so a client sees only their contracted/used services (no empty
+ * tabs, no fabricated zeros). Derived from real sessions, so a newly-used
+ * module appears automatically.
+ */
+export async function rolplayAppAvailableModules(clientId: number): Promise<string[]> {
+  const cid = Math.trunc(clientId)
+  const rows = await remoteSelect<{ category: string | null; n: number | string }>(
+    `SELECT sim.category AS category, COUNT(*) AS n
+       FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
+       LEFT JOIN r_simulator sim ON sim.ID = s.simulator_id
+      WHERE u.client_id = ${cid}
+      GROUP BY sim.category`,
+  ).catch(() => [])
+  const present = new Set(
+    rows.filter(r => Number(r.n) > 0 && r.category).map(r => String(r.category).toUpperCase()),
+  )
+  return Object.entries(SOLUTION_TO_CATEGORY)
+    .filter(([, cat]) => present.has(cat))
+    .map(([solution]) => solution)
+}
+
 function dateClause(fromIso?: string, toIso?: string): string {
   if (!fromIso || !toIso) return ''
   return ` AND s.date_created BETWEEN '${toSqlDt(fromIso)}' AND '${toSqlDt(toIso)}'`
@@ -200,7 +269,7 @@ function dateClause(fromIso?: string, toIso?: string): string {
 
 interface ScoreStats { total: number; scored: number; avg: number | null; passed: number }
 
-async function fetchScoreStats(cid: number, fromIso?: string, toIso?: string): Promise<ScoreStats> {
+async function fetchScoreStats(cid: number, fromIso?: string, toIso?: string, solution?: string | null): Promise<ScoreStats> {
   const rows = await remoteSelect<{ total: number | string; scored: number | string; avg_score: string | null; passed: number | string }>(
     `SELECT COUNT(*) AS total,
             COUNT(sc) AS scored,
@@ -209,7 +278,7 @@ async function fetchScoreStats(cid: number, fromIso?: string, toIso?: string): P
        FROM (
          SELECT ${SCORE_SQL} AS sc
            FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
-          WHERE u.client_id = ${cid}${dateClause(fromIso, toIso)}
+          WHERE u.client_id = ${cid}${dateClause(fromIso, toIso)}${categoryClause(solution)}
        ) t`,
   ).catch(() => [])
   const r = rows[0]
@@ -227,6 +296,7 @@ async function fetchScoreStats(cid: number, fromIso?: string, toIso?: string): P
 export async function rolplayAppOverview(
   clientId: number,
   range?: { fromIso: string; toIso: string },
+  solution?: string | null,
 ): Promise<OverviewApiResponse> {
   const cid = Math.trunc(clientId)
 
@@ -241,8 +311,8 @@ export async function rolplayAppOverview(
   }
 
   const [cur, prev] = await Promise.all([
-    fetchScoreStats(cid, range?.fromIso, range?.toIso),
-    prevRange ? fetchScoreStats(cid, prevRange.fromIso, prevRange.toIso) : Promise.resolve<ScoreStats | null>(null),
+    fetchScoreStats(cid, range?.fromIso, range?.toIso, solution),
+    prevRange ? fetchScoreStats(cid, prevRange.fromIso, prevRange.toIso, solution) : Promise.resolve<ScoreStats | null>(null),
   ])
 
   const passRate = (s: ScoreStats) => s.total > 0 ? Math.round((s.passed / s.total) * 1000) / 10 : null
@@ -277,6 +347,7 @@ export async function rolplayAppResults(
   clientId: number,
   limit: number,
   range?: { fromIso: string; toIso: string },
+  solution?: string | null,
 ): Promise<ResultsApiResponse> {
   const cid = Math.trunc(clientId)
   const lim = Math.max(1, Math.min(200, Math.trunc(limit)))
@@ -288,7 +359,7 @@ export async function rolplayAppResults(
   }>(
     `SELECT s.ID AS id, s.simulator_id, s.date_created, ${SCORE_SQL} AS sc
        FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
-      WHERE u.client_id = ${cid}${dateClause(range?.fromIso, range?.toIso)}
+      WHERE u.client_id = ${cid}${dateClause(range?.fromIso, range?.toIso)}${categoryClause(solution)}
       ORDER BY s.date_created DESC
       LIMIT ${lim}`,
   ).catch(() => [])
@@ -313,6 +384,7 @@ export async function rolplayAppResults(
 export async function rolplayAppTrends(
   clientId: number,
   range?: { fromIso: string; toIso: string },
+  solution?: string | null,
 ): Promise<TrendsApiResponse> {
   const cid = Math.trunc(clientId)
   const dc = dateClause(range?.fromIso, range?.toIso)
@@ -322,7 +394,7 @@ export async function rolplayAppTrends(
             SUM(CASE WHEN sc >= ${PASS_THRESHOLD} THEN 1 ELSE 0 END) AS passed
        FROM (SELECT DATE(s.date_created) AS day, ${SCORE_SQL} AS sc
                FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
-              WHERE u.client_id = ${cid}${dc}) t
+              WHERE u.client_id = ${cid}${dc}${categoryClause(solution)}) t
       GROUP BY day ORDER BY day`,
   ).catch(() => [])
 
@@ -333,7 +405,7 @@ export async function rolplayAppTrends(
   const buckets = await remoteSelect<{ bucket: number | string; count: number | string }>(
     `SELECT LEAST(FLOOR(sc/10)*10,90) AS bucket, COUNT(*) AS count
        FROM (SELECT ${SCORE_SQL} AS sc FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
-              WHERE u.client_id = ${cid}${dc}) t
+              WHERE u.client_id = ${cid}${dc}${categoryClause(solution)}) t
       WHERE sc IS NOT NULL GROUP BY bucket ORDER BY bucket`,
   ).catch(() => [])
   const totalScored = buckets.reduce((s, b) => s + Number(b.count), 0) || 1
@@ -349,6 +421,7 @@ export async function rolplayAppTrends(
 export async function rolplayAppUsecaseBreakdown(
   clientId: number,
   range?: { fromIso: string; toIso: string },
+  solution?: string | null,
 ): Promise<UsecaseBreakdownApiResponse> {
   const cid = Math.trunc(clientId)
   const dc = dateClause(range?.fromIso, range?.toIso)
@@ -358,7 +431,7 @@ export async function rolplayAppUsecaseBreakdown(
             SUM(CASE WHEN (${SCORE_SQL}) >= ${PASS_THRESHOLD} THEN 1 ELSE 0 END) AS passed
        FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
        LEFT JOIN r_simulator sim ON sim.ID = s.simulator_id
-      WHERE u.client_id = ${cid}${dc}
+      WHERE u.client_id = ${cid}${dc}${categoryClause(solution)}
       GROUP BY s.simulator_id, sim.name ORDER BY total DESC`,
   ).catch(() => [])
 
@@ -382,6 +455,7 @@ export async function rolplayAppBestPerformers(
   clientId: number,
   limit: number,
   range?: { fromIso: string; toIso: string },
+  solution?: string | null,
 ): Promise<BestPerformersApiResponse> {
   const cid = Math.trunc(clientId)
   const lim = Math.max(1, Math.min(50, Math.trunc(limit)))
@@ -391,7 +465,7 @@ export async function rolplayAppBestPerformers(
             COUNT(*) AS sessions, ROUND(AVG(${SCORE_SQL}),2) AS avg,
             SUM(CASE WHEN (${SCORE_SQL}) >= ${PASS_THRESHOLD} THEN 1 ELSE 0 END) AS passed
        FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
-      WHERE u.client_id = ${cid}${dc}
+      WHERE u.client_id = ${cid}${dc}${categoryClause(solution)}
       GROUP BY u.ID, u.email, u.name
       HAVING COUNT(${SCORE_SQL}) > 0
       ORDER BY avg DESC, sessions DESC

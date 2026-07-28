@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
       const clientId = await resolveRolplayAppAccess(ctx.email)
       if (!clientId) return buildApiError('Rolplay-app client could not be resolved', 500)
       source = `rolplay-app-${clientId}`
-      fetchTrends = (from, to) => rolplayAppTrends(clientId, { fromIso: from.toISOString(), toIso: to.toISOString() })
+      fetchTrends = (from, to) => rolplayAppTrends(clientId, { fromIso: from.toISOString(), toIso: to.toISOString() }, solution)
     } else {
       const idsParam = sp.get('usecaseIds')
       const usecaseIds = idsParam

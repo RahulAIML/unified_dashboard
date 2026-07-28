@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
       if (!clientId) return buildApiError('Rolplay-app client could not be resolved', 500)
       const data = await rolplayAppOverview(clientId, {
         fromIso: range.from.toISOString(), toIso: range.to.toISOString(),
-      })
+      }, solution)
       return buildSuccess(data, {
         from: range.from.toISOString(), to: range.to.toISOString(),
         source: `rolplay-app-${clientId}`,
