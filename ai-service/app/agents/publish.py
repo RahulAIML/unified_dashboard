@@ -78,14 +78,33 @@ async def run(cfg: DashboardConfig, domains: list[str], log: LogFn) -> bool:
         # real logins immediately, no deploy.
         client_id = cfg.connector_handle.get("client_id")
         domain = (domains or [None])[0]
+        # Zero-config: if no domain was supplied, derive it from the client's own
+        # users (the most common non-shared email domain in r_user). This is what
+        # makes publishing work for a BRAND-NEW client without anyone typing a
+        # domain — the data itself tells us how their people log in.
+        if client_id and not domain:
+            domain = await _derive_domain(int(client_id))
+            if domain:
+                await log("publish", "info", f"Domain not provided — derived '{domain}' from the client's users")
         if not client_id:
             await log("publish", "warn", "Config stored, but no client_id on the connector — logins cannot be routed")
         elif not domain:
             await log("publish", "warn",
-                      f"Config stored for client_id={client_id}, but no company domain was provided — "
-                      "logins cannot be routed. Re-publish with the client's email domain.")
+                      f"Config stored for client_id={client_id}, but no company domain could be determined "
+                      "(client has no users with a company email yet) — logins cannot be routed.")
         else:
             try:
+                # Idempotent so publishing works even if migration 005 hasn't been
+                # run — a new client must never fail to go live for that reason.
+                await pool.execute(
+                    """CREATE TABLE IF NOT EXISTS rolplay_app_domains (
+                         domain TEXT PRIMARY KEY,
+                         client_id INTEGER NOT NULL,
+                         display_name TEXT,
+                         is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())"""
+                )
                 await pool.execute(
                     """INSERT INTO rolplay_app_domains (domain, client_id, display_name, is_active, updated_at)
                        VALUES ($1,$2,$3,TRUE,NOW())
@@ -103,6 +122,39 @@ async def run(cfg: DashboardConfig, domains: list[str], log: LogFn) -> bool:
     else:
         await log("publish", "success", f"Config published for '{cfg.slug}' (rendered from metadata)")
     return True
+
+
+# Shared/staff and generic domains can belong to several clients, so they must
+# never be used to route a client's logins.
+_NON_ROUTABLE_DOMAINS = {
+    "audioweb.com.mx",  # shared staff domain (spans Takeda/M8/Rowe)
+    "gmail.com", "hotmail.com", "outlook.com", "yahoo.com", "icloud.com",
+    "protonmail.com", "live.com", "aol.com", "example.com", "test.com", "mail.com",
+}
+
+
+async def _derive_domain(client_id: int) -> str | None:
+    """Most common company email domain among the client's real users, so a new
+    client can be published without anyone typing a domain."""
+    from ..config import get_settings
+    from ..http import post_json
+
+    sql = (
+        "SELECT SUBSTRING_INDEX(email,'@',-1) AS domain, COUNT(*) AS n "
+        "FROM r_user "
+        f"WHERE client_id={int(client_id)} AND email LIKE '%@%' "
+        "GROUP BY domain ORDER BY n DESC LIMIT 10"
+    )
+    try:
+        _, body = await post_json(get_settings().rolplay_app_sql_url, {"sql": sql})
+        rows = (body or {}).get("data", []) if isinstance(body, dict) else []
+    except Exception:
+        return None
+    for r in rows:
+        d = str(r.get("domain") or "").lower().strip()
+        if d and d not in _NON_ROUTABLE_DOMAINS:
+            return d
+    return None
 
 
 def _bridge_url(cfg: DashboardConfig) -> str:
