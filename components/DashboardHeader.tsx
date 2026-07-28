@@ -6,6 +6,7 @@ import { Calendar, Filter, RefreshCw } from "lucide-react"
 import { useDashboardStore } from "@/lib/store"
 import { useLangStore, useT } from "@/lib/lang-store"
 import { useClientBrand } from "@/lib/hooks/useClientBrand"
+import { useAvailableModules } from "@/lib/hooks/useAvailableModules"
 import { DateRangePicker } from "@/components/DateRangePicker"
 import { cn } from "@/lib/utils"
 import type { Module } from "@/lib/types"
@@ -37,13 +38,19 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
   const t = useT()
   const brand = useClientBrand()
 
-  const MODULES: { id: Module; label: string }[] = [
+  // Dynamic render: only the modules this tenant actually has. A client who
+  // contracted e.g. Second Brain + Simulator sees just those two.
+  const { modules: availableModules } = useAvailableModules()
+
+  const ALL_MODULE_OPTIONS: { id: Module; label: string }[] = [
     { id: "lms",           label: t.moduleLms           },
     { id: "coach",         label: t.moduleCoach         },
     { id: "simulator",     label: t.moduleSimulator     },
     { id: "certification", label: t.moduleCertification },
     { id: "second-brain",  label: t.moduleSecondBrain   },
   ]
+  const MODULES: { id: Module; label: string }[] =
+    ALL_MODULE_OPTIONS.filter(m => availableModules.includes(m.id))
 
   const [activeDays, setActiveDays] = useState<number | "custom">(ALL_TIME_DAYS)
   const [refreshing, setRefreshing] = useState(false)

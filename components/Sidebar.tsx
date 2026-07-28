@@ -16,6 +16,8 @@ import { useClientBrand } from "@/lib/hooks/useClientBrand"
 import { usePlatformName } from "@/lib/hooks/usePlatformName"
 import { useAuthContext } from "./AuthProvider"
 import { useApi } from "@/lib/hooks/useApi"
+import { useAvailableModules } from "@/lib/hooks/useAvailableModules"
+import type { Module } from "@/lib/types"
 
 // Minimal capability shape from /api/auth/access-status (only the flag we need).
 interface AccessCaps { hasPharmaAccess?: boolean; hasCoachData?: boolean; hasBancoAccess?: boolean }
@@ -70,6 +72,10 @@ export function Sidebar() {
   // actually have that data (e.g. Conversational needs pharma objection data).
   const { data: access } = useApi<AccessCaps>(user ? "/api/auth/access-status" : null)
 
+  // Dynamic render: which solution pages this tenant actually has.
+  const { modules: availableModules } = useAvailableModules()
+  const hasModule = (m: string) => availableModules.includes(m as Module)
+
   // Close on Escape + prevent background scroll when open (mobile)
   useEffect(() => {
     if (!mobileOpen) return
@@ -108,9 +114,11 @@ export function Sidebar() {
   // (e.g. manually deactivating a tenant), just not surfaced in client nav.
   const nav = [
     { href: "/",              label: t.navOverview,      icon: LayoutDashboard },
-    { href: "/lms",           label: t.navLms,           icon: BookOpen        },
-    { href: "/coach",         label: t.navCoach,         icon: BrainCircuit    },
-    { href: "/simulator",     label: t.navSimulator,     icon: Gamepad2        },
+    // Solution pages render only for modules this tenant actually has, so a
+    // client never lands on an empty module page. Overview/Settings always show.
+    ...(hasModule('lms')           ? [{ href: "/lms",           label: t.navLms,        icon: BookOpen     }] : []),
+    ...(hasModule('coach')         ? [{ href: "/coach",         label: t.navCoach,      icon: BrainCircuit }] : []),
+    ...(hasModule('simulator')     ? [{ href: "/simulator",     label: t.navSimulator,  icon: Gamepad2     }] : []),
     // Activities works for any tenant with per-activity analytics data.
     ...((access?.hasCoachData || access?.hasPharmaAccess || access?.hasBancoAccess)
       ? [{ href: "/activities", label: t.navActivities, icon: Activity }] : []),
@@ -121,8 +129,8 @@ export function Sidebar() {
       { href: "/business-lines", label: t.navBusinessLines,  icon: GitBranch     },
       { href: "/organization",   label: t.navOrganization,   icon: Building2     },
     ] : []),
-    { href: "/certification", label: t.navCertification, icon: BadgeCheck      },
-    { href: "/second-brain",  label: t.navSecondBrain,   icon: Database        },
+    ...(hasModule('certification')  ? [{ href: "/certification", label: t.navCertification, icon: BadgeCheck }] : []),
+    ...(hasModule('second-brain')   ? [{ href: "/second-brain",  label: t.navSecondBrain,   icon: Database   }] : []),
     ...((access?.hasCoachData || access?.hasPharmaAccess || access?.hasBancoAccess)
       ? [{ href: "/reports", label: t.navReports, icon: FileText }] : []),
     { href: "/settings",      label: t.navSettings,      icon: Settings        },
