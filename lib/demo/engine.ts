@@ -418,3 +418,81 @@ export function demoObjections(from: Date, to: Date) {
   data.sort((a, b) => a.passRate - b.passRate)
   return { data }
 }
+
+// ── LMS ───────────────────────────────────────────────────────────────────────
+/**
+ * LMS demo data. Deliberately NOT built from demoOverview(): an LMS measures
+ * course progress (enrolled / completed / quiz score), not evaluation sessions.
+ * Reusing the evaluation numbers here is exactly the Simulator-relabelled-as-LMS
+ * problem this module exists to avoid.
+ */
+export function demoLms(from: Date, to: Date) {
+  const days = daysBetween(from, to)
+  const rng  = seededRng(dateToSeed(from, to, solutionSalt('lms')) + 23)
+
+  const COURSES = [
+    'Inducción Comercial',
+    'Producto: Portafolio Cardiovascular',
+    'Técnicas de Visita Médica',
+    'Normativa y Compliance Farmacéutico',
+    'Manejo de Objeciones Avanzado',
+  ]
+
+  const learners = 60 + Math.floor(rng() * 40)
+
+  let totalEnrollments = 0
+  let totalCompleted   = 0
+  let scoreSum = 0
+  let scoreN   = 0
+
+  const courses = COURSES.map((name, i) => {
+    const enrolled  = 20 + Math.floor(rng() * 45)
+    const rate      = 0.42 + rng() * 0.45
+    const completed = Math.round(enrolled * rate)
+    const avgScore  = Math.round((74 + rng() * 16) * 10) / 10
+
+    totalEnrollments += enrolled
+    totalCompleted   += completed
+    scoreSum += avgScore
+    scoreN   += 1
+
+    return {
+      courseId: `demo-course-${i + 1}`,
+      name,
+      enrolled,
+      completed,
+      inProgress: Math.max(0, enrolled - completed - Math.round(enrolled * 0.2)),
+      completionRate: Math.round((completed / enrolled) * 1000) / 10,
+      avgScore,
+    }
+  })
+
+  // Completions accrue over the selected window.
+  const completionTrend = Array.from({ length: days }, (_, d) => {
+    const date = new Date(from)
+    date.setDate(date.getDate() + d)
+    return {
+      date:  date.toISOString().slice(0, 10),
+      value: Math.max(0, Math.round((totalCompleted / days) * (0.5 + rng()))),
+    }
+  })
+
+  const inProgress = courses.reduce((n, c) => n + c.inProgress, 0)
+
+  return {
+    configured:       true,
+    enrolledUsers:    learners,
+    totalUsers:       learners + 8,
+    totalEnrollments,
+    totalCourses:     courses.length,
+    modulesCompleted: totalCompleted,
+    inProgress,
+    notStarted:       Math.max(0, totalEnrollments - totalCompleted - inProgress),
+    completionRate:   Math.round((totalCompleted / totalEnrollments) * 1000) / 10,
+    // Demo shows a graded school so the scored path is exercised too.
+    avgQuizScore:     Math.round((scoreSum / scoreN) * 10) / 10,
+    hasScoreData:     true,
+    completionTrend,
+    courses,
+  }
+}

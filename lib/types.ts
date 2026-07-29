@@ -340,3 +340,52 @@ export interface LmsModuleRow {
   completed: number
   avgScore: number | null
 }
+
+/* ---------------------------------------------------------------------------
+ * LMS (LearnWorlds) — real API contract for GET /api/dashboard/lms
+ *
+ * Distinct from LmsData above (which carries KpiCard objects for the mock
+ * layer). An LMS measures course progress — enrolled / completed / quiz score
+ * — NOT evaluation sessions. Keeping this contract separate from
+ * OverviewApiResponse is what stops Simulator numbers being relabelled as LMS.
+ * Nullable metrics mean "no data upstream", never zero.
+ * ------------------------------------------------------------------------- */
+
+export interface LmsCourseRow {
+  courseId:       string
+  name:           string
+  enrolled:       number
+  completed:      number
+  inProgress:     number
+  completionRate: number | null
+  avgScore:       number | null
+}
+
+export interface LmsApiResponse {
+  /** False when this tenant has no LMS configured — UI must show an empty state. */
+  configured:       boolean
+  /** Learners with at least one course enrollment (current state). */
+  enrolledUsers:    number
+  /** All users on the school, enrolled or not. */
+  totalUsers:       number
+  /** Enrollments = user x course pairs, across every status. */
+  totalEnrollments: number
+  totalCourses:     number
+  modulesCompleted: number
+  inProgress:       number
+  notStarted:       number
+  /** Percent 0-100. Null when there are no enrollments to divide by. */
+  completionRate:   number | null
+  /**
+   * Percent 0-100, or null when the school has no graded assessments.
+   * LearnWorlds returns average_score_rate = 0 for ungraded courses, which is
+   * indistinguishable from a real zero — so only positive values are averaged
+   * and `hasScoreData` says whether any grade exists. Rendering a flat 0 would
+   * misreport "never graded" as "everyone failed".
+   */
+  avgQuizScore:     number | null
+  hasScoreData:     boolean
+  /** Completions per day, filtered to the selected range. */
+  completionTrend:  ApiTrendPoint[]
+  courses:          LmsCourseRow[]
+}

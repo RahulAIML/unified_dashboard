@@ -87,6 +87,20 @@ export interface TenantConfig {
   hasOrganization?: boolean
   /** True only where sim.topstats (all-time leaderboard) is confirmed present (Sanfer). */
   hasTopStats?: boolean
+  /**
+   * True where the tenant has a real LMS (LearnWorlds) with its own course
+   * catalog. LMS data comes from lib/lms-learnworlds.ts via LMS_* env credentials
+   * (or LMS_<TENANT>_* for a tenant-specific school) — NOT from the pharma
+   * bridge, which has no course/enrollment concept at all.
+   */
+  hasLms?: boolean
+  /**
+   * True where the tenant has practice-simulation sessions. Defaults to true
+   * for bridge tenants (every pharma bridge exposes sim data), but must be
+   * settable to false so an LMS-only client does not get a Simulator tab
+   * populated with data it does not have.
+   */
+  hasSimulator?: boolean
   /** Extra header to send when this tenant's endpoint lives on a different server and needs its own auth. */
   authHeaderName?: string
   authHeaderValue?: string
