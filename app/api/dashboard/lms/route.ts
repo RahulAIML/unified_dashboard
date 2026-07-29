@@ -16,7 +16,7 @@ import { buildSuccess, buildApiError, parseDateRange } from '@/lib/api-utils'
 import { getAuthContextFromRequest } from '@/lib/server-auth'
 import { resolveOrgType } from '@/lib/org-type'
 import { resolvePharmaTenant } from '@/lib/pharma-tenant'
-import { lmsDashboard } from '@/lib/lms-learnworlds'
+import { lmsDashboard, lmsEnvPrefix } from '@/lib/lms-learnworlds'
 import { useDemoData } from '@/lib/demo'
 import { demoLms } from '@/lib/demo/engine'
 
@@ -41,9 +41,29 @@ export async function GET(request: NextRequest) {
     const tenantKey = orgType === 'pharma' ? await resolvePharmaTenant(ctx.email) : null
 
     const data = await lmsDashboard(tenantKey, from, to)
+
+    // Name the exact env vars that were looked for and did not resolve. Without
+    // this, an unconfigured LMS is indistinguishable from a misnamed variable or
+    // a tenant key that is not what you assumed — which is exactly the guessing
+    // this endpoint should make unnecessary. Values are never logged.
+    if (!data.configured) {
+      const prefix = tenantKey ? lmsEnvPrefix(tenantKey) : 'LMS'
+      console.warn(
+        `[/api/dashboard/lms] not configured for tenantKey=${tenantKey ?? '(none)'} ` +
+        `orgType=${orgType}. Looked for ${prefix}_API_URL plus either ` +
+        `${prefix}_ACCESS_TOKEN or (${prefix}_CLIENT_ID and ${prefix}_CLIENT_SECRET). ` +
+        `Present: ${['API_URL', 'ACCESS_TOKEN', 'CLIENT_ID', 'CLIENT_SECRET']
+          .map(s => `${s}=${process.env[`${prefix}_${s}`] ? 'yes' : 'no'}`)
+          .join(' ')}`,
+      )
+    }
+
     return buildSuccess(data, {
       source: data.configured ? `lms-${tenantKey ?? 'default'}` : 'lms-not-configured',
       orgType,
+      // Surfaced so the tenant key can be confirmed from the response itself.
+      tenantKey: tenantKey ?? null,
+      lmsEnvPrefix: tenantKey ? lmsEnvPrefix(tenantKey) : 'LMS',
     })
   } catch (err) {
     console.error('[/api/dashboard/lms]', err)

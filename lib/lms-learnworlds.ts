@@ -87,13 +87,25 @@ export const EMPTY_LMS: LmsApiResponse = {
  * school's data to every tenant that asks. Callers resolving a specific tenant
  * must pass it, so a tenant sees an LMS only when LMS_<TENANT>_* exists for it.
  */
+/**
+ * Tenant key → env-var fragment.
+ *
+ * Env var names cannot contain hyphens or dots, but tenant keys can ('apotex-mx',
+ * 'itf.labomed'), and such a key would produce a name like LMS_APOTEX-MX_API_URL
+ * that is impossible to set — so the lookup would silently always miss. Everything
+ * outside [A-Z0-9] becomes '_'.
+ */
+export function lmsEnvPrefix(tenantKey: string): string {
+  return `LMS_${tenantKey.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}`
+}
+
 function envFor(
   tenantKey: string | null,
   suffix: string,
   requireScoped = false,
 ): string | undefined {
   if (tenantKey) {
-    const scoped = process.env[`LMS_${tenantKey.toUpperCase()}_${suffix}`]
+    const scoped = process.env[`${lmsEnvPrefix(tenantKey)}_${suffix}`]
     if (scoped) return scoped
     if (requireScoped) return undefined
   }
