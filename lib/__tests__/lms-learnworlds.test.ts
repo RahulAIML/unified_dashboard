@@ -108,9 +108,16 @@ beforeEach(() => {
   for (const k of Object.keys(process.env)) {
     if (k.startsWith('LMS_')) delete process.env[k]
   }
+  // Shared fallback, used by the null-tenant and precedence cases.
   process.env.LMS_API_URL = ORIGIN
   process.env.LMS_CLIENT_ID = 'cid'
   process.env.LMS_CLIENT_SECRET = 'secret'
+  // Apotex is configured the way a real tenant is: its OWN scoped credentials.
+  // lmsDashboard() requires scoped credentials for a named tenant, so shared
+  // vars alone would (correctly) resolve to EMPTY_LMS and test nothing.
+  process.env.LMS_APOTEX_API_URL = ORIGIN
+  process.env.LMS_APOTEX_CLIENT_ID = 'cid'
+  process.env.LMS_APOTEX_CLIENT_SECRET = 'secret'
 })
 
 afterEach(() => {
@@ -120,6 +127,7 @@ afterEach(() => {
 describe('resolveLmsCredentials', () => {
   it('returns null when no URL is configured, so callers render an empty state', async () => {
     delete process.env.LMS_API_URL
+    delete process.env.LMS_APOTEX_API_URL
     const { resolveLmsCredentials } = await freshModule()
     expect(resolveLmsCredentials('apotex')).toBeNull()
   })
@@ -149,6 +157,43 @@ describe('resolveLmsCredentials', () => {
     const { resolveLmsCredentials } = await freshModule()
     expect(resolveLmsCredentials('apotex')?.origin).toBe('https://apotex.learnworlds.com')
     expect(resolveLmsCredentials('sanfer')?.origin).toBe(ORIGIN)
+  })
+
+  describe('requireScoped', () => {
+    it('resolves a tenant that has its own scoped credentials', async () => {
+      process.env.LMS_APOTEX_API_URL = 'https://apotex.learnworlds.com'
+      process.env.LMS_APOTEX_CLIENT_ID = 'a-cid'
+      process.env.LMS_APOTEX_CLIENT_SECRET = 'a-secret'
+      const { hasLmsCredentials } = await freshModule()
+
+      expect(hasLmsCredentials('apotex', { requireScoped: true })).toBe(true)
+    })
+
+    it('refuses to fall back to shared credentials for a named tenant', async () => {
+      // Only shared LMS_* is set (from beforEach). Without requireScoped, EVERY
+      // tenant would inherit this one school — a cross-tenant data leak.
+      const { hasLmsCredentials } = await freshModule()
+
+      expect(hasLmsCredentials('sanfer')).toBe(true)
+      expect(hasLmsCredentials('sanfer', { requireScoped: true })).toBe(false)
+    })
+
+    it('will not mix a scoped URL with a shared secret', async () => {
+      // A half-configured tenant must not silently borrow the other half.
+      delete process.env.LMS_APOTEX_CLIENT_ID
+      delete process.env.LMS_APOTEX_CLIENT_SECRET
+      process.env.LMS_APOTEX_API_URL = 'https://apotex.learnworlds.com'
+      const { resolveLmsCredentials } = await freshModule()
+
+      expect(resolveLmsCredentials('apotex', { requireScoped: true })).toBeNull()
+    })
+
+    it('still allows shared credentials when there is no tenant key', async () => {
+      // Single-tenant deployments configure bare LMS_* and have no tenant key.
+      const { hasLmsCredentials } = await freshModule()
+
+      expect(hasLmsCredentials(null, { requireScoped: true })).toBe(true)
+    })
   })
 })
 

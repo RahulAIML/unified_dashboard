@@ -80,10 +80,22 @@ export const EMPTY_LMS: LmsApiResponse = {
   courses: [],
 }
 
-function envFor(tenantKey: string | null, suffix: string): string | undefined {
+/**
+ * `requireScoped` forbids the shared LMS_* fallback for a named tenant.
+ *
+ * Multi-tenant safety: without it, setting bare LMS_API_URL would hand ONE
+ * school's data to every tenant that asks. Callers resolving a specific tenant
+ * must pass it, so a tenant sees an LMS only when LMS_<TENANT>_* exists for it.
+ */
+function envFor(
+  tenantKey: string | null,
+  suffix: string,
+  requireScoped = false,
+): string | undefined {
   if (tenantKey) {
     const scoped = process.env[`LMS_${tenantKey.toUpperCase()}_${suffix}`]
     if (scoped) return scoped
+    if (requireScoped) return undefined
   }
   return process.env[`LMS_${suffix}`]
 }
@@ -91,12 +103,24 @@ function envFor(tenantKey: string | null, suffix: string): string | undefined {
 /**
  * Resolve credentials for a tenant, or null when the LMS is not configured —
  * callers must render an empty state, never invent numbers.
+ *
+ * With `requireScoped`, the presence of tenant-scoped credentials is the ONLY
+ * signal that a tenant has an LMS. That is deliberate: capability flags like
+ * TenantConfig.hasLms cannot serve as the gate, because a tenant defined purely
+ * by a pharma_tenants DB row has no static config to read a flag from and the
+ * table has no has_lms column — making the flag unreachable for exactly the
+ * self-service tenants the builder creates. Credentials, by contrast, always
+ * exist wherever the LMS genuinely does.
  */
-export function resolveLmsCredentials(tenantKey: string | null): LmsCredentials | null {
-  const rawUrl = envFor(tenantKey, 'API_URL')
-  const clientId = envFor(tenantKey, 'CLIENT_ID')
-  const clientSecret = envFor(tenantKey, 'CLIENT_SECRET')
-  const accessToken = envFor(tenantKey, 'ACCESS_TOKEN')
+export function resolveLmsCredentials(
+  tenantKey: string | null,
+  opts: { requireScoped?: boolean } = {},
+): LmsCredentials | null {
+  const { requireScoped = false } = opts
+  const rawUrl = envFor(tenantKey, 'API_URL', requireScoped)
+  const clientId = envFor(tenantKey, 'CLIENT_ID', requireScoped)
+  const clientSecret = envFor(tenantKey, 'CLIENT_SECRET', requireScoped)
+  const accessToken = envFor(tenantKey, 'ACCESS_TOKEN', requireScoped)
 
   if (!rawUrl) return null
   // A static token alone is enough to read; otherwise we need the client pair.
@@ -114,8 +138,11 @@ export function resolveLmsCredentials(tenantKey: string | null): LmsCredentials 
   return { origin, clientId: clientId ?? '', clientSecret: clientSecret ?? '', accessToken }
 }
 
-export function hasLmsCredentials(tenantKey: string | null): boolean {
-  return resolveLmsCredentials(tenantKey) !== null
+export function hasLmsCredentials(
+  tenantKey: string | null,
+  opts: { requireScoped?: boolean } = {},
+): boolean {
+  return resolveLmsCredentials(tenantKey, opts) !== null
 }
 
 // ---------------------------------------------------------------------------
@@ -258,7 +285,10 @@ export async function lmsDashboard(
   from: Date,
   to: Date,
 ): Promise<LmsApiResponse> {
-  const creds = resolveLmsCredentials(tenantKey)
+  // requireScoped must match the gate in /api/dashboard/modules exactly. If the
+  // tab is shown on scoped credentials but the data resolved via the shared
+  // LMS_* fallback, a tenant could be shown another tenant's school.
+  const creds = resolveLmsCredentials(tenantKey, { requireScoped: true })
   if (!creds) return EMPTY_LMS
 
   const fromKey = from.toISOString().slice(0, 10)

@@ -71,16 +71,20 @@ export async function GET(request: NextRequest) {
     // so a rolplay-app tenant could never show it no matter how its credentials
     // were configured. Do not move this back inside a branch.
     //
-    // Credentials are the authority: a pharma tenant must ALSO declare hasLms
-    // (so a shared LMS_* fallback cannot light up the tab for every pharma
-    // client at once), while any other org type is governed purely by whether
-    // LMS_<TENANT>_*/LMS_* actually resolve. No credentials → no tab, so the
-    // page never opens onto an empty state that reads as an outage.
+    // CREDENTIALS ARE THE ONLY GATE, and for a named tenant they must be
+    // tenant-scoped (LMS_<TENANT>_*). requireScoped is what keeps this safe in a
+    // multi-tenant dashboard: a bare LMS_* would otherwise show one school's
+    // data to every tenant.
+    //
+    // TenantConfig.hasLms is deliberately NOT consulted. It cannot work as a
+    // gate: a tenant defined solely by a pharma_tenants row (every tenant the
+    // builder onboards) has no static config to hold the flag, and the table has
+    // no has_lms column — so the flag reads false for precisely the tenants that
+    // most need it. Requiring it is what kept Apotex's tab hidden after its
+    // credentials were correct. Credentials cannot go missing where the LMS is
+    // real, which makes them the honest signal.
     const lmsTenant = orgType === 'pharma' ? await resolvePharmaTenant(ctx.email) : null
-    const lmsDeclared = orgType === 'pharma'
-      ? Boolean(lmsTenant && TENANT_CONFIG[lmsTenant]?.hasLms)
-      : true
-    if (lmsDeclared && hasLmsCredentials(lmsTenant)) modules.add('lms')
+    if (hasLmsCredentials(lmsTenant, { requireScoped: true })) modules.add('lms')
 
     // Second Brain is independent of the above: it resolves only if the tenant
     // has its OWN Second Brain org on the dedicated API.
