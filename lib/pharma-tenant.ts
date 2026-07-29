@@ -300,6 +300,14 @@ async function loadDynamicTenants(): Promise<void> {
       hasOrganization:  t.hasOrganization  || (prev?.hasOrganization  ?? false),
       hasTopStats:      t.hasTopStats       || (prev?.hasTopStats      ?? false),
       coachActivityIds: t.coachActivityIds ?? prev?.coachActivityIds ?? undefined,
+      // hasLms / hasSimulator have NO pharma_tenants column yet (see
+      // migrations/003), so there is no DB value to OR against — they must be
+      // carried straight through or a DB row silently drops them, hiding
+      // Apotex's LMS tab. When a has_lms column lands, OR it in like the rest.
+      hasLms: prev?.hasLms ?? false,
+      // undefined means "on" (the gate tests `!== false`), so preserve undefined
+      // rather than defaulting — and let an explicit false survive too.
+      hasSimulator: prev?.hasSimulator,
       authHeaderName: t.authHeaderName ?? undefined,
       authHeaderValue: t.authHeaderValue ?? undefined,
     }
