@@ -1,22 +1,35 @@
 "use client"
 
 import { useMemo } from "react"
-import { TrendingUp, AlertTriangle, Lightbulb } from "lucide-react"
+import { TrendingUp, AlertTriangle, Lightbulb, Gamepad2, CheckCircle, Star, Target } from "lucide-react"
 import { DashboardHeader } from "@/components/DashboardHeader"
 import { DataTable, type Column } from "@/components/DataTable"
 import { ExportButton } from "@/components/ExportButton"
+import { SummaryCard } from "@/components/SummaryCard"
+import { ChartCard } from "@/components/ChartCard"
+import { ActivityLineChart } from "@/components/charts/ActivityLineChart"
 import { useDashboardStore } from "@/lib/store"
 import { useT } from "@/lib/lang-store"
 import { useApi, buildApiUrl } from "@/lib/hooks/useApi"
+import { useClientBrand } from "@/lib/hooks/useClientBrand"
 import { calcDeltaPct } from "@/lib/kpi-builder"
 import { csvFilename } from "@/lib/csv-export"
 import { cn } from "@/lib/utils"
 import type {
+  OverviewApiResponse,
+  TrendsApiResponse,
   UsecaseBreakdownApiResponse,
   BestPerformersApiResponse,
   ObjectionsApiResponse,
   ObjectionRow,
 } from "@/lib/types"
+
+const kpiIcons = [
+  <Gamepad2    key="g" className="w-4 h-4" />,
+  <CheckCircle key="c" className="w-4 h-4" />,
+  <Star        key="s" className="w-4 h-4" />,
+  <Target      key="t" className="w-4 h-4" />,
+]
 
 function ErrorBanner({ message }: { message: string }) {
   return (
@@ -53,24 +66,71 @@ function PassRateBar({ value }: { value: number }) {
 export default function CoachPage() {
   const { dateRange, refreshKey } = useDashboardStore()
   const t = useT()
+  const brand = useClientBrand()
 
+  const overviewUrl    = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to, { solution: "coach", rk: refreshKey })
+  const trendsUrl      = buildApiUrl("/api/dashboard/trends",   dateRange.from, dateRange.to, { solution: "coach", rk: refreshKey })
   const ucUrl          = buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to, { solution: "coach", rk: refreshKey })
   const bestUrl        = buildApiUrl("/api/dashboard/best-performers",   dateRange.from, dateRange.to, { limit: 50, solution: "coach", rk: refreshKey })
   const objectionsUrl  = buildApiUrl("/api/dashboard/objections", dateRange.from, dateRange.to, { rk: refreshKey })
 
+  const { data: overview, loading: overviewLoading, error: overviewError } = useApi<OverviewApiResponse>(overviewUrl)
+  const { data: trends,   loading: trendsLoading }           = useApi<TrendsApiResponse>(trendsUrl)
   const { data: ucBreakdown,    loading: ucLoading }         = useApi<UsecaseBreakdownApiResponse>(ucUrl)
   const { data: bestPerformers, loading: bestLoading, error: bestError } = useApi<BestPerformersApiResponse>(bestUrl)
   const { data: objections,     loading: objectionsLoading } = useApi<ObjectionsApiResponse>(objectionsUrl)
 
   const loading = ucLoading || bestLoading
   const hasData = (bestPerformers?.data?.length ?? 0) > 0 || (ucBreakdown?.data?.length ?? 0) > 0
+  const days = Math.round((dateRange.to.getTime() - dateRange.from.getTime()) / 86_400_000)
 
-  // Same underlying session data as Simulator — this page deliberately does
-  // NOT repeat those headline totals (that read as "the dashboard is broken,
-  // every tab looks the same"). Instead it surfaces coaching-actionable
-  // insights derived from the same rows, matching the real Sanfer product's
-  // own Coaching page (top performers / improvement areas / focus areas),
-  // not a second copy of the KPI tiles.
+  // Master Coach is a SIMULATOR VARIANT, not an advice product: in the platform
+  // schema it is r_simulator.category = 'COACH', so it produces scored practice
+  // sessions exactly like SIM does. It therefore gets the same session metrics.
+  //
+  // This page previously omitted them on purpose, reasoning that repeating
+  // headline totals would make every tab look identical. That worry does not
+  // apply: every request here is scoped to solution=coach, so these are
+  // coach-only figures, NOT the Simulator numbers repeated. Showing a scored
+  // module with no scores was the bigger problem — it made a practice module
+  // read as a page of advice.
+  //
+  // The coaching insights below are kept: they are still the actionable part,
+  // now sitting under the module's actual performance rather than standing in
+  // for it.
+  const kpis = useMemo(() => {
+    if (!overview || overview.totalEvaluations === 0) return []
+    return [
+      {
+        label: "Total Sessions", labelKey: "totalSessions" as const,
+        value: overview.totalEvaluations,
+        delta: calcDeltaPct(overview.totalEvaluations, overview.prevTotalEvaluations),
+        tier: "A" as const,
+      },
+      {
+        label: "Pass Rate", labelKey: "passRate" as const,
+        value: overview.passRate ?? 0, unit: "%",
+        delta: calcDeltaPct(overview.passRate ?? 0, overview.prevPassRate ?? 0),
+        tier: "B" as const,
+      },
+      {
+        label: "Avg Score", labelKey: "avgScore" as const,
+        value: overview.avgScore ?? 0, unit: "pts",
+        delta: calcDeltaPct(overview.avgScore ?? 0, overview.prevAvgScore ?? 0),
+        tier: "B" as const,
+      },
+      {
+        label: "Successful Sessions", labelKey: "successfulSessions" as const,
+        value: overview.passedEvaluations,
+        delta: calcDeltaPct(overview.passedEvaluations, overview.prevTotalEvaluations),
+        tier: "A" as const,
+      },
+    ]
+  }, [overview])
+
+  const activityData   = useMemo(() => trends?.evalCountTrend ?? [], [trends])
+  const scoreTrendData = useMemo(() => trends?.scoreTrend ?? [],     [trends])
+
   const strengths = useMemo(
     () => [...(bestPerformers?.data ?? [])].sort((a, b) => b.avg_score - a.avg_score).slice(0, 5),
     [bestPerformers],
@@ -116,10 +176,57 @@ export default function CoachPage() {
       <DashboardHeader title={t.coachTitle} subtitle={t.coachSub} />
       <div className="w-full max-w-[1400px] mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
 
-        {bestError && <ErrorBanner message={`${t.errorLoading}: ${bestError}`} />}
+        {(overviewError || bestError) && (
+          <ErrorBanner message={`${t.errorLoading}: ${overviewError || bestError}`} />
+        )}
 
-        {/* Coaching insights — derived from the same session data as Simulator,
-            presented as actionable coaching content instead of duplicate KPI tiles */}
+        {/* Session metrics — coach-scoped, because Master Coach is a scored
+            simulator variant (r_simulator.category = 'COACH'). */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {overviewLoading
+            ? Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
+                  <div className="h-[3px] bg-primary" />
+                  <div className="p-5 space-y-3 animate-pulse">
+                    <div className="h-3 w-24 rounded bg-muted" />
+                    <div className="h-8 w-20 rounded bg-muted" />
+                    <div className="h-5 w-16 rounded bg-muted" />
+                  </div>
+                </div>
+              ))
+            : kpis.length > 0
+              ? kpis.map((kpi, i) => <SummaryCard key={kpi.label} kpi={kpi} index={i} icon={kpiIcons[i]} />)
+              : Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+                    <div className="h-[3px] bg-primary" />
+                    <div className="p-5 text-center text-sm text-muted-foreground py-8">{t.noDataAvailable}</div>
+                  </div>
+                ))
+          }
+        </div>
+
+        {/* Trends — same pair the Simulator page shows, scoped to coach. */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+          <ChartCard title={t.activityTrend} subtitle={`${t.evalCountSub} — ${t.last} ${days} ${t.days}`}>
+            {trendsLoading
+              ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
+              : activityData.length > 0
+                ? <ActivityLineChart data={activityData} label={t.journeySessions} color={brand.chartColors[0]} />
+                : <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.noDataAvailable}</div>
+            }
+          </ChartCard>
+          <ChartCard title={t.scoreTrend} subtitle={`${t.last} ${days} ${t.days}`}>
+            {trendsLoading
+              ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
+              : scoreTrendData.length > 0
+                ? <ActivityLineChart data={scoreTrendData} label={t.avgScore} color={brand.chartColors[1] ?? brand.chartColors[0]} />
+                : <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.noDataAvailable}</div>
+            }
+          </ChartCard>
+        </div>
+
+        {/* Coaching insights — the actionable layer, derived from the same rows,
+            now sitting UNDER the module's own performance instead of replacing it. */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div className="rounded-xl border border-border bg-card shadow-sm p-5">
             <div className="flex items-center gap-2 mb-4">
