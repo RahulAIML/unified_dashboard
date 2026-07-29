@@ -1,7 +1,24 @@
 "use client"
 
+/**
+ * LMS — course progress.
+ *
+ * This page used to read /api/dashboard/overview?solution=lms and relabel
+ * Simulator fields: session count became "Enrolled Users", pass rate became
+ * "Completion Rate", and the use-case table was captioned as courses. It now
+ * reads /api/dashboard/lms, which talks to the real LearnWorlds school.
+ *
+ * Two things follow from an LMS being a roster rather than a stream of scored
+ * sessions:
+ *  - Counts are current-state, so the KPI cards carry `noComparison` instead of
+ *    a period-over-period delta. Only the completion trend honours the range.
+ *  - A missing score is rendered as "not graded", never as 0. LearnWorlds
+ *    reports average_score_rate = 0 for ungraded courses, so the API sends null
+ *    plus `hasScoreData` and the distinction has to survive to the screen.
+ */
+
 import { useMemo } from "react"
-import { BookOpen, CheckCircle, TrendingUp, Star, BarChart2, AlertTriangle } from "lucide-react"
+import { BookOpen, CheckCircle, Users, GraduationCap, BarChart2, AlertTriangle, Link2Off } from "lucide-react"
 import { DashboardHeader } from "@/components/DashboardHeader"
 import { SummaryCard } from "@/components/SummaryCard"
 import { ChartCard } from "@/components/ChartCard"
@@ -12,21 +29,15 @@ import { useDashboardStore } from "@/lib/store"
 import { useT } from "@/lib/lang-store"
 import { useApi, buildApiUrl } from "@/lib/hooks/useApi"
 import { useClientBrand } from "@/lib/hooks/useClientBrand"
-import { calcDeltaPct, estimatePassedSessions } from "@/lib/kpi-builder"
 import { csvFilename } from "@/lib/csv-export"
 import { cn } from "@/lib/utils"
-import type {
-  OverviewApiResponse,
-  TrendsApiResponse,
-  UsecaseBreakdownApiResponse,
-  UsecaseApiRow,
-} from "@/lib/types"
+import type { LmsApiResponse, LmsCourseRow, KpiCard } from "@/lib/types"
 
 const icons = [
-  <BookOpen    key="b" className="w-4 h-4" />,
-  <CheckCircle key="c" className="w-4 h-4" />,
-  <Star        key="s" className="w-4 h-4" />,
-  <TrendingUp  key="t" className="w-4 h-4" />,
+  <Users        key="u" className="w-4 h-4" />,
+  <CheckCircle  key="c" className="w-4 h-4" />,
+  <GraduationCap key="g" className="w-4 h-4" />,
+  <BookOpen     key="b" className="w-4 h-4" />,
 ]
 
 function EmptyState() {
@@ -48,7 +59,19 @@ function ErrorBanner({ message }: { message: string }) {
   )
 }
 
-function PassRateBar({ value }: { value: number }) {
+/** Shown when the tenant has no LMS at all — distinct from "an LMS with no activity". */
+function NotConfigured() {
+  const t = useT()
+  return (
+    <div className="rounded-xl border border-border bg-card shadow-sm px-6 py-16 flex flex-col items-center text-center gap-3">
+      <Link2Off className="w-10 h-10 text-muted-foreground opacity-40" />
+      <h3 className="text-base font-semibold">{t.lmsNotConfigured}</h3>
+      <p className="max-w-md text-sm text-muted-foreground">{t.lmsNotConfiguredHint}</p>
+    </div>
+  )
+}
+
+function CompletionBar({ value }: { value: number }) {
   const color =
     value >= 70 ? "bg-primary"
     : value >= 50 ? "bg-amber-500"
@@ -70,73 +93,112 @@ function PassRateBar({ value }: { value: number }) {
   )
 }
 
+/** Stacked proportion bar over the three enrollment statuses. */
+function StatusBreakdown({ data }: { data: LmsApiResponse }) {
+  const t = useT()
+  const total = data.totalEnrollments
+  if (total === 0) return <EmptyState />
+
+  const rows = [
+    { key: "done", label: t.lmsStatusCompleted,  value: data.modulesCompleted, cls: "bg-primary",     text: "text-primary" },
+    { key: "wip",  label: t.lmsStatusInProgress, value: data.inProgress,       cls: "bg-amber-500",   text: "text-amber-600" },
+    { key: "new",  label: t.lmsStatusNotStarted, value: data.notStarted,       cls: "bg-muted-foreground/40", text: "text-muted-foreground" },
+  ]
+
+  return (
+    <div className="space-y-4 py-2">
+      <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted" role="presentation">
+        {rows.map(r => r.value > 0 && (
+          <div key={r.key} className={r.cls} style={{ width: `${(r.value / total) * 100}%` }} />
+        ))}
+      </div>
+      <ul className="space-y-2">
+        {rows.map(r => (
+          <li key={r.key} className="flex items-center justify-between gap-3 text-sm">
+            <span className="flex items-center gap-2">
+              <span className={cn("w-2.5 h-2.5 rounded-full shrink-0", r.cls)} />
+              <span className="text-muted-foreground">{r.label}</span>
+            </span>
+            <span className="flex items-baseline gap-2">
+              <span className={cn("tabular-nums font-semibold", r.text)}>{r.value.toLocaleString()}</span>
+              <span className="tabular-nums text-xs text-muted-foreground">
+                {Math.round((r.value / total) * 1000) / 10}%
+              </span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 export default function LmsPage() {
   const { dateRange, refreshKey } = useDashboardStore()
   const t     = useT()
   const brand = useClientBrand()
   const days = Math.round((dateRange.to.getTime() - dateRange.from.getTime()) / 86_400_000)
 
-  const overviewUrl = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to, { solution: "lms", rk: refreshKey })
-  const trendsUrl   = buildApiUrl("/api/dashboard/trends",   dateRange.from, dateRange.to, { solution: "lms", rk: refreshKey })
-  const ucUrl       = buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to, { solution: "lms", rk: refreshKey })
+  const lmsUrl = buildApiUrl("/api/dashboard/lms", dateRange.from, dateRange.to, { rk: refreshKey })
+  const { data, loading, error } = useApi<LmsApiResponse>(lmsUrl)
 
-  const { data: overview, loading: overviewLoading, error: overviewError } = useApi<OverviewApiResponse>(overviewUrl)
-  const { data: trends,   loading: trendsLoading,   error: trendsError }   = useApi<TrendsApiResponse>(trendsUrl)
-  const { data: ucBreakdown, loading: ucLoading,    error: ucError }       = useApi<UsecaseBreakdownApiResponse>(ucUrl)
+  const configured = data?.configured ?? true
+  const hasEnrollments = (data?.totalEnrollments ?? 0) > 0
 
-  const hasData = overview && overview.totalEvaluations > 0
-
-  const kpis = useMemo(() => {
-    if (!hasData) return []
+  const kpis = useMemo<KpiCard[]>(() => {
+    if (!data || !data.configured) return []
     return [
       {
-        label: "Enrolled Users", labelKey: "enrolledUsers" as const,
-        value: overview!.totalEvaluations,
-        delta: calcDeltaPct(overview!.totalEvaluations, overview!.prevTotalEvaluations),
-        tier: "A" as const,
+        label: "Enrolled Users", labelKey: "enrolledUsers",
+        value: data.enrolledUsers,
+        delta: 0, noComparison: true, tier: "A",
       },
       {
-        label: "Completion Rate", labelKey: "completionRate" as const,
-        value: overview!.passRate ?? 0, unit: "%",
-        delta: calcDeltaPct(overview!.passRate ?? 0, overview!.prevPassRate ?? 0),
-        tier: "B" as const,
+        label: "Completion Rate", labelKey: "completionRate",
+        // Null means "nothing to divide by", which is not 0%.
+        value: data.completionRate ?? "—",
+        unit: data.completionRate != null ? "%" : undefined,
+        delta: 0, noComparison: true, tier: "B",
       },
       {
-        label: "Avg Quiz Score", labelKey: "avgQuizScore" as const,
-        value: overview!.avgScore ?? 0, unit: "pts",
-        delta: calcDeltaPct(overview!.avgScore ?? 0, overview!.prevAvgScore ?? 0),
-        tier: "B" as const,
+        label: "Avg Quiz Score", labelKey: "avgQuizScore",
+        value: data.hasScoreData && data.avgQuizScore != null ? data.avgQuizScore : "—",
+        unit: data.hasScoreData && data.avgQuizScore != null ? "%" : undefined,
+        delta: 0, noComparison: true, tier: "B",
       },
       {
-        label: "Modules Completed", labelKey: "modulesCompleted" as const,
-        value: overview!.passedEvaluations,
-        delta: calcDeltaPct(
-          overview!.passedEvaluations,
-          estimatePassedSessions(overview!.prevTotalEvaluations, overview!.prevPassRate)
-        ),
-        tier: "A" as const,
+        label: "Modules Completed", labelKey: "modulesCompleted",
+        value: data.modulesCompleted,
+        delta: 0, noComparison: true, tier: "A",
       },
     ]
-  }, [overview, hasData])
+  }, [data])
 
-  const activityData = useMemo(() => trends?.evalCountTrend ?? [], [trends])
-  const scoreTrend   = useMemo(() => trends?.scoreTrend ?? [],     [trends])
-
-  const ucColumns: Column<UsecaseApiRow>[] = useMemo(() => [
+  const columns: Column<LmsCourseRow>[] = useMemo(() => [
     {
-      key: "usecaseId", header: t.colScenario,
-      render: r => (
-        <span className="font-medium text-sm">
-          {r.usecase_name?.trim() || `UC-${r.usecaseId}`}
-        </span>
-      ),
+      key: "name", header: t.lmsColCourse,
+      render: r => <span className="font-medium text-sm">{r.name}</span>,
     },
     {
-      key: "totalEvaluations", header: t.colSessions,
-      render: r => <span className="tabular-nums font-medium">{r.totalEvaluations}</span>,
+      key: "enrolled", header: t.lmsColEnrolled,
+      render: r => <span className="tabular-nums font-medium">{r.enrolled}</span>,
     },
     {
-      key: "avgScore", header: t.colAvgScore,
+      key: "completed", header: t.lmsColCompleted,
+      render: r => <span className="tabular-nums text-primary font-semibold">{r.completed}</span>,
+    },
+    {
+      key: "inProgress", header: t.lmsColInProgress,
+      render: r => <span className="tabular-nums text-muted-foreground">{r.inProgress}</span>,
+    },
+    {
+      key: "completionRate", header: t.completionRate,
+      render: r => r.completionRate != null
+        ? <CompletionBar value={r.completionRate} />
+        : <span className="text-muted-foreground">—</span>,
+    },
+    {
+      key: "avgScore", header: t.avgQuizScore,
+      // "—" here means the course has no graded units, not a score of zero.
       render: r => r.avgScore != null ? (
         <span className={cn(
           "tabular-nums font-semibold",
@@ -144,19 +206,11 @@ export default function LmsPage() {
             : r.avgScore >= 60 ? "text-foreground"
             : "text-amber-600"
         )}>
-          {r.avgScore} pts
+          {r.avgScore}%
         </span>
-      ) : <span className="text-muted-foreground">—</span>,
-    },
-    {
-      key: "passRate", header: t.colPassRate,
-      render: r => r.passRate != null
-        ? <PassRateBar value={r.passRate} />
-        : <span className="text-muted-foreground">—</span>,
-    },
-    {
-      key: "passed", header: t.colPassed,
-      render: r => <span className="tabular-nums text-primary font-semibold">{r.passed}</span>,
+      ) : (
+        <span className="text-xs text-muted-foreground italic">{t.lmsNotGraded}</span>
+      ),
     },
   ], [t])
 
@@ -165,88 +219,118 @@ export default function LmsPage() {
       <DashboardHeader title={t.lmsTitle} subtitle={t.lmsSub} />
       <div className="w-full max-w-[1400px] mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
 
-        {overviewError && <ErrorBanner message={`${t.errorLoading}: ${overviewError}`} />}
+        {error && <ErrorBanner message={`${t.errorLoading}: ${error}`} />}
 
-        {/* KPI cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {overviewLoading
-            ? Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
-                  <div className="h-[3px] bg-primary" />
-                  <div className="p-5 space-y-3 animate-pulse">
-                    <div className="h-3 w-24 rounded bg-muted" />
-                    <div className="h-8 w-20 rounded bg-muted" />
-                    <div className="h-5 w-16 rounded bg-muted" />
-                  </div>
-                </div>
-              ))
-            : kpis.length > 0
-              ? kpis.map((kpi, i) => <SummaryCard key={kpi.label} kpi={kpi} index={i} icon={icons[i]} />)
-              : Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-                    <div className="h-[3px] bg-primary" />
-                    <div className="p-5 text-center text-sm text-muted-foreground py-8">{t.noDataAvailable}</div>
-                  </div>
-                ))
-          }
-        </div>
-
-        {/* Charts */}
-        {trendsError && <ErrorBanner message={`${t.errorLoading}: ${trendsError}`} />}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-          <ChartCard title={t.activityTrend} subtitle={`${t.evalCountSub} — ${t.last} ${days} ${t.days}`}>
-            {trendsLoading
-              ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
-              : activityData.length > 0
-                ? <ActivityLineChart data={activityData} label="Enrollments" color={brand.chartColors[0]} />
-                : <EmptyState />
-            }
-          </ChartCard>
-          <ChartCard title={t.scoreTrend} subtitle={`${t.last} ${days} ${t.days}`}>
-            {trendsLoading
-              ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
-              : scoreTrend.length > 0
-                ? <ActivityLineChart data={scoreTrend} label={t.avgScore} color={brand.chartColors[1] ?? brand.chartColors[0]} />
-                : <EmptyState />
-            }
-          </ChartCard>
-        </div>
-
-        {/* Usecase breakdown table */}
-        {ucError && <ErrorBanner message={`${t.errorLoading}: ${ucError}`} />}
-        <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-4 flex-wrap">
-            <div>
-              <h3 className="text-sm font-semibold">{t.usecaseBreakdown}</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {ucLoading ? t.loading : `${ucBreakdown?.data?.length ?? 0} ${t.usecaseBreakdownSub}`}
-                <span className="ml-2 text-[10px] font-medium bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">
-                  {t.navLms}
-                </span>
-              </p>
+        {!loading && !error && !configured ? (
+          <NotConfigured />
+        ) : (
+          <>
+            {/* KPI cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {loading
+                ? Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
+                      <div className="h-[3px] bg-primary" />
+                      <div className="p-5 space-y-3 animate-pulse">
+                        <div className="h-3 w-24 rounded bg-muted" />
+                        <div className="h-8 w-20 rounded bg-muted" />
+                        <div className="h-5 w-16 rounded bg-muted" />
+                      </div>
+                    </div>
+                  ))
+                : kpis.length > 0
+                  ? kpis.map((kpi, i) => <SummaryCard key={kpi.label} kpi={kpi} index={i} icon={icons[i]} />)
+                  : Array.from({ length: 4 }).map((_, i) => (
+                      <div key={i} className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+                        <div className="h-[3px] bg-primary" />
+                        <div className="p-5 text-center text-sm text-muted-foreground py-8">{t.noDataAvailable}</div>
+                      </div>
+                    ))
+              }
             </div>
-            <ExportButton
-              data={ucBreakdown?.data ?? []}
-              filename={csvFilename("lms-usecase-breakdown")}
-              columns={[
-                { header: "Use Case",           value: r => r.usecase_name ?? `UC-${r.usecaseId}` },
-                { header: "Use Case ID",        value: r => r.usecaseId },
-                { header: "Total Evaluations",  value: r => r.totalEvaluations },
-                { header: "Avg Score (pts)",    value: r => r.avgScore },
-                { header: "Pass Rate (%)",      value: r => r.passRate },
-                { header: "Passed",             value: r => r.passed },
-              ]}
-            />
-          </div>
-          <div className="p-5">
-            {ucLoading
-              ? <div className="py-10 text-center text-sm text-muted-foreground">{t.loading}</div>
-              : ucBreakdown?.data?.length
-                ? <DataTable data={ucBreakdown.data} columns={ucColumns} pageSize={8} />
-                : <div className="py-10 text-center text-sm text-muted-foreground">{t.noDataAvailable}</div>
-            }
-          </div>
-        </div>
+
+            {/* Roster context + the caveat when nothing is graded. */}
+            {!loading && data?.configured && (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+                <span>{t.lmsOfUsers.replace("{total}", data.totalUsers.toLocaleString())}</span>
+                <span aria-hidden="true">·</span>
+                <span>{t.lmsEnrollmentsTotal.replace("{count}", data.totalEnrollments.toLocaleString())}</span>
+                <span aria-hidden="true">·</span>
+                <span>{data.totalCourses.toLocaleString()} {t.lmsCourses}</span>
+                {hasEnrollments && !data.hasScoreData && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2 py-0.5 text-amber-700 dark:text-amber-500">
+                    <AlertTriangle className="w-3 h-3 shrink-0" />
+                    {t.lmsNoGradedAssessments}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Completion trend + status breakdown */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+              <ChartCard
+                title={t.lmsCompletionTrend}
+                subtitle={`${t.lmsCompletionTrendSub} — ${t.last} ${days} ${t.days}`}
+              >
+                {loading
+                  ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
+                  : data?.completionTrend?.length
+                    ? <ActivityLineChart
+                        data={data.completionTrend}
+                        label={t.lmsStatusCompleted}
+                        color={brand.chartColors[0]}
+                      />
+                    : <EmptyState />
+                }
+              </ChartCard>
+              <ChartCard title={t.lmsEnrollmentStatus} subtitle={t.lmsEnrollmentStatusSub}>
+                {loading
+                  ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
+                  : data
+                    ? <StatusBreakdown data={data} />
+                    : <EmptyState />
+                }
+              </ChartCard>
+            </div>
+
+            {/* Per-course table */}
+            <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                  <h3 className="text-sm font-semibold">{t.lmsCourses}</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {loading ? t.loading : `${data?.courses?.length ?? 0} ${t.lmsCoursesSub}`}
+                    <span className="ml-2 text-[10px] font-medium bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">
+                      {t.navLms}
+                    </span>
+                  </p>
+                </div>
+                <ExportButton
+                  data={data?.courses ?? []}
+                  filename={csvFilename("lms-courses")}
+                  columns={[
+                    { header: "Course",           value: r => r.name },
+                    { header: "Course ID",        value: r => r.courseId },
+                    { header: "Enrolled",         value: r => r.enrolled },
+                    { header: "Completed",        value: r => r.completed },
+                    { header: "In Progress",      value: r => r.inProgress },
+                    { header: "Completion Rate (%)", value: r => r.completionRate },
+                    // Empty, not 0 — the course was never graded.
+                    { header: "Avg Score (%)",    value: r => r.avgScore },
+                  ]}
+                />
+              </div>
+              <div className="p-5">
+                {loading
+                  ? <div className="py-10 text-center text-sm text-muted-foreground">{t.loading}</div>
+                  : data?.courses?.length
+                    ? <DataTable data={data.courses} columns={columns} pageSize={8} />
+                    : <div className="py-10 text-center text-sm text-muted-foreground">{t.noDataAvailable}</div>
+                }
+              </div>
+            </div>
+          </>
+        )}
 
       </div>
     </div>

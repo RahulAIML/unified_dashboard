@@ -204,6 +204,11 @@ if (apotexBridgeUrl) {
     // rpa_profile_type) — same underlying bridge protocol, different action
     // name and response wrapper key ("members"/"admins" vs "data").
     hasOrganization: true,
+    // Apotex is the only tenant with a LearnWorlds school. Verified live: 15
+    // courses, 53 users, 299 enrollments. The flag only declares intent — the
+    // LMS tab still requires LMS_* credentials to resolve, so a missing secret
+    // yields an empty state rather than a broken tab.
+    hasLms: true,
   }
 }
 

@@ -22,6 +22,7 @@ import { resolveOrgType } from '@/lib/org-type'
 import { resolvePharmaTenant, TENANT_CONFIG } from '@/lib/pharma-tenant'
 import { resolveRolplayAppAccess, rolplayAppAvailableModules } from '@/lib/bridge-rolplay-app'
 import { resolveSecondBrainProfile } from '@/lib/banco-second-brain'
+import { hasLmsCredentials } from '@/lib/lms-learnworlds'
 import { useDemoData } from '@/lib/demo'
 
 export const runtime = 'nodejs'
@@ -49,10 +50,15 @@ export async function GET(request: NextRequest) {
       const tenant = await resolvePharmaTenant(ctx.email)
       const cfg = tenant ? TENANT_CONFIG[tenant] : null
       if (cfg) {
-        // Every pharma tenant has simulator sessions; the rest are flag-gated.
-        modules.add('simulator')
+        // Simulator defaults on — every pharma bridge exposes sim data — but an
+        // LMS-only client can opt out rather than get a tab with nothing in it.
+        if (cfg.hasSimulator !== false) modules.add('simulator')
         if (cfg.hasCertification) modules.add('certification')
         if (cfg.coachActivityIds?.length) modules.add('coach')
+        // The LMS is a separate system from the bridge, so it needs both the
+        // tenant's intent and real credentials — otherwise the tab would open
+        // onto an empty state that looks like an outage.
+        if (cfg.hasLms && hasLmsCredentials(tenant)) modules.add('lms')
       }
     } else if (orgType === 'banco' || orgType === 'analytics') {
       // coach_app / banco pipelines cover the classic module set.
