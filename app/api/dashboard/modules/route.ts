@@ -55,15 +55,32 @@ export async function GET(request: NextRequest) {
         if (cfg.hasSimulator !== false) modules.add('simulator')
         if (cfg.hasCertification) modules.add('certification')
         if (cfg.coachActivityIds?.length) modules.add('coach')
-        // The LMS is a separate system from the bridge, so it needs both the
-        // tenant's intent and real credentials — otherwise the tab would open
-        // onto an empty state that looks like an outage.
-        if (cfg.hasLms && hasLmsCredentials(tenant)) modules.add('lms')
       }
     } else if (orgType === 'banco' || orgType === 'analytics') {
       // coach_app / banco pipelines cover the classic module set.
       for (const m of ['lms', 'coach', 'simulator', 'certification']) modules.add(m)
     }
+
+    // The LMS is gated INDEPENDENTLY of orgType, like Second Brain below and for
+    // the same reason: LearnWorlds is a separate system from every bridge above,
+    // so which bridge a tenant uses says nothing about whether it has an LMS.
+    //
+    // This was previously nested inside the pharma branch, which made the tab
+    // structurally unreachable for every other org type — rolplayAppAvailableModules()
+    // derives modules from r_simulator.category and physically cannot return 'lms',
+    // so a rolplay-app tenant could never show it no matter how its credentials
+    // were configured. Do not move this back inside a branch.
+    //
+    // Credentials are the authority: a pharma tenant must ALSO declare hasLms
+    // (so a shared LMS_* fallback cannot light up the tab for every pharma
+    // client at once), while any other org type is governed purely by whether
+    // LMS_<TENANT>_*/LMS_* actually resolve. No credentials → no tab, so the
+    // page never opens onto an empty state that reads as an outage.
+    const lmsTenant = orgType === 'pharma' ? await resolvePharmaTenant(ctx.email) : null
+    const lmsDeclared = orgType === 'pharma'
+      ? Boolean(lmsTenant && TENANT_CONFIG[lmsTenant]?.hasLms)
+      : true
+    if (lmsDeclared && hasLmsCredentials(lmsTenant)) modules.add('lms')
 
     // Second Brain is independent of the above: it resolves only if the tenant
     // has its OWN Second Brain org on the dedicated API.

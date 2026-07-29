@@ -632,15 +632,19 @@ export function DashboardContent() {
           </>
         ) : (
           <>
-            {/* KPI export row — fixed width (not min-width) on BOTH buttons, plus
-                identical padding/text-size/radius via ExportButton's className
-                override, so they stay pixel-identical regardless of language
-                (the Spanish labels are noticeably longer than the English ones). */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:justify-end">
+            {/* KPI export row — both buttons stay pixel-identical via a two-column
+                grid whose container is w-fit: equal 1fr columns sized to the WIDEST
+                label, so identical width no longer means a hardcoded width. The
+                previous sm:w-[220px] was too narrow for the Spanish labels, which
+                are much longer than the English ones, and whitespace-nowrap made
+                the overflow spill visibly outside the button. Any future language
+                or label change is absorbed automatically — do not reintroduce a
+                fixed width here. */}
+            <div className="flex flex-col gap-3 sm:grid sm:w-fit sm:grid-cols-2 sm:ml-auto sm:items-stretch">
               <button
                 onClick={() => exportAllSolutions()}
                 disabled={exportLoading}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold w-full sm:w-[220px] whitespace-nowrap bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed shadow-[0_1px_3px_rgba(0,0,0,0.1)]"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold w-full sm:min-w-[220px] whitespace-nowrap bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed shadow-[0_1px_3px_rgba(0,0,0,0.1)]"
                 title={exportAllLabel}
               >
                 {exportLoading ? (
@@ -659,7 +663,7 @@ export function DashboardContent() {
                 data={kpiExportRows}
                 filename={csvFilename(`kpi-summary-${selectedSolution ?? "all"}`)}
                 label={t.exportCurrent}
-                minWidth="w-full sm:w-[220px]"
+                minWidth="w-full sm:min-w-[220px]"
                 className="!px-4 !py-2.5 !text-sm !rounded-xl !gap-2"
                 columns={[
                   { header: "Solution",              value: (r) => r.solution },
