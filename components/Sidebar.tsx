@@ -7,7 +7,7 @@ import { motion } from "framer-motion"
 import {
   LayoutDashboard, BookOpen, BrainCircuit, Gamepad2,
   BadgeCheck, Database, Sun, Moon, Settings, LogOut, MessageSquare,
-  GitBranch, Building2, Activity, FileText,
+  GitBranch, Building2, Activity, FileText, Route,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useTheme } from "./ThemeProvider"
@@ -17,6 +17,7 @@ import { usePlatformName } from "@/lib/hooks/usePlatformName"
 import { useAuthContext } from "./AuthProvider"
 import { useApi } from "@/lib/hooks/useApi"
 import { useAvailableModules } from "@/lib/hooks/useAvailableModules"
+import { hasJourney } from "@/lib/journey"
 import type { Module } from "@/lib/types"
 
 // Minimal capability shape from /api/auth/access-status (only the flag we need).
@@ -114,6 +115,10 @@ export function Sidebar() {
   // (e.g. manually deactivating a tenant), just not surfaced in client nav.
   const nav = [
     { href: "/",              label: t.navOverview,      icon: LayoutDashboard },
+    // The journey needs at least two services to be a progression; with one
+    // there is nothing to sequence, so the entry hides rather than showing a
+    // single lonely stage. hasJourney() owns that rule.
+    ...(hasJourney(availableModules) ? [{ href: "/journey", label: t.navJourney, icon: Route }] : []),
     // Solution pages render only for modules this tenant actually has, so a
     // client never lands on an empty module page. Overview/Settings always show.
     ...(hasModule('lms')           ? [{ href: "/lms",           label: t.navLms,        icon: BookOpen     }] : []),
