@@ -1,0 +1,18 @@
+# Binary assets: never apply line-ending conversion. Without this, git on
+# Windows rewrites LF to CRLF inside these files on checkout and corrupts them
+# (a PDF fails to open, an image fails to decode).
+*.pdf  binary
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.woff binary
+*.woff2 binary
+*.xlsx binary
+*.docx binary
+*.pptx binary
+
+# SQL dumps are text but must keep LF so they stay byte-identical to the
+# upstream mysqldump output they are compared against.
+*.sql text eol=lf
