@@ -264,6 +264,13 @@ function toSqlDt(iso: string): string {
 // 'SB' category, Second Brain data comes exclusively from the dedicated Second
 // Brain API (lib/second-brain-api.ts, per-org admin_email) — that stays intact.
 // So SB sessions in r_user_session are ignored by this connector.
+//
+// To be explicit, because the omission reads like an oversight and has been
+// questioned more than once: r_simulator.category has FOUR values (COACH, SIM,
+// SEGMENT, SB) and only three are mapped above. The fourth is excluded on
+// purpose, not forgotten. Do not add `'second-brain': 'SB'` here — it would
+// give Second Brain two disagreeing sources. lib/journey.ts repeats this note
+// where the journey view consumes both.
 const SOLUTION_TO_CATEGORY: Record<string, string> = {
   coach: 'COACH',
   simulator: 'SIM',

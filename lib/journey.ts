@@ -18,9 +18,11 @@
  * scoped to its own stage and labelled with its own meaning.
  *
  * SOURCE NOTE: rolplay_app's `r_simulator.category` has four values — COACH,
- * SIM, SEGMENT and a second-brain one. The fourth is deliberately IGNORED:
- * Second Brain data comes exclusively from its own token-authenticated API,
- * which is the verified source. Do not wire the category variant in.
+ * SIM, SEGMENT, SB. Only the first three feed this dashboard. The SB one is
+ * deliberately IGNORED: Second Brain data comes exclusively from its own
+ * token-authenticated API (lib/second-brain-api.ts), which is the verified
+ * source. Wiring in the category variant would give Second Brain two
+ * disagreeing sources — see the matching note in lib/bridge-rolplay-app.ts.
  */
 
 import type { Module } from './types'
