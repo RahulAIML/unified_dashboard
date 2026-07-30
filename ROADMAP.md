@@ -27,22 +27,24 @@ Verify every finding directly rather than trusting the report.
 
 ---
 
-## Phase 1 — Security: all P0/P1 `[~]`
+## Phase 1 — Security: all P0/P1 `[x]`
 
-- [ ] `S1` Require admin on `/api/ai/**` (both the catch-all and `app/api/ai/route.ts`)
-- [ ] `S4` Gate or remove `/api/debug/second-brain-check`
-- [ ] `S5` Rate limiting on auth + AI endpoints
-- [ ] Security headers (CSP, HSTS, X-Frame-Options, nosniff, Referrer-Policy)
-- [ ] Input validation at the AI proxy boundary
-- [ ] Audit logging for admin/AI mutations
-- [ ] Tests: unauthenticated + non-admin callers rejected on every AI route
-- [ ] `S3` Encrypted credential storage → **deferred to Phase 2**, needs the credential store to land with it
+- [x] `S1` Admin required on `/api/ai/**` catch-all. **Verified live: 403 on POST and GET without a session.** (`app/api/ai/route.ts` was already authenticated — audit overstated the scope; corrected.)
+- [x] `S4` `/api/debug/second-brain-check` admin-gated. **Verified live: 403.** Reclassified while fixing: it accepts an arbitrary `?email=`, so unauthenticated it was cross-tenant data disclosure by enumeration, not just debug exposure.
+- [x] `S5` Rate limiting — login 20/min/IP, register 5/min/IP, AI 60/min/admin
+- [x] Security headers — nosniff, DENY, Referrer-Policy, Permissions-Policy, HSTS (prod only). **Verified live on `/api/health`.**
+- [x] Input validation at the AI proxy — path-traversal rejection, 256KB cap, JSON validation
+- [x] Audit logging for AI mutations (admin + method + path; bodies excluded, they can carry credentials)
+- [x] Tests — 8 proxy authorisation tests + 11 rate-limit tests
+- [x] **Restored 26 dead API tests** — `vitest.config.ts` excluded `**/dashboard/**` for a root submodule, which also matched `app/api/dashboard/__tests__/`. Those tests had never run. Now anchored to the repo root; all 26 pass.
+- [ ] CSP — **deliberately not shipped.** Next injects inline hydration scripts, so a correct policy needs per-request nonces threaded through the document. A broad `unsafe-inline` policy would pass an audit while blocking nothing. Needs its own change.
+- [ ] `S3` Encrypted credential storage → **Phase 2**, lands with the credential store
 
-**Gate:** full suite green, tsc clean, no unauthenticated mutating endpoint remains.
+**Gate: PASS.** 153 tests (108 → 153), tsc clean, eslint clean on all changed files, no unauthenticated mutating endpoint remains.
 
 ---
 
-## Phase 2 — Architecture refactor `[ ]`
+## Phase 2 — Architecture refactor `[ ]` ← NEXT
 
 Ordered so nothing is built against two sources of truth.
 
@@ -104,12 +106,12 @@ Docker · migrations · cold start · horizontal scaling · autoscaling · zero 
 
 | Criterion | Status |
 |---|---|
-| All critical audit findings resolved | `[~]` Phase 1 in progress |
-| Zero failing tests | `[x]` 108/108 at `f05c906` |
+| All critical audit findings resolved | `[~]` Phase 1 done; `S2`/`S3`/`A1`–`A4` in Phase 2 |
+| Zero failing tests | `[x]` 153/153 |
 | Zero TypeScript errors | `[x]` |
-| Zero ESLint errors | `[ ]` not yet verified |
+| Zero ESLint errors | `[x]` clean on all changed files; full-repo sweep pending |
 | Zero build warnings | `[ ]` not yet verified |
-| Zero security vulnerabilities | `[ ]` Phase 1 |
+| Zero security vulnerabilities | `[~]` P0 closed; `S2`/`S3` are Phase 2 |
 | Self-service onboarding works | `[ ]` Phase 3 — blocked on A1/A2 |
 | Publish / rollback / journey / progress work | `[ ]` Phases 3–4 |
 | Tenant isolation verified | `[ ]` Phase 1 tests |
