@@ -118,3 +118,10 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ path: s
 export async function POST(request: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
   return forward(request, (await ctx.params).path)
 }
+// DELETE is required by DELETE /ai/knowledge/{slug} — the AI service's own
+// endpoint for clearing a stale/wrong cached company-discovery entry. Without
+// it, an admin has no way to correct a bad cache other than direct DB access,
+// and this proxy previously only forwarded GET/POST.
+export async function DELETE(request: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
+  return forward(request, (await ctx.params).path)
+}

@@ -84,6 +84,28 @@ describe('AI proxy authorisation', () => {
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
+  it('gates DELETE too', async () => {
+    requireAdminFromRequest.mockResolvedValue(null)
+    const { DELETE } = await loadRoute()
+
+    const res = await DELETE(req('DELETE'), ctx(['knowledge', 'takeda']))
+
+    expect(res.status).toBe(403)
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('forwards a DELETE for an authenticated admin, e.g. clearing stale company knowledge', async () => {
+    requireAdminFromRequest.mockResolvedValue({ email: 'admin@rolplay.ai', role: 'admin' })
+    const { DELETE } = await loadRoute()
+
+    const res = await DELETE(req('DELETE'), ctx(['knowledge', 'takeda']))
+
+    expect(res.status).toBe(200)
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    const [, init] = fetchSpy.mock.calls[0]
+    expect(init.method).toBe('DELETE')
+  })
+
   it('forwards for an authenticated admin', async () => {
     requireAdminFromRequest.mockResolvedValue({ email: 'admin@rolplay.ai', role: 'admin' })
     const { POST } = await loadRoute()
