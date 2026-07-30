@@ -22,7 +22,7 @@ import { resolveOrgType } from '@/lib/org-type'
 import { resolvePharmaTenant, TENANT_CONFIG } from '@/lib/pharma-tenant'
 import { resolveRolplayAppAccess, rolplayAppAvailableModules } from '@/lib/bridge-rolplay-app'
 import { resolveSecondBrainProfile } from '@/lib/banco-second-brain'
-import { hasLmsCredentials } from '@/lib/lms-learnworlds'
+import { hasLmsCredentialsAsync } from '@/lib/lms-learnworlds'
 import { useDemoData } from '@/lib/demo'
 
 export const runtime = 'nodejs'
@@ -83,8 +83,13 @@ export async function GET(request: NextRequest) {
     // most need it. Requiring it is what kept Apotex's tab hidden after its
     // credentials were correct. Credentials cannot go missing where the LMS is
     // real, which makes them the honest signal.
+    // DB-aware: reads tenant_credentials first, then env. This is what lets a
+    // wizard-onboarded tenant show its LMS tab without a redeploy, and it drops
+    // the dependency on an env var NAME matching the DB-assigned tenant key —
+    // the mismatch that kept Apotex's tab hidden. Same resolver as the data
+    // path, so the tab can never appear without resolvable credentials behind it.
     const lmsTenant = orgType === 'pharma' ? await resolvePharmaTenant(ctx.email) : null
-    if (hasLmsCredentials(lmsTenant, { requireScoped: true })) modules.add('lms')
+    if (await hasLmsCredentialsAsync(lmsTenant)) modules.add('lms')
 
     // Second Brain is independent of the above: it resolves only if the tenant
     // has its OWN Second Brain org on the dedicated API.

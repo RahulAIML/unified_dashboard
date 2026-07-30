@@ -25,12 +25,21 @@ describe('rateLimit', () => {
   })
 
   it('resets after the window elapses', () => {
-    expect(rateLimit('k', 1, 1).ok).toBe(true)
-    expect(rateLimit('k', 1, 1).ok).toBe(false)
-    // Window is 1ms; a synchronous busy-wait avoids fake timers entirely.
-    const until = Date.now() + 5
-    while (Date.now() < until) { /* spin */ }
-    expect(rateLimit('k', 1, 1).ok).toBe(true)
+    // Fake timers, NOT a busy-wait. The first version of this test spun on
+    // Date.now() for 5ms, which is flaky on Windows where the clock advances in
+    // ~15ms steps — it passed and failed on identical code. Controlling the
+    // clock makes the assertion about the limiter, not about timer resolution.
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
+      expect(rateLimit('k', 1, 60_000).ok).toBe(true)
+      expect(rateLimit('k', 1, 60_000).ok).toBe(false)
+
+      vi.setSystemTime(new Date('2026-01-01T00:01:01Z')) // past the 60s window
+      expect(rateLimit('k', 1, 60_000).ok).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('returns a Retry-After of at least 1 second when rejecting', () => {

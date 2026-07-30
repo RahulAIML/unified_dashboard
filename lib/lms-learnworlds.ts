@@ -150,6 +150,58 @@ export function resolveLmsCredentials(
   return { origin, clientId: clientId ?? '', clientSecret: clientSecret ?? '', accessToken }
 }
 
+/** Field names in tenant_credentials, mirroring the env var suffixes. */
+const LMS_FIELDS = ['api_url', 'client_id', 'client_secret', 'access_token'] as const
+
+/**
+ * Build LmsCredentials from an already-resolved bundle. Shared by the sync and
+ * async paths so the validation rules cannot drift between them.
+ */
+function credentialsFromBundle(bundle: Record<string, string>): LmsCredentials | null {
+  const rawUrl = bundle.api_url
+  const clientId = bundle.client_id
+  const clientSecret = bundle.client_secret
+  const accessToken = bundle.access_token
+
+  if (!rawUrl) return null
+  if (!accessToken && !(clientId && clientSecret)) return null
+
+  let origin: string
+  try {
+    origin = new URL(rawUrl.includes('://') ? rawUrl : `https://${rawUrl}`).origin
+  } catch {
+    return null
+  }
+  return { origin, clientId: clientId ?? '', clientSecret: clientSecret ?? '', accessToken }
+}
+
+/**
+ * Resolve credentials from the runtime store FIRST, then environment variables.
+ *
+ * This is the path that removes the redeploy-per-tenant requirement, and it also
+ * removes the failure mode that hid Apotex's LMS tab: with credentials stored
+ * against the tenant's DB row, resolution no longer depends on an environment
+ * variable NAME matching the DB-assigned tenant key. A tenant onboarded by the
+ * wizard works immediately; a tenant still configured via env keeps working
+ * untouched, because resolveTenantCredentials falls back per field.
+ *
+ * Async by necessity (it may read Postgres). The sync `resolveLmsCredentials`
+ * above is retained for env-only callers and for tests, but production paths
+ * should prefer this one — it is the only version that sees the DB.
+ */
+export async function resolveLmsCredentialsAsync(
+  tenantKey: string | null,
+): Promise<LmsCredentials | null> {
+  const { resolveTenantCredentials } = await import('./tenant-credentials')
+  const bundle = await resolveTenantCredentials(tenantKey, 'lms', 'LMS', LMS_FIELDS)
+  return credentialsFromBundle(bundle)
+}
+
+/** Async capability probe — DB-aware counterpart of hasLmsCredentials. */
+export async function hasLmsCredentialsAsync(tenantKey: string | null): Promise<boolean> {
+  return (await resolveLmsCredentialsAsync(tenantKey)) !== null
+}
+
 export function hasLmsCredentials(
   tenantKey: string | null,
   opts: { requireScoped?: boolean } = {},
@@ -297,10 +349,12 @@ export async function lmsDashboard(
   from: Date,
   to: Date,
 ): Promise<LmsApiResponse> {
-  // requireScoped must match the gate in /api/dashboard/modules exactly. If the
-  // tab is shown on scoped credentials but the data resolved via the shared
-  // LMS_* fallback, a tenant could be shown another tenant's school.
-  const creds = resolveLmsCredentials(tenantKey, { requireScoped: true })
+  // Uses the DB-aware resolver so a wizard-onboarded tenant works with no
+  // redeploy. resolveTenantCredentials enforces the same tenant-scoping rule
+  // internally (a named tenant never inherits shared LMS_* credentials), so the
+  // tab gate and the data path still resolve by identical rules — if they
+  // diverged, a tenant could be shown another tenant's school.
+  const creds = await resolveLmsCredentialsAsync(tenantKey)
   if (!creds) return EMPTY_LMS
 
   const fromKey = from.toISOString().slice(0, 10)
