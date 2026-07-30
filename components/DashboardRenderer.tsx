@@ -7,6 +7,11 @@
  * config describes. This is the "metadata over code generation" contract.
  */
 
+import {
+  ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis,
+  CartesianGrid, Tooltip, LabelList,
+} from 'recharts'
+
 export interface WidgetPreview { widget_id: string; ok: boolean; value?: number | string | null; series?: Record<string, unknown>[]; rows?: Record<string, unknown>[]; error?: string | null }
 export interface WidgetConfig { id: string; type: string; title: string; metric_key?: string | null; span?: number }
 export interface DashRow { id: string; title?: string | null; widgets: WidgetConfig[] }
@@ -65,26 +70,96 @@ export function DashboardRenderer({ config, preview }: { config: DashboardConfig
   )
 }
 
-export function MiniChart({ series, bar }: { series: Record<string, unknown>[]; bar?: boolean }) {
-  const rows = series.slice(0, 14)
-  const vals = rows.map(r => Number(r.value ?? r.total_sessions ?? r.sessions ?? 0))
-  const max = Math.max(1, ...vals)
+function normalizeChartRow(r: Record<string, unknown>, i: number): { label: string; value: number } {
+  const rawLabel = r.date ?? r.activity ?? r.usecase ?? r.simulator ?? i
+  return {
+    label: String(rawLabel),
+    value: Number(r.value ?? r.total_sessions ?? r.sessions ?? 0),
+  }
+}
+
+/** Truncates a long category name for the X axis; the full name still shows in the tooltip. */
+function truncateTick(label: string, max = 14): string {
+  return label.length > max ? `${label.slice(0, max - 1)}…` : label
+}
+
+function ChartTooltip({
+  active, payload, label,
+}: {
+  active?: boolean
+  payload?: { value?: number | string; payload?: { label?: string } }[]
+  label?: string
+}) {
+  if (!active || !payload?.length) return null
+  // The tick label may be truncated; the full untruncated label travels with
+  // the data point itself and is what we show here.
+  const fullLabel = payload[0]?.payload?.label ?? label
   return (
-    <div className="flex items-end gap-1 h-24 mt-2">
-      {rows.map((r, i) => (
-        // h-full is load-bearing, not decorative: the outer row has align-items
-        // "end" (items-end), and flexbox's align-items only stretches a child to
-        // fill the cross axis under "stretch" (the default) — "end" instead sizes
-        // each child to its own content, so without an explicit height this column
-        // has an auto (0) height. The bar below sets height as a PERCENTAGE, and a
-        // percentage height resolves against nothing when its container's height
-        // is auto — CSS spec, not a rendering glitch — so every bar silently
-        // computed to 0px. Confirmed live: adding h-full took a bar from 0px to
-        // 86.4px (90% of the 96px h-24 row), matching the intended height exactly.
-        <div key={i} className="flex-1 h-full flex flex-col items-center justify-end" title={`${r.date ?? r.activity ?? r.usecase ?? i}: ${vals[i]}`}>
-          <div className={`w-full rounded-t ${bar ? 'bg-primary/70' : 'bg-primary'}`} style={{ height: `${Math.max(4, (vals[i] / max) * 90)}%` }} />
-        </div>
-      ))}
+    <div className="bg-card/95 backdrop-blur-sm border border-border/60 rounded-xl px-3 py-2 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1)] text-xs max-w-[220px]">
+      <p className="font-semibold text-foreground break-words">{fullLabel}</p>
+      <p className="text-primary font-medium">{payload[0]?.value?.toLocaleString?.() ?? payload[0]?.value}</p>
+    </div>
+  )
+}
+
+/**
+ * Real chart, not a placeholder — this replaced a version that drew flat
+ * solid-color rectangles (bars only, even for "line_chart" widgets) with no
+ * axis, no scale reference, and no visible value on small bars. That became a
+ * genuine problem on real data: Siigo's per-simulator session counts are
+ * 129 / 8 / 4 / 3 — a ~40:1 range — so on a plain linear-height bar the three
+ * smaller ones are indistinguishable slivers with nothing indicating they are
+ * 8, 4, and 3 rather than all "small". A real axis plus an always-on value
+ * label (not just on hover) is what makes a skewed real-world distribution
+ * like that legible, not just technically-correctly-proportioned.
+ *
+ * line_chart now draws an actual line (not bars); bar_chart draws bars with
+ * the true count printed above each one regardless of its height.
+ */
+export function MiniChart({ series, bar }: { series: Record<string, unknown>[]; bar?: boolean }) {
+  const data = series.slice(0, 14).map(normalizeChartRow)
+  if (!data.length) {
+    return <div className="h-40 flex items-center justify-center text-sm text-muted-foreground">—</div>
+  }
+
+  const tickProps = { fontSize: 11, fill: 'currentColor', opacity: 0.5, fontWeight: 500 } as const
+
+  return (
+    <div className="w-full h-40 mt-2">
+      <ResponsiveContainer width="100%" height="100%">
+        {bar ? (
+          <BarChart data={data} margin={{ top: 20, right: 8, left: -20, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="4 4" stroke="currentColor" strokeOpacity={0.06} vertical={false} />
+            <XAxis dataKey="label" tickFormatter={truncateTick} tick={tickProps} axisLine={false} tickLine={false} dy={6} />
+            <YAxis tick={tickProps} axisLine={false} tickLine={false} allowDecimals={false} />
+            <Tooltip content={<ChartTooltip />} cursor={{ fill: 'currentColor', opacity: 0.05 }} />
+            <Bar dataKey="value" fill="var(--chart-1, hsl(var(--primary)))" radius={[4, 4, 0, 0]} maxBarSize={56}>
+              {/* Always-visible label so a tiny bar (e.g. 3 sessions next to
+                  129) still shows its real number instead of reading as an
+                  unlabeled sliver indistinguishable from zero. */}
+              <LabelList dataKey="value" position="top" style={{ fontSize: 11, fill: 'currentColor', opacity: 0.7 }} />
+            </Bar>
+          </BarChart>
+        ) : (
+          <LineChart data={data} margin={{ top: 20, right: 8, left: -20, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="4 4" stroke="currentColor" strokeOpacity={0.06} vertical={false} />
+            <XAxis dataKey="label" tickFormatter={truncateTick} tick={tickProps} axisLine={false} tickLine={false} dy={6} />
+            <YAxis tick={tickProps} axisLine={false} tickLine={false} allowDecimals={false} />
+            <Tooltip content={<ChartTooltip />} cursor={{ stroke: 'currentColor', strokeOpacity: 0.15 }} />
+            <Line
+              type="monotone" dataKey="value"
+              stroke="var(--chart-1, hsl(var(--primary)))" strokeWidth={2}
+              dot={{ r: 3, fill: 'var(--chart-1, hsl(var(--primary)))' }}
+              // A single point has no line SEGMENT to draw — isAnimationActive
+              // off avoids a distracting draw-in animation on a lone dot, and
+              // the dot itself (set above) is what actually renders in that case.
+              isAnimationActive={data.length > 1}
+            >
+              <LabelList dataKey="value" position="top" style={{ fontSize: 11, fill: 'currentColor', opacity: 0.7 }} />
+            </Line>
+          </LineChart>
+        )}
+      </ResponsiveContainer>
     </div>
   )
 }

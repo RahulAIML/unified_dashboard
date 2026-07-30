@@ -1,68 +1,123 @@
 /**
- * Regression test for a real bug found visually testing the AI dashboard
- * builder: chart widgets (line_chart / bar_chart) rendered as empty boxes —
- * only the title, no bar. The underlying data was completely correct
- * (verified against the live API response); this was a pure CSS bug.
+ * MiniChart was a placeholder that drew flat solid-color rectangles for BOTH
+ * line_chart and bar_chart widget types (a "line chart" never actually drew a
+ * line — only a lighter bar color), with no axis and no visible value on a
+ * small bar. That became a real problem on real data: a live cross-check
+ * against a client with a skewed distribution (one simulator at 129 sessions,
+ * others at 8/4/3) rendered the three smaller bars as indistinguishable
+ * slivers with nothing indicating their actual counts. MiniChart now renders
+ * real recharts LineChart/BarChart components (matching the house style used
+ * by components/charts/ModuleBarChart.tsx and ActivityLineChart.tsx), with an
+ * always-on value label so a small bar's number stays legible.
  *
- * Root cause: the outer row is `flex items-end`, and flexbox's align-items
- * only stretches a child to fill the cross axis under the default "stretch" —
- * "end" instead sizes each child to its own content, so the per-bar column had
- * an auto (0) height. The bar sets `height: X%`, and a percentage height
- * resolves against NOTHING when the container's height is auto (CSS spec, not
- * a browser quirk) — so every bar computed to 0px regardless of its data
- * value. jsdom (used by these tests) does not compute flex layout, so this
- * test asserts the FIX (h-full present on the per-bar column) rather than a
- * pixel height — the live confirmation (0px -> 86.4px after adding h-full)
- * was done directly in the browser, not here.
+ * recharts' ResponsiveContainer measures its DOM container to size the chart,
+ * and jsdom never reports a non-zero size (no layout engine, no
+ * ResizeObserver) — confirmed directly: rendering MiniChart against jsdom
+ * produces a ResponsiveContainer with width/height 0 and no child SVG at all.
+ * Rather than fight jsdom with a fake ResizeObserver, these tests mock
+ * `recharts` itself (matching this codebase's existing pattern of mocking
+ * whole chart components away in components/__tests__ — see vitest.setup.ts
+ * mocking ActivityLineChart/ModuleBarChart/DonutChart) and assert on the real
+ * thing under our control: which chart type is chosen, and what data reaches
+ * it — including that a small value like 3 arrives completely unchanged
+ * alongside a much larger 129, since that's what makes it legible via the
+ * label once recharts actually draws it.
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { render } from '@testing-library/react'
 import { MiniChart, MiniTable, DashboardRenderer, humanizeConnector } from '../DashboardRenderer'
 
-describe('MiniChart — the empty-chart bug', () => {
-  it('gives every bar column a definite height (h-full) so the percentage height can resolve', () => {
-    const { container } = render(
-      <MiniChart series={[{ date: '2026-05', value: '24.00', sessions: 5 }]} />,
-    )
+vi.mock('recharts', () => {
+  const Pass = ({ children }: { children?: React.ReactNode }) => <>{children}</>
+  const ChartStub = (testId: string) =>
+    function Stub({ data, children }: { data: unknown[]; children?: React.ReactNode }) {
+      return (
+        <div data-testid={testId} data-points={JSON.stringify(data)}>
+          {children}
+        </div>
+      )
+    }
+  return {
+    ResponsiveContainer: Pass,
+    BarChart: ChartStub('bar-chart'),
+    LineChart: ChartStub('line-chart'),
+    Bar: () => null,
+    Line: () => null,
+    XAxis: () => null,
+    YAxis: () => null,
+    CartesianGrid: () => null,
+    Tooltip: () => null,
+    LabelList: () => null,
+  }
+})
 
-    const column = container.querySelector('.flex-1')
-    // This exact class is what the bug fix added. Without it, the bar's
-    // percentage height is provably 0 regardless of the data value — see
-    // file header for why that is a CSS fact, not an assumption.
-    expect(column?.className).toContain('h-full')
+function chartData(container: HTMLElement, testId: string): { label: string; value: number }[] {
+  const el = container.querySelector(`[data-testid="${testId}"]`)
+  if (!el) return []
+  return JSON.parse(el.getAttribute('data-points') ?? '[]')
+}
+
+describe('MiniChart', () => {
+  it('renders a real line for a line_chart widget (bar=false), not a bar', () => {
+    const { container } = render(
+      <MiniChart series={[{ date: '2026-05', value: '24.00' }]} />,
+    )
+    expect(container.querySelector('[data-testid="line-chart"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="bar-chart"]')).toBeNull()
   })
 
-  it('renders one bar per data point, not zero', () => {
+  it('renders a real bar chart for a bar_chart widget (bar=true)', () => {
     const { container } = render(
-      <MiniChart series={[{ date: '2026-05', value: 10 }, { date: '2026-06', value: 20 }]} />,
+      <MiniChart bar series={[{ simulator: 'A', total_sessions: 2 }]} />,
     )
+    expect(container.querySelector('[data-testid="bar-chart"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="line-chart"]')).toBeNull()
+  })
 
-    expect(container.querySelectorAll('.bg-primary').length).toBe(2)
+  it('extracts value from the `value` field when present', () => {
+    const { container } = render(<MiniChart series={[{ date: '2026-05', value: '24.00' }]} />)
+    const data = chartData(container, 'line-chart')
+    expect(data[0].value).toBe(24)
   })
 
   it('reads total_sessions when there is no value field (bar_chart shape)', () => {
     const { container } = render(
       <MiniChart bar series={[{ simulator: 'A', total_sessions: 2 }, { simulator: 'B', total_sessions: 4 }]} />,
     )
-
-    const bars = container.querySelectorAll('[style*="height"]')
-    // B (4) is twice A (2), so B's bar must be taller than A's.
-    const heightOf = (el: Element) => parseFloat((el as HTMLElement).style.height)
-    expect(heightOf(bars[1])).toBeGreaterThan(heightOf(bars[0]))
+    const data = chartData(container, 'bar-chart')
+    expect(data.map(d => d.value)).toEqual([2, 4])
   })
 
-  it('floors every bar at 4% so a real-but-tiny value is still visible', () => {
+  it('keeps a small value exact and unclamped next to a much larger one, so its label stays legible', () => {
+    // The failure mode this guards against: a 129-vs-3 session ratio made the
+    // smaller bars visually invisible under pure height-based rendering. The
+    // fix is an always-on value label (LabelList) — which can only show the
+    // correct number if the real, unrounded value actually reaches the chart.
     const { container } = render(
-      <MiniChart series={[{ value: 0.001 }, { value: 1000 }]} />,
+      <MiniChart bar series={[
+        { simulator: 'Siigo 1', total_sessions: 129 },
+        { simulator: 'Siigo 2', total_sessions: 8 },
+        { simulator: 'Siigo 3', total_sessions: 4 },
+        { simulator: 'Siigo 4', total_sessions: 3 },
+      ]} />,
     )
-    const bars = container.querySelectorAll('[style*="height"]')
-    const heightOf = (el: Element) => parseFloat((el as HTMLElement).style.height)
-    expect(heightOf(bars[0])).toBeGreaterThanOrEqual(4)
+    const data = chartData(container, 'bar-chart')
+    expect(data.map(d => d.value)).toEqual([129, 8, 4, 3])
   })
 
-  it('renders nothing (no crash) for an empty series', () => {
-    const { container } = render(<MiniChart series={[]} />)
-    expect(container.querySelectorAll('.bg-primary').length).toBe(0)
+  it('carries the real label (not the truncated tick) alongside each value', () => {
+    const { container } = render(
+      <MiniChart bar series={[{ simulator: 'A Very Long Simulator Name', total_sessions: 5 }]} />,
+    )
+    const data = chartData(container, 'bar-chart')
+    expect(data[0].label).toBe('A Very Long Simulator Name')
+  })
+
+  it('shows a placeholder rather than an empty chart for no data', () => {
+    const { container, getByText } = render(<MiniChart series={[]} />)
+    expect(getByText('—')).toBeTruthy()
+    expect(container.querySelector('[data-testid="bar-chart"]')).toBeNull()
+    expect(container.querySelector('[data-testid="line-chart"]')).toBeNull()
   })
 })
 
@@ -89,7 +144,7 @@ describe('humanizeConnector', () => {
 })
 
 describe('DashboardRenderer — end to end with real widget shapes', () => {
-  it('renders a visible bar for a line_chart widget with real API data', () => {
+  it('renders a real chart with the right data for a line_chart widget', () => {
     const config = {
       company: 'Takeda', slug: 'takeda', title: 'Takeda Analytics', connector: 'rolplay_app_sql',
       rows: [{ id: 'r1', widgets: [{ id: 'trend', type: 'line_chart', title: 'Score Trend' }] }],
@@ -99,10 +154,9 @@ describe('DashboardRenderer — end to end with real widget shapes', () => {
 
     const { container } = render(<DashboardRenderer config={config} preview={preview} />)
 
-    const bar = container.querySelector('.bg-primary') as HTMLElement | null
-    expect(bar).not.toBeNull()
-    expect(bar?.style.height).toBe('90%')
-    expect(bar?.parentElement?.className).toContain('h-full')
+    const chart = container.querySelector('[data-testid="line-chart"]')
+    expect(chart).not.toBeNull()
+    expect(chartData(container, 'line-chart')[0].value).toBe(24)
   })
 
   it('shows a "no data" note only when the widget genuinely failed', () => {
