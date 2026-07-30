@@ -494,14 +494,25 @@ export async function lmsDashboard(
   }
 }
 
-/** Cheap liveness probe for module gating and the dashboard builder. */
+/**
+ * Cheap liveness probe for module gating and the dashboard builder.
+ *
+ * Was calling the SYNC, env-only `resolveLmsCredentials` with no options — so
+ * it never read the DB credential store at all, and (with requireScoped
+ * defaulted off) it would have fallen back to a shared LMS_* credential for a
+ * named tenant, exactly the cross-tenant leak requireScoped exists to
+ * prevent. Currently unused elsewhere in this codebase, so it hasn't produced
+ * a live bug yet — but it is exactly the trap that hid the Apotex tab the
+ * first time: correct everywhere except one caller nobody re-checked after
+ * the DB store was added. Fixed here before anything wires it up.
+ */
 export async function lmsProbe(tenantKey: string | null): Promise<{
   configured: boolean
   alive: boolean
   courses: number
   note: string
 }> {
-  const creds = resolveLmsCredentials(tenantKey)
+  const creds = await resolveLmsCredentialsAsync(tenantKey)
   if (!creds) {
     return { configured: false, alive: false, courses: 0, note: 'No LMS credentials configured' }
   }

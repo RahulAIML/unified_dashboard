@@ -23,7 +23,7 @@ import { resolvePharmaTenant, TENANT_CONFIG } from '@/lib/pharma-tenant'
 import { resolveRolplayAppAccess, rolplayAppAvailableModules } from '@/lib/bridge-rolplay-app'
 import { resolveSecondBrainProfile } from '@/lib/banco-second-brain'
 import { hasLmsCredentialsAsync } from '@/lib/lms-learnworlds'
-import { useDemoData } from '@/lib/demo'
+import { isDemoDataEnabled } from '@/lib/demo'
 
 export const runtime = 'nodejs'
 
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
   if (!ctx) return buildApiError('Unauthorized', 401)
 
   // Demo mode showcases the whole ecosystem.
-  if (useDemoData(ctx.email)) return buildSuccess({ modules: ALL }, { source: 'demo' })
+  if (isDemoDataEnabled(ctx.email)) return buildSuccess({ modules: ALL }, { source: 'demo' })
 
   try {
     const orgType = await resolveOrgType(ctx.email, ctx.customerId)

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { isRolplayDemoTenant, useDemoData } from '../demo'
+import { isRolplayDemoTenant, isDemoDataEnabled } from '../demo'
 import { demoBusinessLines, demoOrganization, demoObjections, demoAccessStatus } from '../demo/engine'
 
 const ORIGINAL_DEMO_DOMAINS = process.env.DEMO_DOMAINS
@@ -31,7 +31,7 @@ describe('demo scoping — Rolplay domains ONLY', () => {
       'd@gmail.com',
     ]) {
       expect(isRolplayDemoTenant(e)).toBe(false)
-      expect(useDemoData(e)).toBe(false)
+      expect(isDemoDataEnabled(e)).toBe(false)
     }
   })
 
@@ -60,7 +60,7 @@ describe('demo scoping — Rolplay domains ONLY', () => {
 
   it('global NEXT_PUBLIC_DEMO_MODE still forces demo data for anyone', () => {
     process.env.NEXT_PUBLIC_DEMO_MODE = 'true'
-    expect(useDemoData('adriana.losada@siigo.com')).toBe(true)
+    expect(isDemoDataEnabled('adriana.losada@siigo.com')).toBe(true)
   })
 })
 

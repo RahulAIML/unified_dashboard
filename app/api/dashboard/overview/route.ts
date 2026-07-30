@@ -8,7 +8,7 @@ import { bancoOverviewFromSecondBrain } from '@/lib/banco-second-brain'
 import { resolveRolplayAppAccess, rolplayAppOverview } from '@/lib/bridge-rolplay-app'
 import { resolvePharmaTenant } from '@/lib/pharma-tenant'
 import { pharmaDashboardOverview } from '@/lib/bridge-pharma-analytics'
-import { useDemoData } from '@/lib/demo'
+import { isDemoDataEnabled } from '@/lib/demo'
 import { demoOverview } from '@/lib/demo/engine'
 
 export const runtime = 'nodejs'
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
   if (!ctx) return buildApiError('Unauthorized', 401)
 
   // ── DEMO MODE ──────────────────────────────────────────────────────────────
-  if (useDemoData(ctx.email)) {
+  if (isDemoDataEnabled(ctx.email)) {
     const sp    = request.nextUrl.searchParams
     const range = parseDateRange(sp)
     if (!range) return buildApiError('Invalid date range', 400)

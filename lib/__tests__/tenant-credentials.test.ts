@@ -201,3 +201,87 @@ describe('hasTenantCredentials', () => {
     expect(await hasTenantCredentials('nobody', 'lms', 'LMS', ['api_url'], LMS_FIELDS)).toBe(false)
   })
 })
+
+/**
+ * These tests exist because a first draft of diagnoseTenantCredentials had a
+ * bug caught before it shipped: it checked `LMS_API_URL` for a NAMED tenant
+ * (missing the tenant-key segment resolveTenantCredentials actually inserts),
+ * so it would report a correctly-configured tenant-scoped env var as
+ * 'missing' — a diagnostic tool that lies about the exact thing it exists to
+ * diagnose. Asserting the diagnostic agrees with the real resolver on the
+ * SAME env vars is what would have caught that before it shipped.
+ */
+describe('diagnoseTenantCredentials', () => {
+  it('reports a tenant-scoped env var as env, not missing', async () => {
+    const { diagnoseTenantCredentials } = await fresh()
+    process.env.LMS_APOTEX_API_URL = 'https://apotex.example'
+
+    const d = await diagnoseTenantCredentials('apotex', 'lms', 'LMS', ['api_url'])
+
+    expect(d.fields.api_url).toBe('env')
+  })
+
+  it('agrees with resolveTenantCredentials on which env var name it checks', async () => {
+    // Regression guard for the exact bug found: run both against the same
+    // env var and require the same verdict.
+    const { diagnoseTenantCredentials, resolveTenantCredentials } = await fresh()
+    process.env.LMS_APOTEX_MX_ACCESS_TOKEN = 'tok'
+
+    const resolved = await resolveTenantCredentials('apotex-mx', 'lms', 'LMS', ['access_token'])
+    const diagnosed = await diagnoseTenantCredentials('apotex-mx', 'lms', 'LMS', ['access_token'])
+
+    expect(resolved.access_token).toBe('tok')
+    expect(diagnosed.fields.access_token).toBe('env')
+  })
+
+  it('reports a DB-stored field as db, taking precedence over env', async () => {
+    const { diagnoseTenantCredentials, encryptSecret } = await fresh()
+    authQuery.mockResolvedValue([
+      { field: 'api_url', value_encrypted: encryptSecret('https://from-db.example') },
+    ])
+    process.env.LMS_APOTEX_API_URL = 'https://from-env.example'
+
+    const d = await diagnoseTenantCredentials('apotex', 'lms', 'LMS', ['api_url'])
+
+    expect(d.fields.api_url).toBe('db')
+  })
+
+  it('reports missing when neither DB nor env has the field', async () => {
+    const { diagnoseTenantCredentials } = await fresh()
+    const d = await diagnoseTenantCredentials('nobody', 'lms', 'LMS', ['api_url'])
+    expect(d.fields.api_url).toBe('missing')
+  })
+
+  it('never includes a decrypted value, only presence', async () => {
+    const { diagnoseTenantCredentials, encryptSecret } = await fresh()
+    const secretValue = 'super-secret-token-value'
+    authQuery.mockResolvedValue([
+      { field: 'access_token', value_encrypted: encryptSecret(secretValue) },
+    ])
+
+    const d = await diagnoseTenantCredentials('apotex', 'lms', 'LMS', ['access_token'])
+
+    expect(JSON.stringify(d)).not.toContain(secretValue)
+  })
+
+  it('reports dbReachable=false and the error when the DB query throws', async () => {
+    const { diagnoseTenantCredentials } = await fresh()
+    authQuery.mockRejectedValue(new Error('relation "tenant_credentials" does not exist'))
+
+    const d = await diagnoseTenantCredentials('apotex', 'lms', 'LMS', ['api_url'])
+
+    expect(d.dbReachable).toBe(false)
+    expect(d.dbError).toContain('tenant_credentials')
+  })
+
+  it('does not touch the DB at all for a null tenant key', async () => {
+    const { diagnoseTenantCredentials } = await fresh()
+    process.env.LMS_API_URL = 'https://shared.example'
+
+    const d = await diagnoseTenantCredentials(null, 'lms', 'LMS', ['api_url'])
+
+    expect(authQuery).not.toHaveBeenCalled()
+    expect(d.fields.api_url).toBe('env')
+    expect(d.dbReachable).toBe(true)
+  })
+})

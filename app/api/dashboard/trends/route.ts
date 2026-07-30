@@ -8,7 +8,7 @@ import { bancoDashboardTrends } from '@/lib/bridge-banco-analytics'
 import { resolvePharmaTenant } from '@/lib/pharma-tenant'
 import { pharmaDashboardTrends } from '@/lib/bridge-pharma-analytics'
 import { resolveRolplayAppAccess, rolplayAppTrends } from '@/lib/bridge-rolplay-app'
-import { useDemoData } from '@/lib/demo'
+import { isDemoDataEnabled } from '@/lib/demo'
 import { demoTrends } from '@/lib/demo/engine'
 import { bucketTrends, bucketTrend, attachPreviousScore, isGranularity, type Granularity } from '@/lib/trend-transform'
 import type { TrendsApiResponse } from '@/lib/types'
@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
   if (!ctx) return buildApiError('Unauthorized', 401)
 
   // ── DEMO MODE ──────────────────────────────────────────────────────────────
-  if (useDemoData(ctx.email)) {
+  if (isDemoDataEnabled(ctx.email)) {
     const sp    = request.nextUrl.searchParams
     const range = parseDateRange(sp)
     if (!range) return buildApiError('Invalid date range', 400)

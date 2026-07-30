@@ -17,7 +17,8 @@ import { getAuthContextFromRequest } from '@/lib/server-auth'
 import { resolveOrgType } from '@/lib/org-type'
 import { resolvePharmaTenant } from '@/lib/pharma-tenant'
 import { lmsDashboard, lmsEnvPrefix } from '@/lib/lms-learnworlds'
-import { useDemoData } from '@/lib/demo'
+import { diagnoseTenantCredentials } from '@/lib/tenant-credentials'
+import { isDemoDataEnabled } from '@/lib/demo'
 import { demoLms } from '@/lib/demo/engine'
 
 export const runtime = 'nodejs'
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
   if (!range) return buildApiError('Invalid or missing from/to date range', 400)
   const { from, to } = range
 
-  if (useDemoData(ctx.email)) {
+  if (isDemoDataEnabled(ctx.email)) {
     return buildSuccess(demoLms(from, to), { source: 'demo' })
   }
 
@@ -42,19 +43,21 @@ export async function GET(request: NextRequest) {
 
     const data = await lmsDashboard(tenantKey, from, to)
 
-    // Name the exact env vars that were looked for and did not resolve. Without
-    // this, an unconfigured LMS is indistinguishable from a misnamed variable or
-    // a tenant key that is not what you assumed — which is exactly the guessing
-    // this endpoint should make unnecessary. Values are never logged.
+    // Full per-field diagnosis whenever unconfigured: which fields resolved
+    // from the DB store, which from env, which are missing entirely, and
+    // whether the DB itself was even reachable. Previously "not configured"
+    // could mean any of: no DB row, DB unreachable, env var misnamed, or a
+    // tenant key that isn't what you assumed — all indistinguishable from the
+    // outside, each needing a different fix. Values are never included.
+    let diagnostic: Awaited<ReturnType<typeof diagnoseTenantCredentials>> | undefined
     if (!data.configured) {
-      const prefix = tenantKey ? lmsEnvPrefix(tenantKey) : 'LMS'
+      diagnostic = await diagnoseTenantCredentials(
+        tenantKey, 'lms', tenantKey ? lmsEnvPrefix(tenantKey) : 'LMS',
+        ['api_url', 'client_id', 'client_secret', 'access_token'],
+      )
       console.warn(
         `[/api/dashboard/lms] not configured for tenantKey=${tenantKey ?? '(none)'} ` +
-        `orgType=${orgType}. Looked for ${prefix}_API_URL plus either ` +
-        `${prefix}_ACCESS_TOKEN or (${prefix}_CLIENT_ID and ${prefix}_CLIENT_SECRET). ` +
-        `Present: ${['API_URL', 'ACCESS_TOKEN', 'CLIENT_ID', 'CLIENT_SECRET']
-          .map(s => `${s}=${process.env[`${prefix}_${s}`] ? 'yes' : 'no'}`)
-          .join(' ')}`,
+        `orgType=${orgType} dbReachable=${diagnostic.dbReachable} fields=${JSON.stringify(diagnostic.fields)}`,
       )
     }
 
@@ -64,6 +67,7 @@ export async function GET(request: NextRequest) {
       // Surfaced so the tenant key can be confirmed from the response itself.
       tenantKey: tenantKey ?? null,
       lmsEnvPrefix: tenantKey ? lmsEnvPrefix(tenantKey) : 'LMS',
+      ...(diagnostic ? { diagnostic } : {}),
     })
   } catch (err) {
     console.error('[/api/dashboard/lms]', err)

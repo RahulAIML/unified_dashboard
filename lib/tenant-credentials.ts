@@ -117,6 +117,20 @@ async function readFromDb(
 }
 
 /**
+ * The exact env var name resolveTenantCredentials will look for. Factored out
+ * as the SINGLE source of truth for this naming, because a second, hand-copied
+ * version of this logic in diagnoseTenantCredentials previously drifted from
+ * this one and silently reported every tenant-scoped var as missing — a
+ * diagnostic that lies is worse than no diagnostic. Both now call this.
+ */
+function tenantEnvVarName(tenantKey: string, envPrefix: string, suffix: string): string {
+  // Non-alphanumerics collapse to '_' — a key like 'apotex-mx' would
+  // otherwise build an env name that cannot legally be set.
+  const scoped = tenantKey.toUpperCase().replace(/[^A-Z0-9]+/g, '_')
+  return `${envPrefix}_${scoped}_${suffix}`
+}
+
+/**
  * Resolve a tenant's credential bundle for one provider, DB first then env.
  *
  * @param envPrefix uppercase provider prefix for env fallback, e.g. 'LMS'.
@@ -140,10 +154,7 @@ export async function resolveTenantCredentials(
     if (bundle[field]) continue
     const suffix = field.toUpperCase()
     if (tenantKey) {
-      // Non-alphanumerics collapse to '_' — a key like 'apotex-mx' would
-      // otherwise build an env name that cannot legally be set.
-      const scoped = tenantKey.toUpperCase().replace(/[^A-Z0-9]+/g, '_')
-      const v = process.env[`${envPrefix}_${scoped}_${suffix}`]
+      const v = process.env[tenantEnvVarName(tenantKey, envPrefix, suffix)]
       if (v) { bundle[field] = v; continue }
       // Deliberately NO shared fallback for a named tenant: a bare LMS_* would
       // otherwise serve one school's data to every tenant.
@@ -172,4 +183,69 @@ export async function hasTenantCredentials(
 /** Test-only. */
 export function __resetCredentialCache(): void {
   cache.clear()
+}
+
+export interface CredentialDiagnostic {
+  tenantKey: string | null
+  provider: CredentialProvider
+  envPrefix: string
+  /** Per requested field: where it resolved from, or 'missing'. NEVER the value. */
+  fields: Record<string, 'db' | 'env' | 'missing'>
+  dbReachable: boolean
+  /** Present only when dbReachable is false — the DB error message. */
+  dbError?: string
+}
+
+/**
+ * Report WHERE each credential field would resolve from, without ever
+ * returning a value. Exists because "not configured" was previously
+ * indistinguishable from "DB row exists but env fallback also set", "DB
+ * unreachable", or "tenant key doesn't match what you assumed" — all of which
+ * look identical from the outside and each need a different fix. This
+ * collapses that guessing into one call.
+ */
+export async function diagnoseTenantCredentials(
+  tenantKey: string | null,
+  provider: CredentialProvider,
+  envPrefix: string,
+  fields: readonly string[],
+): Promise<CredentialDiagnostic> {
+  const dbBundle: CredentialBundle = {}
+  let dbReachable = true
+  let dbError: string | undefined
+
+  if (tenantKey) {
+    try {
+      const { authQuery } = await import('./db-auth')
+      const rows = await authQuery<{ field: string; value_encrypted: string }>(
+        `SELECT field, value_encrypted
+           FROM tenant_credentials
+          WHERE tenant_key = $1 AND provider = $2 AND is_active`,
+        [tenantKey, provider],
+      )
+      // Presence only — never decrypt for a diagnostic. Whether the value
+      // decrypts correctly is exactly what resolveTenantCredentials proves by
+      // actually using it; this just answers "does a row exist".
+      for (const row of rows) dbBundle[row.field] = row.field
+    } catch (err) {
+      dbReachable = false
+      dbError = err instanceof Error ? err.message : String(err)
+    }
+  }
+
+  const result: Record<string, 'db' | 'env' | 'missing'> = {}
+  for (const field of fields) {
+    if (dbBundle[field]) {
+      result[field] = 'db'
+      continue
+    }
+    const suffix = field.toUpperCase()
+    // Same lookup resolveTenantCredentials performs — see tenantEnvVarName.
+    const present = tenantKey
+      ? Boolean(process.env[tenantEnvVarName(tenantKey, envPrefix, suffix)])
+      : Boolean(process.env[`${envPrefix}_${suffix}`])
+    result[field] = present ? 'env' : 'missing'
+  }
+
+  return { tenantKey, provider, envPrefix, fields: result, dbReachable, ...(dbError ? { dbError } : {}) }
 }

@@ -42,6 +42,6 @@ export function isRolplayDemoTenant(email: string | null | undefined): boolean {
 }
 
 /** Demo data applies when the global flag is on OR the user is a Rolplay demo tenant. */
-export function useDemoData(email: string | null | undefined): boolean {
+export function isDemoDataEnabled(email: string | null | undefined): boolean {
   return isDemoMode() || isRolplayDemoTenant(email)
 }

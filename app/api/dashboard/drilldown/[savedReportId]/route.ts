@@ -5,7 +5,7 @@ import { getAuthContextFromRequest } from '@/lib/server-auth'
 import { resolveOrgType } from '@/lib/org-type'
 import { resolvePharmaTenant } from '@/lib/pharma-tenant'
 import { pharmaDashboardDrilldown } from '@/lib/bridge-pharma-analytics'
-import { useDemoData } from '@/lib/demo'
+import { isDemoDataEnabled } from '@/lib/demo'
 import { getDemoReport } from '@/lib/demo/reports'
 import { DEMO_REPORT_IDS } from '@/lib/demo/engine'
 
@@ -24,7 +24,7 @@ export async function GET(
     if (isNaN(id)) return buildApiError('Invalid report ID', 400)
 
     // ── DEMO MODE ────────────────────────────────────────────────────────────
-    if (useDemoData(ctx.email)) {
+    if (isDemoDataEnabled(ctx.email)) {
       // Map any ID into the demo report pool so all drilldown links work
       const demoId = DEMO_REPORT_IDS[id % DEMO_REPORT_IDS.length] ?? DEMO_REPORT_IDS[0]
       const report = getDemoReport(demoId)

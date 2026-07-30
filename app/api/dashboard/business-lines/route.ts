@@ -4,7 +4,7 @@ import { getAuthContextFromRequest } from '@/lib/server-auth'
 import { resolveOrgType } from '@/lib/org-type'
 import { resolvePharmaTenant } from '@/lib/pharma-tenant'
 import { pharmaDashboardBusinessLines } from '@/lib/bridge-pharma-analytics'
-import { useDemoData } from '@/lib/demo'
+import { isDemoDataEnabled } from '@/lib/demo'
 import { demoBusinessLines } from '@/lib/demo/engine'
 
 export const runtime = 'nodejs'
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
   const ctx = await getAuthContextFromRequest(request)
   if (!ctx) return buildApiError('Unauthorized', 401)
 
-  if (useDemoData(ctx.email)) {
+  if (isDemoDataEnabled(ctx.email)) {
     const range = parseDateRange(request.nextUrl.searchParams)
     return buildSuccess(range ? demoBusinessLines(range.from, range.to) : EMPTY, { source: 'demo' })
   }
