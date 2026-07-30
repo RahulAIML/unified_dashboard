@@ -61,6 +61,8 @@ async def fetch_widget(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
             return await _sale_exercises(cfg, w)
         if cfg.connector == ServiceKind.rolplay_app_sql:
             return await _rolplay_app(cfg, w)
+        if cfg.connector == ServiceKind.coach_app_sql:
+            return await _coach_app(cfg, w)
         if cfg.connector == ServiceKind.second_brain:
             return await _second_brain(cfg, w)
         return WidgetPreview(widget_id=w.id, ok=False, error=f"no preview for {cfg.connector}")
@@ -256,6 +258,102 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
         "passed": passed,
     }
     val = metrics.get(w.metric_key, sessions)
+    return WidgetPreview(widget_id=w.id, ok=val is not None, value=val)
+
+
+# ── coach_app_sql (customer_id-scoped analytics; Takeda, Besins) ─────────────────
+#
+# Mirrors lib/bridge-client.ts EXACTLY (bridgeOverviewKpis / bridgeTrends /
+# bridgeUsecaseBreakdown) -- same tables, same score normalisation, same
+# passed_flag join -- so a dashboard built here shows the same numbers the
+# main Next.js app already shows this tenant. This was the missing half of
+# the fix: schema_discovery already declared these three metrics for
+# coach_app_sql, but fetch_widget had no case for the connector at all, so
+# EVERY coach_app_sql client (not just one) rendered every widget as
+# "no preview for ServiceKind.coach_app_sql" regardless of whether it had
+# real data.
+#
+# SCORE_CASE: rfc.value_num is on a 0-10 scale for some rows, 0-100 for
+# others (same ambiguity lib/bridge-client.ts's SCORE_CASE handles) --
+# normalise <=10 by multiplying by 10, else use as-is.
+_SCORE_CASE = """
+  CASE WHEN rfc.field_key IN ('overall_score','final_score')
+       THEN CASE WHEN rfc.value_num <= 10 THEN rfc.value_num * 10 ELSE rfc.value_num END
+       ELSE NULL
+  END"""
+
+
+async def _coach_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
+    from .connectors.coach_app import CoachAppConnector
+
+    customer_id = int(cfg.connector_handle.get("customer_id") or 0)
+    if not customer_id:
+        return WidgetPreview(widget_id=w.id, ok=False, error="no customer_id resolved for this tenant")
+
+    conn = CoachAppConnector()
+    frm, to = _date_range(cfg)
+
+    # ── Trend line: daily session count + avg score ──
+    if w.type == WidgetType.line_chart:
+        rows = await conn._sql(
+            f"SELECT DATE(rfc.report_created_at) AS date, "
+            f"ROUND(AVG({_SCORE_CASE}),1) AS avg_score, "
+            f"COUNT(DISTINCT rfc.saved_report_id) AS sessions "
+            f"FROM rolplay_pro_analytics.report_field_current rfc "
+            f"WHERE rfc.customer_id = ? AND rfc.report_created_at BETWEEN ? AND ? "
+            f"GROUP BY DATE(rfc.report_created_at) ORDER BY date ASC LIMIT 90",
+            [customer_id, frm, to],
+        )
+        series = [{"date": r.get("date"), "value": r.get("avg_score"), "sessions": r.get("sessions")}
+                  for r in (rows or [])]
+        return WidgetPreview(widget_id=w.id, ok=bool(series), series=series)
+
+    # ── Per-usecase breakdown (bar_chart / donut / table) ──
+    # 'user' is also a declared dimension (schema_discovery._analytics_schema)
+    # but no widget requesting it has been observed live yet -- only usecase
+    # is implemented here. A 'user'-dimension widget would currently fall
+    # through to the tile branch below and report an unsupported metric_key,
+    # which is honest (visibly wrong) rather than silently empty.
+    if w.type in (WidgetType.bar_chart, WidgetType.donut, WidgetType.table):
+        rows = await conn._sql(
+            f"SELECT rfc.usecase_id, uc.usecase_name, "
+            f"COUNT(DISTINCT rfc.saved_report_id) AS total_sessions, "
+            f"ROUND(AVG({_SCORE_CASE}),2) AS avg_score, "
+            f"ROUND(100.0 * COUNT(DISTINCT CASE WHEN sr.passed_flag = 1 THEN rfc.saved_report_id END) "
+            f"  / NULLIF(COUNT(DISTINCT rfc.saved_report_id),0), 1) AS pass_rate "
+            f"FROM rolplay_pro_analytics.report_field_current rfc "
+            f"JOIN coach_app.saved_reports sr ON sr.id = rfc.saved_report_id "
+            f"LEFT JOIN coach_app.usecases uc ON uc.id = rfc.usecase_id "
+            f"WHERE rfc.customer_id = ? AND rfc.report_created_at BETWEEN ? AND ? "
+            f"GROUP BY rfc.usecase_id, uc.usecase_name ORDER BY total_sessions DESC LIMIT 30",
+            [customer_id, frm, to],
+        )
+        out = [{"usecase": (r.get("usecase_name") or f"Usecase {r.get('usecase_id')}"),
+                "total_sessions": r.get("total_sessions"), "avg_score": r.get("avg_score"),
+                "pass_rate": r.get("pass_rate")} for r in (rows or [])]
+        return WidgetPreview(widget_id=w.id, ok=bool(out), rows=out)
+
+    # ── KPI tiles (scalar): total_sessions / avg_score / pass_rate ──
+    rows = await conn._sql(
+        f"SELECT COUNT(DISTINCT rfc.saved_report_id) AS total_sessions, "
+        f"ROUND(AVG({_SCORE_CASE}),2) AS avg_score, "
+        f"COUNT(DISTINCT CASE WHEN sr.passed_flag = 1 THEN rfc.saved_report_id END) AS passed "
+        f"FROM rolplay_pro_analytics.report_field_current rfc "
+        f"JOIN coach_app.saved_reports sr ON sr.id = rfc.saved_report_id "
+        f"WHERE rfc.customer_id = ? AND rfc.report_created_at BETWEEN ? AND ?",
+        [customer_id, frm, to],
+    )
+    row = (rows or [{}])[0]
+    sessions = int(row.get("total_sessions") or 0)
+    passed = int(row.get("passed") or 0)
+    metrics = {
+        "total_sessions": sessions,
+        "avg_score": float(row["avg_score"]) if row.get("avg_score") is not None else None,
+        "pass_rate": round(100 * passed / sessions, 1) if sessions else None,
+    }
+    if w.metric_key not in metrics:
+        return WidgetPreview(widget_id=w.id, ok=False, error=f"unsupported metric_key '{w.metric_key}' for coach_app_sql")
+    val = metrics[w.metric_key]
     return WidgetPreview(widget_id=w.id, ok=val is not None, value=val)
 
 

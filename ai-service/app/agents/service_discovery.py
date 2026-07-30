@@ -74,14 +74,29 @@ async def run(knowledge: CompanyKnowledge, exercise_ids: list[int], log: LogFn) 
 
 
 def pick_primary(knowledge: CompanyKnowledge) -> ServiceDescriptor | None:
-    """The service the dashboard is primarily built from: prefer one with data."""
+    """The service the dashboard is primarily built from: prefer one with data.
+
+    rolplay_app_sql now ranks ABOVE coach_app_sql, reversed from the previous
+    order. Found live: Takeda's cached knowledge had picked coach_app_sql over
+    rolplay_app_sql, and coach_app_sql's match came from a broad LIKE probe
+    against coach_users on the email domain (CoachAppConnector.probe) -- a
+    much weaker signal of "this is really the client's account" than
+    rolplay_app_sql's match against r_client.name, which is where Takeda's
+    real, verified account actually lives (client_id=13, confirmed against
+    live production data this session). coach_app_sql is kept ABOVE
+    second_brain, which is never the primary analytics source for any tenant.
+
+    pharma_kpi/pharma_sale_exercises/pharma_exceltis_rest stay on top,
+    unchanged -- those match on an explicit tenant slug (not a fuzzy domain or
+    name LIKE), so they are a strictly stronger signal than either of the two
+    reordered below them.
+    """
     if not knowledge.services:
         return None
     with_data = [s for s in knowledge.services if s.has_data]
     pool = with_data or knowledge.services
-    # Prefer richer pharma sources over counts-only rolplay-app.
     order = {
         "pharma_kpi": 0, "pharma_sale_exercises": 1, "pharma_exceltis_rest": 2,
-        "coach_app_sql": 3, "second_brain": 4, "rolplay_app_sql": 5, "unknown": 9,
+        "rolplay_app_sql": 3, "coach_app_sql": 4, "second_brain": 5, "unknown": 9,
     }
     return sorted(pool, key=lambda s: order.get(s.kind.value, 9))[0]
