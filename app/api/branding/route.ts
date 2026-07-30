@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
 import { getAuthContextFromRequest } from "@/lib/server-auth"
 import { buildApiError, buildSuccess } from "@/lib/api-utils"
-import { getBrandingSettings, upsertBrandingSettings, brandingTenantKey } from "@/lib/db-branding"
+import { getBrandingSettingsForUser, upsertBrandingSettings, brandingUserKey } from "@/lib/db-branding"
 import { normalizeBrandingSettings, resolveClientBrand, validateBrandingPayload } from "@/lib/branding"
 
 export const runtime = "nodejs"
@@ -11,7 +11,10 @@ export async function GET(request: NextRequest) {
   if (!auth) return buildApiError("Unauthorized", 401)
 
   try {
-    const settings = await getBrandingSettings(brandingTenantKey(auth.email, auth.customerId))
+    // Per-user, with an org-wide fallback for anyone who hasn't personalized
+    // yet. See lib/db-branding.ts — this used to be ONE row shared by every
+    // user at a company, so one person's change overwrote everyone else's.
+    const settings = await getBrandingSettingsForUser(auth.userId, auth.email, auth.customerId)
     return buildSuccess({
       settings,
       brand: resolveClientBrand(settings),
@@ -31,7 +34,9 @@ export async function PUT(request: NextRequest) {
     const payload = normalizeBrandingSettings(body)
     validateBrandingPayload(payload)
 
-    const settings = await upsertBrandingSettings(brandingTenantKey(auth.email, auth.customerId), auth.customerId, payload)
+    // Written to the PERSONAL row only — never the shared org-wide row — so
+    // saving never affects any other signed-in user.
+    const settings = await upsertBrandingSettings(brandingUserKey(auth.userId), auth.customerId, payload)
     return buildSuccess({
       settings,
       brand: resolveClientBrand(settings),

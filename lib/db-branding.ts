@@ -9,14 +9,49 @@ interface BrandingRow {
 }
 
 /**
- * Stable per-tenant branding key. customer_id collapses to 0 for every
- * non-coach tenant, so it can't isolate them; the email domain does (one per
- * company). Coach tenants keep cust:<id> so their existing row is preserved.
+ * Stable per-tenant (ORG-WIDE) branding key. customer_id collapses to 0 for
+ * every non-coach tenant, so it can't isolate them; the email domain does (one
+ * per company). Coach tenants keep cust:<id> so their existing row is preserved.
+ *
+ * Still used as the FALLBACK layer under per-user settings (see brandingUserKey
+ * below) — a user who has never customized anything inherits whatever their
+ * org already set, rather than starting from the bare default.
  */
 export function brandingTenantKey(email: string, customerId: number): string {
   if (customerId > 0) return `cust:${customerId}`
   const domain = email.split("@")[1]?.toLowerCase().trim()
   return domain ? `domain:${domain}` : "cust:0"
+}
+
+/**
+ * Per-USER branding key. Every user gets their own row, so one person changing
+ * the platform name / colors / logo never affects anyone else signed in under
+ * the same company — each user customizes their own view independently.
+ *
+ * This was previously the actual bug: /api/branding read and wrote ONLY
+ * brandingTenantKey(...), a single row shared by every user at a company, so
+ * any one person's change was visible to (and overwritten by) everyone else.
+ *
+ * No migration needed: tenant_key is a plain TEXT unique key, so a 'user:<id>'
+ * value is just another row in the same table.
+ */
+export function brandingUserKey(userId: number): string {
+  return `user:${userId}`
+}
+
+/**
+ * Resolve settings for ONE user: their personal row if they have saved one,
+ * else the org-wide default (so a first-time user isn't dropped back to plain
+ * defaults if their company already has branding set), else DEFAULT.
+ */
+export async function getBrandingSettingsForUser(
+  userId: number,
+  email: string,
+  customerId: number
+): Promise<BrandingSettings> {
+  const personal = await getBrandingSettings(brandingUserKey(userId))
+  if (personal !== DEFAULT_BRANDING_SETTINGS) return personal
+  return getBrandingSettings(brandingTenantKey(email, customerId))
 }
 
 export async function getBrandingSettings(tenantKey: string): Promise<BrandingSettings> {
