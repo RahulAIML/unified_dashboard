@@ -20,6 +20,10 @@ export interface PharmaTenantRow {
   hasBusinessLines: boolean
   hasOrganization: boolean
   hasTopStats: boolean
+  /** NULL/undefined = unspecified (no LMS). */
+  hasLms: boolean | null
+  /** NULL/undefined = unspecified, which means ENABLED (gate tests !== false). */
+  hasSimulator: boolean | null
   coachActivityIds: number[] | null
   authHeaderName: string | null
   authHeaderValue: string | null
@@ -40,6 +44,11 @@ interface TenantSqlRow {
   has_business_lines: boolean
   has_organization: boolean
   has_top_stats: boolean
+  // Nullable, unlike the flags above: NULL means "unspecified", which for
+  // has_simulator resolves to ON. See migrations/007 for why they are not
+  // NOT NULL DEFAULT FALSE.
+  has_lms: boolean | null
+  has_simulator: boolean | null
   coach_activity_ids: number[] | null
   auth_header_name: string | null
   auth_header_value: string | null
@@ -61,6 +70,10 @@ function rowToTenant(r: TenantSqlRow): PharmaTenantRow {
     hasBusinessLines: r.has_business_lines,
     hasOrganization: r.has_organization,
     hasTopStats: r.has_top_stats,
+    // ?? null so a pre-migration database (column absent → undefined) behaves
+    // identically to an unspecified value rather than throwing or reading false.
+    hasLms: r.has_lms ?? null,
+    hasSimulator: r.has_simulator ?? null,
     coachActivityIds: r.coach_activity_ids,
     authHeaderName: r.auth_header_name,
     authHeaderValue: r.auth_header_value,
@@ -72,6 +85,7 @@ function rowToTenant(r: TenantSqlRow): PharmaTenantRow {
 
 const SELECT_COLS = `tenant_key, display_name, kind, url, x_tenant, ucids,
   has_certification, has_objections, has_business_lines, has_organization, has_top_stats,
+  has_lms, has_simulator,
   coach_activity_ids, auth_header_name, auth_header_value, is_active, created_at, updated_at`
 
 /** All active tenant rows — used to populate the runtime config cache. */
@@ -120,6 +134,10 @@ export interface UpsertTenantInput {
   hasBusinessLines?: boolean
   hasOrganization?: boolean
   hasTopStats?: boolean
+  /** undefined/null = unspecified (no LMS). */
+  hasLms?: boolean | null
+  /** undefined/null = unspecified, which means ENABLED. Pass false only for an LMS-only client. */
+  hasSimulator?: boolean | null
   coachActivityIds?: number[] | null
   authHeaderName?: string | null
   authHeaderValue?: string | null
@@ -131,9 +149,10 @@ export async function upsertTenant(input: UpsertTenantInput): Promise<PharmaTena
     `INSERT INTO pharma_tenants
        (tenant_key, display_name, kind, url, x_tenant, ucids,
         has_certification, has_objections, has_business_lines, has_organization, has_top_stats,
+        has_lms, has_simulator,
         coach_activity_ids, auth_header_name, auth_header_value, created_by, created_at, updated_at)
      VALUES
-       ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11, $12::jsonb, $13, $14, $15, NOW(), NOW())
+       ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15, $16, $17, NOW(), NOW())
      ON CONFLICT (tenant_key) DO UPDATE SET
        display_name = EXCLUDED.display_name,
        kind = EXCLUDED.kind,
@@ -145,6 +164,11 @@ export async function upsertTenant(input: UpsertTenantInput): Promise<PharmaTena
        has_business_lines = EXCLUDED.has_business_lines,
        has_organization = EXCLUDED.has_organization,
        has_top_stats = EXCLUDED.has_top_stats,
+       -- COALESCE, not plain assignment: these are tri-state (NULL = unspecified).
+       -- A caller that omits them must not wipe a previously-set value, which a
+       -- bare EXCLUDED would do on every partial update.
+       has_lms = COALESCE(EXCLUDED.has_lms, pharma_tenants.has_lms),
+       has_simulator = COALESCE(EXCLUDED.has_simulator, pharma_tenants.has_simulator),
        coach_activity_ids = EXCLUDED.coach_activity_ids,
        auth_header_name = EXCLUDED.auth_header_name,
        auth_header_value = EXCLUDED.auth_header_value,
@@ -163,6 +187,9 @@ export async function upsertTenant(input: UpsertTenantInput): Promise<PharmaTena
       input.hasBusinessLines ?? false,
       input.hasOrganization ?? false,
       input.hasTopStats ?? false,
+      // ?? null preserves "unspecified"; do NOT default these to false.
+      input.hasLms ?? null,
+      input.hasSimulator ?? null,
       input.coachActivityIds ? JSON.stringify(input.coachActivityIds) : null,
       input.authHeaderName ?? null,
       input.authHeaderValue ?? null,

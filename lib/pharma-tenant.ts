@@ -289,7 +289,25 @@ async function loadDynamicTenants(): Promise<void> {
     // built-in's known capability. Same idea for ucids/coachActivityIds: fall
     // back to the static value when the DB row omits them.
     const prev = TENANT_CONFIG[t.tenantKey]
-    TENANT_CONFIG[t.tenantKey] = {
+    // Typed as ALL-KEYS-REQUIRED (-? strips the optionality) so omitting any
+    // field of TenantConfig is a COMPILE ERROR rather than a silent drop.
+    //
+    // This is the structural fix for the bug that shipped twice: the merge below
+    // rebuilds the object from scratch, so a field left out simply vanished, with
+    // no error anywhere — Apotex's LMS tab disappeared exactly this way. A
+    // hand-maintained list cannot be kept correct by discipline alone; now the
+    // typechecker maintains it. When a field is added to TenantConfig, tsc fails
+    // here until it is handled explicitly.
+    //
+    // Optional fields may still be assigned `undefined` — the point is that the
+    // KEY must be written, forcing a deliberate decision per field.
+    // Enforced with `satisfies Record<keyof TenantConfig, unknown>` below rather
+    // than a mapped type: `-?` would also strip `undefined` from each field's
+    // type, wrongly rejecting the optional fields that legitimately hold it.
+    // Record makes every key REQUIRED while `unknown` accepts any value, which is
+    // exactly the guarantee wanted — presence enforced, values unconstrained here
+    // and checked by the TenantConfig annotation on assignment.
+    const merged: TenantConfig = {
       kind: t.kind,
       url: t.url,
       xTenant: t.xTenant ?? undefined,
@@ -300,17 +318,23 @@ async function loadDynamicTenants(): Promise<void> {
       hasOrganization:  t.hasOrganization  || (prev?.hasOrganization  ?? false),
       hasTopStats:      t.hasTopStats       || (prev?.hasTopStats      ?? false),
       coachActivityIds: t.coachActivityIds ?? prev?.coachActivityIds ?? undefined,
-      // hasLms / hasSimulator have NO pharma_tenants column yet (see
-      // migrations/003), so there is no DB value to OR against — they must be
-      // carried straight through or a DB row silently drops them, hiding
-      // Apotex's LMS tab. When a has_lms column lands, OR it in like the rest.
-      hasLms: prev?.hasLms ?? false,
-      // undefined means "on" (the gate tests `!== false`), so preserve undefined
-      // rather than defaulting — and let an explicit false survive too.
-      hasSimulator: prev?.hasSimulator,
+      // has_lms now EXISTS as a column (migrations/007), so the DB can enable it
+      // for a self-service tenant. OR-ed like its siblings: the DB may turn it
+      // on, but can never drop a built-in's verified value.
+      hasLms: (t.hasLms ?? false) || (prev?.hasLms ?? false),
+      // hasSimulator is NOT OR-ed, deliberately. Its gate is `!== false`, so
+      // undefined means ON — OR-ing would make an explicit `false` unexpressible
+      // and force the Simulator tab on for an LMS-only client. Precedence is
+      // therefore: explicit DB value → static value → undefined (= on).
+      hasSimulator: t.hasSimulator ?? prev?.hasSimulator ?? undefined,
       authHeaderName: t.authHeaderName ?? undefined,
       authHeaderValue: t.authHeaderValue ?? undefined,
-    }
+      // Add a field to TenantConfig and tsc FAILS HERE until it is handled.
+      // That is the whole point: this object is rebuilt from scratch, so a field
+      // left out silently vanished — which is how Apotex lost its LMS tab twice.
+      // The typechecker now maintains this list instead of discipline.
+    } satisfies Record<keyof TenantConfig, unknown>
+    TENANT_CONFIG[t.tenantKey] = merged
   }
 
   dynamicDomainMap.clear()

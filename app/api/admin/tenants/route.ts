@@ -59,6 +59,10 @@ export async function POST(request: NextRequest) {
     hasBusinessLines?: boolean
     hasOrganization?: boolean
     hasTopStats?: boolean
+    /** Tri-state: omit for unspecified. null is accepted and means the same. */
+    hasLms?: boolean | null
+    /** Tri-state: omit/null = unspecified (ENABLED). Pass false for an LMS-only client. */
+    hasSimulator?: boolean | null
     coachActivityIds?: number[]
     authHeaderName?: string
     authHeaderValue?: string
@@ -99,6 +103,11 @@ export async function POST(request: NextRequest) {
       hasBusinessLines: body.hasBusinessLines ?? false,
       hasOrganization: body.hasOrganization ?? false,
       hasTopStats: body.hasTopStats ?? false,
+      // ?? null, NOT ?? false: these are tri-state and an omitted value must stay
+      // unspecified. Defaulting hasSimulator to false here would switch the
+      // Simulator tab off for every tenant saved through this endpoint.
+      hasLms: body.hasLms ?? null,
+      hasSimulator: body.hasSimulator ?? null,
       coachActivityIds: body.coachActivityIds && body.coachActivityIds.length > 0 ? body.coachActivityIds : null,
       authHeaderName: body.authHeaderName?.trim() || null,
       authHeaderValue: body.authHeaderValue?.trim() || null,

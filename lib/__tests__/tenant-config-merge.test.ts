@@ -97,3 +97,50 @@ describe('TENANT_CONFIG merge with a DB row', () => {
     expect(TENANT_CONFIG.newclient?.hasLms).toBeFalsy()
   })
 })
+
+/**
+ * migrations/007 added has_lms / has_simulator, so the DB can now express these
+ * for a tenant that has no static config at all. Before that column existed,
+ * hasLms was unreachable for exactly the tenants the onboarding wizard creates.
+ */
+describe('capability flags from the DB (migrations/007)', () => {
+  it('lets a DB row ENABLE the LMS for a self-service tenant', async () => {
+    const { TENANT_CONFIG } = await loadWithDbRows([
+      apotexRow({ tenantKey: 'newclient', xTenant: 'newclient', hasLms: true }),
+    ])
+
+    // The capability that was previously impossible to express.
+    expect(TENANT_CONFIG.newclient?.hasLms).toBe(true)
+  })
+
+  it('still cannot let a DB row DROP a built-in tenant\'s LMS', async () => {
+    const { TENANT_CONFIG } = await loadWithDbRows([apotexRow({ hasLms: false })])
+
+    // OR-ed with the static value: the DB may add a capability, never remove one.
+    expect(TENANT_CONFIG.apotex?.hasLms).toBe(true)
+  })
+
+  it('treats NULL has_simulator as enabled', async () => {
+    const { TENANT_CONFIG } = await loadWithDbRows([apotexRow({ hasSimulator: null })])
+
+    // The gate is `!== false`, so unspecified must stay on — a NOT NULL DEFAULT
+    // FALSE column would have silently disabled every tenant's Simulator tab.
+    expect(TENANT_CONFIG.apotex?.hasSimulator).not.toBe(false)
+  })
+
+  it('honours an explicit has_simulator = false for an LMS-only client', async () => {
+    const { TENANT_CONFIG } = await loadWithDbRows([
+      apotexRow({ tenantKey: 'lmsonly', xTenant: 'lmsonly', hasLms: true, hasSimulator: false }),
+    ])
+
+    // Must be expressible, which is why this field is NOT OR-ed like the others.
+    expect(TENANT_CONFIG.lmsonly?.hasSimulator).toBe(false)
+    expect(TENANT_CONFIG.lmsonly?.hasLms).toBe(true)
+  })
+
+  it('prefers an explicit DB has_simulator over the static value', async () => {
+    const { TENANT_CONFIG } = await loadWithDbRows([apotexRow({ hasSimulator: false })])
+
+    expect(TENANT_CONFIG.apotex?.hasSimulator).toBe(false)
+  })
+})
