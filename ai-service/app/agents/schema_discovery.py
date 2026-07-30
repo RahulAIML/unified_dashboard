@@ -142,10 +142,29 @@ async def _exceltis_schema(k, svc, schema, exercise_ids, log) -> None:
         await log("schema_discovery", "info", "This client records qualitative results — counts-only dashboard")
 
 
+# r_simulator.category -> dashboard module name. 'SB' is DELIBERATELY EXCLUDED:
+# Second Brain data comes from its own token-authenticated API, which is the
+# verified source. Mirrors SOLUTION_TO_CATEGORY in the Next.js
+# lib/bridge-rolplay-app.ts and the note in lib/journey.ts — same rule, kept
+# in sync across both codebases so a rolplay-app session is never counted
+# through two disagreeing paths.
+_CATEGORY_TO_MODULE = {"COACH": "coach", "SIM": "simulator", "SEGMENT": "certification"}
+
+
 async def _rolplay_app_schema(svc, schema, log: LogFn) -> None:
     """Rolplay-app clients: always counts; add score metrics when the client's
     sessions actually carry a score (raw_closing_data / closing_analysis), probed
-    live so the dashboard represents everything the data has — client_id only."""
+    live so the dashboard represents everything the data has — client_id only.
+
+    Previously left schema.modules and schema.date_range UNSET for every
+    rolplay-app client, so the builder could not distinguish a Coach-only
+    client from a full one, and had no observed window to render trends over
+    (it would default to an arbitrary range that could be entirely empty for
+    a client whose real activity sits outside it). Both are now discovered
+    from r_simulator.category via one additional query, independent of the
+    existing scored-count query above so the proven score-extraction path is
+    untouched by this change.
+    """
     schema.dimensions = ["simulator", "user"]
     metrics = [
         DiscoveredMetric(key="total_sessions", label="Total Sessions", type=MetricType.count,
@@ -164,6 +183,36 @@ async def _rolplay_app_schema(svc, schema, log: LogFn) -> None:
         data = (body or {}).get("data") if isinstance(body, dict) else None
         if data:
             scored = int(data[0].get("scored") or 0)
+
+        _, mod_body = await post_json(
+            get_settings().rolplay_app_sql_url,
+            {"sql": (
+                "SELECT sim.category AS category, "
+                "MIN(s.date_created) AS min_d, MAX(s.date_created) AS max_d "
+                "FROM r_user_session s JOIN r_user u ON u.ID = s.user_id "
+                "LEFT JOIN r_simulator sim ON sim.ID = s.simulator_id "
+                f"WHERE u.client_id = {client_id} GROUP BY sim.category"
+            )},
+        )
+        mod_rows = (mod_body or {}).get("data") if isinstance(mod_body, dict) else None
+        modules: list[str] = []
+        mins: list[str] = []
+        maxs: list[str] = []
+        for row in mod_rows or []:
+            module = _CATEGORY_TO_MODULE.get(str(row.get("category") or "").upper())
+            if not module:
+                continue  # 'SB' and anything unmapped — excluded on purpose.
+            if module not in modules:
+                modules.append(module)
+            if row.get("min_d"):
+                mins.append(str(row["min_d"]))
+            if row.get("max_d"):
+                maxs.append(str(row["max_d"]))
+        schema.modules = modules
+        if mins and maxs:
+            schema.date_range = (min(mins)[:10], max(maxs)[:10])
+        await log("schema_discovery", "info",
+                  f"rolplay-app client_id={client_id}: modules={modules or '—'} window={schema.date_range or '—'}")
 
     if scored > 0:
         metrics += [
