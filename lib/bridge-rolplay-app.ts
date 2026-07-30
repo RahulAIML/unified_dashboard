@@ -35,12 +35,53 @@ function sqlUrl(): string {
   return process.env.ROLPLAY_APP_SQL_URL || DEFAULT_SQL_URL
 }
 
+/**
+ * Statements this client is permitted to send.
+ *
+ * Defence in depth, and deliberately client-side. The endpoint is documented as
+ * "SELECT-only, enforced server-side", but that enforcement lives in a PHP file
+ * outside this repository and is not verifiable from here. This guard makes it
+ * impossible for THIS codebase to send a mutating statement even by mistake —
+ * a future caller cannot accidentally turn a read path into a write one.
+ *
+ * Rejects stacked statements too: a ';' followed by anything else would let one
+ * SELECT smuggle a second statement past a naive server-side prefix check.
+ */
+function assertReadOnly(sql: string): void {
+  const trimmed = sql.trim()
+  if (!/^select\s/i.test(trimmed) && !/^with\s/i.test(trimmed)) {
+    throw new Error('rolplay-app SQL: only SELECT/WITH statements may be sent')
+  }
+  // Allow one optional trailing semicolon; anything after it is a second statement.
+  if (/;\s*\S/.test(trimmed)) {
+    throw new Error('rolplay-app SQL: stacked statements are not permitted')
+  }
+}
+
 /** Run a SELECT against the raw-SQL endpoint. Values are inlined by callers —
  *  callers MUST inline only integers they coerced themselves (never user text). */
 async function remoteSelect<T = Record<string, unknown>>(sql: string): Promise<T[]> {
+  assertReadOnly(sql)
+
+  // Attach a shared secret when configured.
+  //
+  // As of this commit the endpoint accepts UNAUTHENTICATED requests: this client
+  // sends only Content-Type, and the integration works in production, so the
+  // server cannot be requiring a credential. Combined with a public default host
+  // that is an internet-reachable arbitrary-SQL endpoint on the production
+  // database. See docs/ARCHITECTURE_AUDIT.md S2 -- it is a live exposure, not a
+  // future risk.
+  //
+  // Sending the header now means the cutover is a server-side change plus one
+  // environment variable, with no code deploy needed at the moment the endpoint
+  // starts requiring auth.
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const token = process.env.ROLPLAY_APP_SQL_TOKEN
+  if (token) headers['X-Rolplay-Auth'] = token
+
   const res = await fetch(sqlUrl(), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ sql }),
     cache: 'no-store',
     signal: AbortSignal.timeout(20_000),

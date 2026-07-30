@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { rateLimit, clientKey, rateLimitHeaders, __resetRateLimits } from '../rate-limit'
 
 beforeEach(() => __resetRateLimits())
