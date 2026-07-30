@@ -111,6 +111,63 @@ export async function updateUserCustomerId(userId: number, customerId: number): 
   )
 }
 
+/** Summary row for the admin user-management list. Never includes password_hash. */
+export interface UserSummary {
+  id: number
+  email: string
+  full_name: string
+  customer_id: number
+  role: 'user' | 'admin'
+  is_active: boolean
+  created_at: string
+  last_login: string | null
+}
+
+function rowToSummary(row: UserRow): UserSummary {
+  return {
+    id: row.id,
+    email: row.email,
+    full_name: row.full_name,
+    customer_id: Number(row.customer_id),
+    role: row.role,
+    is_active: row.is_active,
+    created_at: typeof row.created_at === 'string' ? row.created_at : row.created_at.toISOString(),
+    last_login: row.last_login == null
+      ? null
+      : typeof row.last_login === 'string' ? row.last_login : row.last_login.toISOString(),
+  }
+}
+
+/** All users, for the admin user-management screen. Ordered newest first. */
+export async function listUsers(): Promise<UserSummary[]> {
+  const rows = await authQuery<UserRow>(
+    `SELECT id, email, full_name, company_domain, customer_id, role, created_at, is_active, last_login
+       FROM users
+      ORDER BY created_at DESC`,
+  )
+  return rows.map(rowToSummary)
+}
+
+/**
+ * Set an existing, active user's role. Returns null if no matching active
+ * user exists, so the caller can distinguish "not found" from a DB error.
+ *
+ * Deliberately has NO "last admin" guard here — that safety belongs at the
+ * route layer, which knows who the CALLER is and can refuse self-demotion.
+ * This function is a plain, unconditional set, same shape as
+ * updateUserCustomerId above.
+ */
+export async function setUserRole(email: string, role: 'user' | 'admin'): Promise<AuthUser | null> {
+  const rows = await authQuery<UserRow>(
+    `UPDATE users
+        SET role = $2, updated_at = NOW()
+      WHERE email = $1 AND is_active = TRUE
+      RETURNING id, email, full_name, company_domain, customer_id, role, created_at, is_active, last_login`,
+    [email.toLowerCase().trim(), role],
+  )
+  return rows.length > 0 ? rowToUser(rows[0]) : null
+}
+
 /**
  * Promote an existing user only when no administrator exists yet.
  * The advisory lock makes concurrent bootstrap attempts deterministic.
