@@ -44,15 +44,15 @@ Verify every finding directly rather than trusting the report.
 
 ---
 
-## Phase 2 — Architecture refactor `[ ]` ← NEXT
+## Phase 2 — Architecture refactor `[~]`
 
 Ordered so nothing is built against two sources of truth.
 
-- [ ] `S3`+`A1` Encrypted per-tenant credential store (read-through: DB → env fallback, so existing tenants keep working)
-- [ ] `A2` Single typed tenant-config document; add missing capability columns; static blocks become seed data
-- [ ] `A4` Redis-backed shared cache + pub/sub invalidation
-- [ ] Connector Interface + SDK — wrap the 4 existing bridges **unchanged** first
-- [ ] `S2` Parameterised RPC replacing the SQL-string transport (golden-master before cutover)
+- [x] `S3`+`A1` Encrypted per-tenant credential store — AES-256-GCM envelope, master key in Render env, ciphertext in Postgres (`migrations/006`). `/api/admin/credentials` writes it; `GET` never returns values. LMS switched over: resolution no longer depends on an env var NAME matching the tenant key. Env fallback per field, so existing tenants are untouched. **27 + 10 tests.**
+- [x] `A2` Capability drop is now a **compile error** — `satisfies Record<keyof TenantConfig, unknown>` on the merge; proven by adding a field and observing TS1360, then reverting. `migrations/007` adds the missing `has_lms` / `has_simulator` as **nullable** tri-state (a NOT NULL DEFAULT FALSE column would have disabled every tenant's Simulator tab). Write path wired through upsert + admin route with COALESCE. **14 tests.**
+- [~] `S2` SQL transport — client-side hardening DONE (read-only guard rejecting non-SELECT and stacked statements; `X-Rolplay-Auth` sent when `ROLPLAY_APP_SQL_TOKEN` is set, so cutover needs no deploy). **The server-side fix is NOT in this repo — see B3, now escalated.**
+- [ ] `A4` Redis-backed shared cache + pub/sub invalidation — **needs a Redis instance** (see B5)
+- [ ] Connector Interface + SDK — wrap the 4 existing bridges **unchanged** first (pure code, no blocker)
 - [ ] Capability Engine (generalise `/api/dashboard/modules`)
 - [ ] Metadata + Semantic layer · KPI Registry · Version Manager
 - [ ] Journey / Progress / Dependency engines (generalise `lib/journey.ts`)
@@ -97,8 +97,9 @@ Docker · migrations · cold start · horizontal scaling · autoscaling · zero 
 |---|---|---|---|
 | B1 | No access to Render env/DB | Phase 11; verifying the Apotex LMS fix | You paste `/api/dashboard/lms` response (`lmsEnvPrefix`, `tenantKey`, `configured`) |
 | B2 | FastAPI AI service is outside this repo | Phases 4–5 completeness; its auth/resumability unaudited | Point me at that repo, or confirm it's out of scope |
-| B3 | Unknown whether the remote SQL executor is internet-reachable | Whether `S2` is architectural risk or a live incident | Confirm its network exposure + what authenticates it |
-| B4 | No production secret manager decided (KMS/Vault/Render secrets) | `S3` credential encryption design | Name the target and I'll build to it |
+| B3 | **ESCALATED — CONFIRMED LIVE.** Internet-reachable endpoint executing SQL on the production DB with no authentication (client sends only Content-Type; default host is public and hardcoded). "SELECT-only" was a comment, not verified code. | Production data confidentiality | **Today:** require the shared secret in `remote-access.php` + IP-allowlist. The client already sends `X-Rolplay-Auth` once `ROLPLAY_APP_SQL_TOKEN` is set. |
+| B4 | ~~Secret manager undecided~~ **RESOLVED: Render secrets**, adapted to envelope encryption (one master key in Render, per-tenant ciphertext in Postgres) because Render secrets alone still require a redeploy per tenant | — | Set `SECRET_ENCRYPTION_KEY` (`openssl rand -base64 32`) and run migrations 006 + 007 |
+| B5 | No Redis instance provisioned | `A4`, Phase 6 caching, Phase 12 live sync | Provision Redis and give me the URL; I'll build the abstraction with an in-process fallback meanwhile |
 
 ---
 
@@ -107,7 +108,7 @@ Docker · migrations · cold start · horizontal scaling · autoscaling · zero 
 | Criterion | Status |
 |---|---|
 | All critical audit findings resolved | `[~]` Phase 1 done; `S2`/`S3`/`A1`–`A4` in Phase 2 |
-| Zero failing tests | `[x]` 153/153 |
+| Zero failing tests | `[x]` 210/210 |
 | Zero TypeScript errors | `[x]` |
 | Zero ESLint errors | `[x]` clean on all changed files; full-repo sweep pending |
 | Zero build warnings | `[ ]` not yet verified |
