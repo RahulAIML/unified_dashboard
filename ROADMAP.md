@@ -52,7 +52,7 @@ Ordered so nothing is built against two sources of truth.
 - [x] `A2` Capability drop is now a **compile error** — `satisfies Record<keyof TenantConfig, unknown>` on the merge; proven by adding a field and observing TS1360, then reverting. `migrations/007` adds the missing `has_lms` / `has_simulator` as **nullable** tri-state (a NOT NULL DEFAULT FALSE column would have disabled every tenant's Simulator tab). Write path wired through upsert + admin route with COALESCE. **14 tests.**
 - [~] `S2` SQL transport — client-side hardening DONE (read-only guard rejecting non-SELECT and stacked statements; `X-Rolplay-Auth` sent when `ROLPLAY_APP_SQL_TOKEN` is set, so cutover needs no deploy). **The server-side fix is NOT in this repo — see B3, now escalated.**
 - [ ] `A4` Redis-backed shared cache + pub/sub invalidation — **needs a Redis instance** (see B5)
-- [ ] Connector Interface + SDK — wrap the 4 existing bridges **unchanged** first (pure code, no blocker)
+- [~] Connector Interface — `lib/connectors/types.ts` defined; **rolplay-app connector done** as a pure adapter over the unmodified bridge module (22 tests asserting numeric equivalence). Remaining: pharma-bridge, banco-second-brain, exceltis-rest, learnworlds-lms adapters, then the registry + route cutover.
 - [ ] Capability Engine (generalise `/api/dashboard/modules`)
 - [ ] Metadata + Semantic layer · KPI Registry · Version Manager
 - [ ] Journey / Progress / Dependency engines (generalise `lib/journey.ts`)
