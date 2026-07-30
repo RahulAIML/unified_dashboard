@@ -17,6 +17,7 @@ import {
   DbError,
 } from '@/lib/db-users'
 import { verifyPassword } from '@/lib/password'
+import { rateLimit, clientKey } from '@/lib/rate-limit'
 import {
   signAccessToken,
   signRefreshToken,
@@ -28,7 +29,26 @@ import { buildSuccess, buildApiError } from '@/lib/api-utils'
 
 export const runtime = 'nodejs'
 
+/**
+ * Deliberately generous: real users fat-finger passwords, and this is a
+ * per-instance counter (see lib/rate-limit.ts), so a tight limit would produce
+ * false lockouts before it produced security. It still reduces an unlimited
+ * online guessing attack to ~20/min/IP.
+ */
+const LOGIN_LIMIT = 20
+const LOGIN_WINDOW_MS = 60_000
+
 export async function POST(request: NextRequest) {
+  // Brute-force guard. Keyed on IP because the attacker controls the email, so
+  // a per-email limit would let them rotate addresses freely — and would also
+  // let anyone lock a known user out by burning their budget.
+  const limit = rateLimit(clientKey(request, 'login'), LOGIN_LIMIT, LOGIN_WINDOW_MS)
+  if (!limit.ok) {
+    return buildApiError('Too many login attempts. Try again shortly.', 429, {
+      retryAfterSeconds: limit.retryAfter,
+    })
+  }
+
   try {
     let body: { email?: string; password?: string }
     try {

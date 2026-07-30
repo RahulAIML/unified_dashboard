@@ -8,6 +8,7 @@
  */
 
 import { NextRequest } from 'next/server'
+import { rateLimit, clientKey } from '@/lib/rate-limit'
 import { createUser, emailExists, createSession, DbError } from '@/lib/db-users'
 import { hashPassword, validateEmail, validatePasswordStrength } from '@/lib/password'
 import {
@@ -21,7 +22,21 @@ import { buildSuccess, buildApiError } from '@/lib/api-utils'
 
 export const runtime = 'nodejs'
 
+/**
+ * Tighter than login: registration creates persistent state, so automated
+ * signup floods cost more than a failed guess does.
+ */
+const REGISTER_LIMIT = 5
+const REGISTER_WINDOW_MS = 60_000
+
 export async function POST(request: NextRequest) {
+  const limit = rateLimit(clientKey(request, 'register'), REGISTER_LIMIT, REGISTER_WINDOW_MS)
+  if (!limit.ok) {
+    return buildApiError('Too many registration attempts. Try again shortly.', 429, {
+      retryAfterSeconds: limit.retryAfter,
+    })
+  }
+
   try {
     let body: { email?: string; password?: string; full_name?: string }
     try {
