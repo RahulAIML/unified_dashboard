@@ -42,6 +42,7 @@ vi.mock('@/lib/lang-store', () => ({
     darkMode:        'Dark mode',
     logout:          'Log out',
     phaseLabel:      'v1.0',
+    dashboardWord:   'Dashboard',
   }),
 }))
 vi.mock('@/lib/hooks/useClientBrand', () => ({
@@ -102,6 +103,22 @@ describe('Sidebar', () => {
   it('renders the platform name', () => {
     render(<Sidebar />)
     expect(screen.getAllByText('Test Platform').length).toBeGreaterThan(0)
+  })
+
+  it('shows the subtitle as plain "Dashboard", not "{brand} Dashboard"', () => {
+    // Regression: the subtitle used to read `${brand.name} Dashboard`, where
+    // brand.name is a fixed constant, NOT the customizable platform name
+    // above it — so renaming the platform (here, to "Test Platform") left this
+    // line still showing the brand's own name underneath, unchanged and
+    // inconsistent with the rename. useClientBrand is mocked to 'TestBrand'
+    // in this file; if the old bug returned, this line would fail because
+    // "Dashboard" would only be found glued to "TestBrand".
+    render(<Sidebar />)
+    // getAllByText, not getByText: Sidebar renders a desktop copy and a mobile
+    // copy simultaneously (see the existing platform-name test above), so
+    // exactly one match would itself be a failure here.
+    expect(screen.getAllByText('Dashboard').length).toBeGreaterThan(0)
+    expect(screen.queryByText('TestBrand Dashboard')).not.toBeInTheDocument()
   })
 
   it('renders the mobile hamburger button', () => {

@@ -72,7 +72,16 @@ export function MiniChart({ series, bar }: { series: Record<string, unknown>[]; 
   return (
     <div className="flex items-end gap-1 h-24 mt-2">
       {rows.map((r, i) => (
-        <div key={i} className="flex-1 flex flex-col items-center justify-end" title={`${r.date ?? r.activity ?? r.usecase ?? i}: ${vals[i]}`}>
+        // h-full is load-bearing, not decorative: the outer row has align-items
+        // "end" (items-end), and flexbox's align-items only stretches a child to
+        // fill the cross axis under "stretch" (the default) — "end" instead sizes
+        // each child to its own content, so without an explicit height this column
+        // has an auto (0) height. The bar below sets height as a PERCENTAGE, and a
+        // percentage height resolves against nothing when its container's height
+        // is auto — CSS spec, not a rendering glitch — so every bar silently
+        // computed to 0px. Confirmed live: adding h-full took a bar from 0px to
+        // 86.4px (90% of the 96px h-24 row), matching the intended height exactly.
+        <div key={i} className="flex-1 h-full flex flex-col items-center justify-end" title={`${r.date ?? r.activity ?? r.usecase ?? i}: ${vals[i]}`}>
           <div className={`w-full rounded-t ${bar ? 'bg-primary/70' : 'bg-primary'}`} style={{ height: `${Math.max(4, (vals[i] / max) * 90)}%` }} />
         </div>
       ))}

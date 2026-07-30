@@ -162,7 +162,14 @@ export function Sidebar() {
           <p className="text-sm font-extrabold tracking-tight leading-tight break-words text-sidebar-foreground" title={platformName} translate="no">
             {platformName}
           </p>
-          <p className="text-[10px] text-sidebar-foreground/50 leading-tight break-words" translate="no">{brand.name} {t.dashboardWord}</p>
+          {/* Just "Dashboard", not "{brand.name} Dashboard". brand.name is a fixed
+              constant ("Rolplay Analytics" — see DEFAULT_BRAND_NAME in
+              lib/branding.ts), not the per-user platformName above it, so this line
+              used to silently ignore your customization: rename the platform to
+              "Acme" and the bold title updates, but this line still read "Rolplay
+              Analytics Dashboard" underneath it — inconsistent with the name you
+              just set. Dropping the brand name here removes that mismatch entirely. */}
+          <p className="text-[10px] text-sidebar-foreground/50 leading-tight break-words" translate="no">{t.dashboardWord}</p>
         </div>
       </div>
 
