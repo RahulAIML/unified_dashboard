@@ -31,7 +31,7 @@ async def run(knowledge: CompanyKnowledge, service: ServiceDescriptor, exercise_
     elif kind == ServiceKind.pharma_exceltis_rest:
         await _exceltis_schema(knowledge, service, schema, exercise_ids, log)
     elif kind == ServiceKind.rolplay_app_sql:
-        _counts_only_schema(service, schema)
+        await _rolplay_app_schema(service, schema, log)
     elif kind == ServiceKind.second_brain:
         _second_brain_schema(service, schema)
     elif kind == ServiceKind.coach_app_sql:
@@ -141,15 +141,105 @@ async def _exceltis_schema(k, svc, schema, exercise_ids, log) -> None:
         await log("schema_discovery", "info", "This client records qualitative results — counts-only dashboard")
 
 
-def _counts_only_schema(svc, schema) -> None:
+# r_simulator.category → dashboard module name. 'SB' is DELIBERATELY EXCLUDED:
+# Second Brain data comes from its own token-authenticated API, which is the
+# verified source. Including it here would give Second Brain two disagreeing
+# sources. Mirrors SOLUTION_TO_CATEGORY in the Next.js lib/bridge-rolplay-app.ts.
+_CATEGORY_TO_MODULE = {"COACH": "coach", "SIM": "simulator", "SEGMENT": "certification"}
+
+
+async def _rolplay_app_schema(svc, schema, log: LogFn) -> None:
+    """Discover modules, date range and score availability for a rolplay-app client.
+
+    Previously this returned a fixed counts-only schema, so every rolplay-app
+    tenant reported modules=[] and date_range=None no matter what it actually
+    had — the builder could not tell a Coach-only client from a full one, and had
+    no window to render trends over.
+
+    Score metrics are offered ONLY when scored rows genuinely exist. Advertising
+    avg_score for a client whose sessions are all unscored produces a dashboard
+    of empty tiles that reads as an outage; the honest output is counts-only.
+    """
     schema.dimensions = ["simulator", "user"]
-    schema.note = "Rolplay-app platform: sessions recorded, scores not captured (counts-only)."
+    client_id = int(svc.handle.get("client_id") or 0)
+
     schema.metrics = [
         DiscoveredMetric(key="total_sessions", label="Total Sessions", type=MetricType.count,
                          source_kind=svc.kind, source_action="r_user_session"),
         DiscoveredMetric(key="total_users", label="Active Users", type=MetricType.count,
                          source_kind=svc.kind, source_action="r_user"),
     ]
+
+    if not client_id:
+        schema.note = "Rolplay-app platform: no client_id resolved, counts-only."
+        return
+
+    from ..connectors.rolplay_app import RolplayAppConnector
+    conn = RolplayAppConnector()
+
+    # One query answers modules, window and score availability together, rather
+    # than three round trips to a production endpoint.
+    rows = await conn._sql(
+        "SELECT sim.category AS category, COUNT(*) AS n, "
+        "SUM(CASE WHEN s.score > 0 THEN 1 ELSE 0 END) AS scored, "
+        "MIN(s.date_created) AS min_d, MAX(s.date_created) AS max_d "
+        "FROM r_user_session s JOIN r_user u ON u.ID = s.user_id "
+        "LEFT JOIN r_simulator sim ON sim.ID = s.simulator_id "
+        f"WHERE u.client_id = {client_id} GROUP BY sim.category"
+    ) or []
+
+    modules: list[str] = []
+    scored_total = 0
+    sessions_total = 0
+    mins: list[str] = []
+    maxs: list[str] = []
+
+    for r in rows:
+        cat = str(r.get("category") or "").upper()
+        module = _CATEGORY_TO_MODULE.get(cat)
+        if not module:
+            # 'SB' and any future/unknown category: skipped on purpose. Counting
+            # them would inflate totals with data this dashboard does not source.
+            continue
+        if module not in modules:
+            modules.append(module)
+        sessions_total += int(r.get("n") or 0)
+        scored_total += int(r.get("scored") or 0)
+        if r.get("min_d"):
+            mins.append(str(r["min_d"]))
+        if r.get("max_d"):
+            maxs.append(str(r["max_d"]))
+
+    schema.modules = modules
+    if mins and maxs:
+        # Real observed window, so trends render over the period that has data
+        # instead of a hardcoded default with an empty chart.
+        schema.date_range = (min(mins)[:10], max(maxs)[:10])
+
+    if scored_total > 0:
+        schema.metrics.append(
+            DiscoveredMetric(key="avg_score", label="Average Score", type=MetricType.score,
+                             source_kind=svc.kind, source_action="r_user_session.score")
+        )
+        schema.metrics.append(
+            DiscoveredMetric(key="pass_rate", label="Pass Rate", type=MetricType.rate,
+                             source_kind=svc.kind, source_action="r_user_session.score")
+        )
+        schema.note = (
+            f"Rolplay-app platform: {sessions_total} session(s) across {len(modules)} module(s), "
+            f"{scored_total} scored."
+        )
+    else:
+        # State the reason explicitly: an operator seeing only counts should know
+        # it is because the platform captured no scores, not because discovery failed.
+        schema.note = (
+            f"Rolplay-app platform: {sessions_total} session(s) across {len(modules)} module(s), "
+            "but NO scored rows — score/pass-rate metrics omitted rather than shown as empty."
+        )
+
+    await log("schema_discovery", "info",
+              f"rolplay-app client_id={client_id}: modules={modules or '—'} "
+              f"sessions={sessions_total} scored={scored_total} window={schema.date_range or '—'}")
 
 
 def _second_brain_schema(svc, schema) -> None:
