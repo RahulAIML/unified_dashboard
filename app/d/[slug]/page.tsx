@@ -12,24 +12,37 @@ export default function PublishedDashboardPage() {
   const [data, setData] = useState<RenderResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null)
 
   useEffect(() => {
     if (!slug) return
     let cancelled = false
-    ;(async () => {
+    const load = async () => {
       setLoading(true); setError(null)
       try {
         const res = await fetch(`/api/ai/render/${slug}`, { cache: 'no-store' })
         if (!res.ok) throw new Error(res.status === 404 ? 'This dashboard has not been published yet.' : `Failed to load (${res.status})`)
         const json: RenderResponse = await res.json()
-        if (!cancelled) setData(json)
+        if (!cancelled) {
+          setData(json)
+          setLastUpdated(new Date().toLocaleTimeString())
+        }
       } catch (e) {
         if (!cancelled) setError((e as Error).message)
       } finally {
         if (!cancelled) setLoading(false)
       }
-    })()
-    return () => { cancelled = true }
+    }
+
+    void load()
+    const interval = window.setInterval(() => {
+      void load()
+    }, 15000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+    }
   }, [slug])
 
   if (loading) {
@@ -55,7 +68,9 @@ export default function PublishedDashboardPage() {
     <div className="max-w-6xl mx-auto px-4 py-8">
       <header className="mb-6">
         <h1 className="text-2xl font-bold text-foreground">{data.config.title}</h1>
-        <p className="text-sm text-muted-foreground">Live data · {humanizeConnector(data.config.connector)}</p>
+        <p className="text-sm text-muted-foreground">
+          Live data · {humanizeConnector(data.config.connector)}{lastUpdated ? ` · refreshed ${lastUpdated}` : ''}
+        </p>
       </header>
       <DashboardRenderer config={data.config} preview={data.preview} />
       {data.config.recommendations?.length > 0 && (

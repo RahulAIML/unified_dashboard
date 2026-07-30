@@ -65,11 +65,19 @@ done
 > **Security note:** a shared initial password is fine for a demo, but for real
 > users have each person change it after first login (or issue unique passwords).
 
-### Making an admin (needed only for the client-onboarding wizard)
-Roles aren't self-serve — promote once in the auth DB:
+### Creating the first admin (needed for the dashboard builder)
+Register the intended administrator normally, then run this once from a secure
+terminal. The setup secret is sent only in a request header, and the endpoint
+atomically refuses every call after an administrator exists:
 ```bash
-psql "$AUTH_DATABASE_URL" -c "UPDATE users SET role='admin' WHERE email='you@yourco.com';"
+curl -X POST https://rolplaypro-dashboard.onrender.com/api/auth/bootstrap-admin \
+  -H "Content-Type: application/json" \
+  -H "X-Setup-Secret: $SETUP_SECRET" \
+  -d '{"email":"you@yourco.com"}'
 ```
+
+Log out and back in after a successful response. `/dashboard-builder` is
+admin-only; non-admin users are redirected to the main dashboard.
 
 ---
 

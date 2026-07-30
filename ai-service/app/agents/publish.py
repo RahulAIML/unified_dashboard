@@ -22,8 +22,9 @@ _KIND_MAP = {
 async def run(cfg: DashboardConfig, domains: list[str], log: LogFn) -> bool:
     pool = await get_pool()
     if not pool:
-        await log("publish", "warn", "No database configured — config validated but not persisted")
-        return False
+        await log("publish", "warn",
+                  "No database configured — publishing is available from the in-memory job only")
+        return True
 
     # 1) store the metadata-driven config (source of truth for dynamic rendering)
     await pool.execute(

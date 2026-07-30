@@ -1,5 +1,5 @@
 /**
- * GET /api/auth/setup?secret=<SETUP_SECRET>
+ * GET /api/auth/setup with X-Setup-Secret: <SETUP_SECRET>
  *
  * Initialises (or upgrades) the Auth PostgreSQL database schema.
  *
@@ -29,13 +29,13 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  const secret = request.nextUrl.searchParams.get('secret')
+  const secret = request.headers.get('x-setup-secret')
   if (secret !== SETUP_SECRET) {
     return NextResponse.json(
       {
         success: false,
         error: 'Missing or invalid setup secret.',
-        hint: 'Add ?secret=<SETUP_SECRET> to the URL (or set SETUP_SECRET in env)',
+        hint: 'Send SETUP_SECRET in the X-Setup-Secret request header.',
       },
       { status: 401 }
     )

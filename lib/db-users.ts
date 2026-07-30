@@ -112,6 +112,29 @@ export async function updateUserCustomerId(userId: number, customerId: number): 
 }
 
 /**
+ * Promote an existing user only when no administrator exists yet.
+ * The advisory lock makes concurrent bootstrap attempts deterministic.
+ */
+export async function promoteFirstAdmin(email: string): Promise<AuthUser | null> {
+  const rows = await authQuery<UserRow>(
+    `WITH bootstrap_lock AS MATERIALIZED (
+       SELECT pg_advisory_xact_lock(4815162342)
+     )
+     UPDATE users AS target
+        SET role = 'admin', updated_at = NOW()
+       FROM bootstrap_lock
+      WHERE target.email = $1
+        AND target.is_active = TRUE
+        AND NOT EXISTS (SELECT 1 FROM users WHERE role = 'admin')
+     RETURNING target.id, target.email, target.full_name, target.company_domain,
+               target.customer_id, target.role, target.created_at, target.is_active,
+               target.last_login`,
+    [email.toLowerCase().trim()],
+  )
+  return rows.length > 0 ? rowToUser(rows[0]) : null
+}
+
+/**
  * Retrieve the bcrypt password hash for login verification.
  * Returns null if user does not exist.
  */

@@ -71,6 +71,8 @@ export default function DashboardBuilderPage() {
   const [resuming, setResuming] = useState(false)
   const [copied, setCopied] = useState(false)
   const [acknowledgedEmpty, setAcknowledgedEmpty] = useState(false)
+  const [publishError, setPublishError] = useState<string | null>(null)
+  const [publishedSlug, setPublishedSlug] = useState<string | null>(null)
   const seededModulesFor = useRef<string | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const logEndRef = useRef<HTMLDivElement | null>(null)
@@ -159,13 +161,23 @@ export default function DashboardBuilderPage() {
   async function publish() {
     if (!job) return
     setPublishing(true)
+    setPublishError(null)
     try {
       const res = await fetch('/api/ai/publish', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ job_id: job.job_id }),
       })
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({ error: 'Publish failed' }))
+        throw new Error(payload.error || 'Publish failed')
+      }
       const r = await res.json()
       setJob(prev => prev ? { ...prev, published: !!r.published } : prev)
+      if (r.published && r.slug) {
+        setPublishedSlug(r.slug)
+      }
+    } catch (err) {
+      setPublishError(err instanceof Error ? err.message : 'Publish failed')
     } finally { setPublishing(false) }
   }
 
@@ -452,6 +464,13 @@ export default function DashboardBuilderPage() {
               {job.published ? '✓ Published — live' : publishing ? 'Publishing…' : 'Publish dashboard'}
             </button>
             {job.published && <span className="text-xs text-muted-foreground">Live within ~30s. Users on this company&apos;s domain now see it.</span>}
+            {publishError && <span className="text-xs text-destructive">{publishError}</span>}
+            {publishedSlug && (
+              <a href={`/d/${publishedSlug}`} target="_blank" rel="noreferrer"
+                className="text-xs font-semibold text-primary hover:underline">
+                Open published dashboard
+              </a>
+            )}
           </div>
         </div>
       )}
