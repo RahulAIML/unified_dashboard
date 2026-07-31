@@ -25,7 +25,7 @@
  */
 import { describe, it, expect, vi } from 'vitest'
 import { render } from '@testing-library/react'
-import { MiniChart, MiniDonut, MiniTable, DashboardRenderer, humanizeConnector } from '../DashboardRenderer'
+import { MiniChart, MiniDonut, MiniJourney, MiniTable, DashboardRenderer, humanizeConnector } from '../DashboardRenderer'
 
 vi.mock('recharts', () => {
   const Pass = ({ children }: { children?: React.ReactNode }) => <>{children}</>
@@ -188,6 +188,34 @@ describe('MiniDonut', () => {
   })
 })
 
+describe('MiniJourney', () => {
+  it('renders one stage per real module with its own count and pass rate', () => {
+    const { getByText } = render(
+      <MiniJourney rows={[
+        { module: 'simulator', label: 'Practice Simulator', phase: 'practice', total_sessions: 144, pass_rate: 36.8 },
+        { module: 'certification', label: 'Certification', phase: 'validation', total_sessions: 3, pass_rate: 66.7 },
+      ]} />,
+    )
+    expect(getByText('Practice Simulator')).toBeTruthy()
+    expect(getByText('144')).toBeTruthy()
+    expect(getByText('36.8% pass rate')).toBeTruthy()
+    expect(getByText('Certification')).toBeTruthy()
+    expect(getByText('3')).toBeTruthy()
+  })
+
+  it('omits the pass-rate bar for a stage with no rate (null, not 0)', () => {
+    const { queryByText } = render(
+      <MiniJourney rows={[{ module: 'lms', label: 'LMS', phase: 'cognitive', total_sessions: 40, pass_rate: null }]} />,
+    )
+    expect(queryByText(/pass rate/)).toBeNull()
+  })
+
+  it('shows a placeholder rather than an empty journey for no rows', () => {
+    const { getByText } = render(<MiniJourney rows={[]} />)
+    expect(getByText('—')).toBeTruthy()
+  })
+})
+
 describe('MiniTable', () => {
   it('renders real rows with their column values', () => {
     const { getByText } = render(
@@ -240,6 +268,29 @@ describe('DashboardRenderer — end to end with real widget shapes', () => {
     const byLabel = new Map(pieData.map((d: { label: string; value: number }) => [d.label, d.value]))
     expect(byLabel.get('Passed')).toBe(9)
     expect(byLabel.get('Failed')).toBe(6)
+  })
+
+  it('renders the Solution Journey for a journey widget with real per-module data', () => {
+    const config = {
+      company: 'Siigo', slug: 'siigo', title: 'Siigo Analytics', connector: 'rolplay_app_sql',
+      rows: [{ id: 'r1', widgets: [{ id: 'journey', type: 'journey', title: 'Solution Journey' }] }],
+      recommendations: [],
+    }
+    const preview = {
+      widgets: [{
+        widget_id: 'journey', ok: true,
+        rows: [
+          { module: 'simulator', label: 'Practice Simulator', phase: 'practice', total_sessions: 144, pass_rate: 36.8 },
+          { module: 'certification', label: 'Certification', phase: 'validation', total_sessions: 3, pass_rate: 66.7 },
+        ],
+      }],
+    }
+
+    const { getByText } = render(<DashboardRenderer config={config} preview={preview} />)
+
+    expect(getByText('Practice Simulator')).toBeTruthy()
+    expect(getByText('Certification')).toBeTruthy()
+    expect(getByText('144')).toBeTruthy()
   })
 
   it('shows a "no data" note only when the widget genuinely failed', () => {

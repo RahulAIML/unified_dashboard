@@ -60,6 +60,7 @@ export function DashboardRenderer({ config, preview }: { config: DashboardConfig
                   {(w.type === 'line_chart' || w.type === 'bar_chart' || w.type === 'histogram') &&
                     <MiniChart series={p?.series ?? p?.rows ?? []} bar={w.type !== 'line_chart'} />}
                   {w.type === 'donut' && <MiniDonut rows={p?.rows ?? []} />}
+                  {w.type === 'journey' && <MiniJourney rows={p?.rows ?? []} />}
                   {w.type === 'table' && <MiniTable rows={p?.rows ?? []} />}
                   {p && !p.ok && <div className="text-xs text-amber-600 dark:text-amber-400 mt-1">no data{p.error ? `: ${p.error}` : ''}</div>}
                 </div>
@@ -178,6 +179,64 @@ export function MiniChart({ series, bar }: { series: Record<string, unknown>[]; 
           </LineChart>
         )}
       </ResponsiveContainer>
+    </div>
+  )
+}
+
+const JOURNEY_PHASE_LABELS: Record<string, string> = {
+  cognitive: 'Cognitive',
+  practice: 'Practice',
+  validation: 'Validation',
+  excellence: 'Excellence',
+}
+
+/**
+ * Solution Journey widget — the tenant's real modules in fixed progression
+ * order (LMS -> Master Coach -> Practice Simulator -> Certification ->
+ * Second Brain; see ai-service/app/journey.py), each with its own real
+ * session count and pass rate. Mirrors the hand-built /journey page's
+ * per-stage cards (app/journey/page.tsx), condensed to fit inside a
+ * dashboard widget rather than a full page — same ordering, same "every
+ * stage reports its own metric on its own scale" rule, no cross-stage funnel.
+ */
+export function MiniJourney({ rows }: { rows: Record<string, unknown>[] }) {
+  if (!rows.length) {
+    return <div className="h-24 flex items-center justify-center text-sm text-muted-foreground">—</div>
+  }
+  return (
+    <div className="flex items-stretch gap-2 mt-2 overflow-x-auto pb-1">
+      {rows.map((r, i) => {
+        const label = String(r.label ?? r.module ?? '—')
+        const phase = String(r.phase ?? '')
+        const total = Number(r.total_sessions ?? 0)
+        const passRate = r.pass_rate === null || r.pass_rate === undefined ? null : Number(r.pass_rate)
+        return (
+          <div key={i} className="flex items-center gap-2 shrink-0">
+            <div className="w-36 rounded-lg border border-border/60 bg-background p-3">
+              {phase && (
+                <p className="text-[9px] font-semibold uppercase tracking-wide text-primary/70">
+                  {JOURNEY_PHASE_LABELS[phase] ?? phase}
+                </p>
+              )}
+              <p className="text-sm font-semibold text-foreground mt-0.5">{label}</p>
+              <p className="text-xl font-bold text-foreground mt-1">{total.toLocaleString()}</p>
+              <p className="text-[10px] text-muted-foreground">sessions</p>
+              {passRate !== null && (
+                <>
+                  <div className="h-1.5 rounded-full bg-muted overflow-hidden mt-2">
+                    <div className="h-full bg-primary" style={{ width: `${Math.max(0, Math.min(100, passRate))}%` }} />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1">{passRate}% pass rate</p>
+                </>
+              )}
+            </div>
+            {/* Arrow between consecutive stages, never after the last. */}
+            {i < rows.length - 1 && (
+              <span className="text-muted-foreground/40 text-lg" aria-hidden="true">→</span>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }

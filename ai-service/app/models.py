@@ -106,6 +106,7 @@ class WidgetType(str, Enum):
     donut = "donut"
     table = "table"
     histogram = "histogram"
+    journey = "journey"
 
 
 class WidgetConfig(BaseModel):

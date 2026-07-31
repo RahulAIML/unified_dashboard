@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 
+from .. import journey as journey_lib
 from ..llm import gemini_json, llm_available
 from ..models import (
     DashboardFilter,
@@ -154,6 +155,7 @@ def _build_from_plan(plan: dict, schema: NormalizedSchema, metrics: dict):
     # and are always all included, one widget per source action.
     charts.extend(_auto_table_widgets(schema))
     charts.extend(_auto_donut_widgets(schema, {c.id for c in charts}))
+    charts.extend(_auto_journey_widget(schema, {c.id for c in charts}))
 
     rows: list[DashboardRow] = []
     if tiles:
@@ -163,6 +165,34 @@ def _build_from_plan(plan: dict, schema: NormalizedSchema, metrics: dict):
     filters = _filters(schema)
     recs = [str(r) for r in plan.get("recommendations", []) if isinstance(r, str)][:6] or _recs(schema, metrics)
     return rows, filters, recs
+
+
+def _auto_journey_widget(schema: NormalizedSchema, existing_ids: set[str]) -> list[WidgetConfig]:
+    """The ordered service-journey widget (see app/journey.py) — added only
+    when schema.modules is evidence-backed enough to place in the canonical
+    LMS -> Master Coach -> Practice Simulator -> Certification -> Second
+    Brain ontology: every discovered module must already be one of those 5
+    names (e.g. rolplay_app_sql's schema_discovery maps r_simulator.category
+    through _CATEGORY_TO_MODULE before this ever runs), and there must be
+    >=2 of them to show a progression at all — mirrors lib/journey.ts's
+    hasJourney() exactly, so the same tenant sees the same journey shape here
+    as on the hand-built /journey page.
+
+    Deliberately does NOT fire for schemas whose modules are raw, unclassified
+    strings (e.g. pharma_kpi's activity_type values like "Coach evaluador") —
+    forcing those into this 5-module ontology would be exactly the kind of
+    unverified low-confidence mapping this pipeline exists to avoid making
+    silently. Those tenants simply get no journey widget rather than a wrong
+    one.
+    """
+    if "journey" in existing_ids or not schema.metrics:
+        return []
+    if not journey_lib.has_journey(schema.modules):
+        return []
+    return [WidgetConfig(
+        id="journey", type=WidgetType.journey, title="Solution Journey",
+        source_kind=schema.metrics[0].source_kind, source_action="journey", span=4,
+    )]
 
 
 def _auto_donut_widgets(schema: NormalizedSchema, existing_ids: set[str]) -> list[WidgetConfig]:
@@ -235,6 +265,7 @@ def _heuristic(schema: NormalizedSchema, metrics: dict):
                                    source_kind=dim.source_kind, source_action=dim.source_action, span=4))
     charts.extend(_auto_table_widgets(schema))
     charts.extend(_auto_donut_widgets(schema, {c.id for c in charts}))
+    charts.extend(_auto_journey_widget(schema, {c.id for c in charts}))
     rows: list[DashboardRow] = []
     if tiles:
         rows.append(DashboardRow(id="row_kpis", title="Overview", widgets=tiles))

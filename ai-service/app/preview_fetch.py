@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from . import journey as journey_lib
 from .config import get_settings
 from .http import get_json, post_json
 from .rolplay_score import SCORE_SQL
@@ -116,6 +117,15 @@ async def _kpi(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
     # reconstruct from slug, which silently breaks for tenants whose bridge
     # doesn't live at the "obvious" path (see _sale_exercises below).
     base = cfg.connector_handle.get("base_url") or f"{get_settings().pharma_bridge_base_url.rstrip('/')}/{slug}/bridge/"
+    if w.type == WidgetType.journey:
+        # pharma_kpi's discovered "modules" are raw activity_type strings
+        # (e.g. "Coach evaluador"), never the canonical LMS/Coach/Simulator/
+        # Certification/Second-Brain set — dashboard_planning.py's
+        # _auto_journey_widget never creates a journey widget for this
+        # connector precisely because forcing them into that ontology would
+        # be an unverified guess. If one somehow reaches here, say so plainly
+        # rather than silently returning mismatched activity_summary rows.
+        return WidgetPreview(widget_id=w.id, ok=False, error="journey requires canonical modules; not available for pharma_kpi")
     if w.type == WidgetType.kpi_tile:
         _, body = await post_json(base, {"action": "kpi.overview", "date_from": frm, "date_to": to}, hdr)
         ov = (body or {}).get("overview", {}) if isinstance(body, dict) else {}
@@ -229,6 +239,30 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
     cid = int(cfg.connector_handle.get("client_id"))
     base = f"FROM r_user_session s JOIN r_user u ON u.ID=s.user_id WHERE u.client_id={cid}"
 
+    # ── Solution journey: one row per canonical module, in journey order ──
+    if w.type == WidgetType.journey:
+        rows = await _rolplay_app_sql(
+            "SELECT sim.category AS category, COUNT(*) total_sessions, "
+            f"SUM(CASE WHEN ({SCORE_SQL})>={PASS_THRESHOLD} THEN 1 ELSE 0 END) passed_sessions, "
+            f"ROUND(100*SUM(CASE WHEN ({SCORE_SQL})>={PASS_THRESHOLD} THEN 1 ELSE 0 END)/COUNT(*),1) pass_rate "
+            "FROM r_user_session s JOIN r_user u ON u.ID=s.user_id "
+            f"JOIN r_simulator sim ON sim.ID=s.simulator_id WHERE u.client_id={cid} "
+            "GROUP BY sim.category"
+        )
+        by_module = {
+            journey_lib.CATEGORY_TO_MODULE[str(r["category"]).upper()]: r
+            for r in rows if str(r.get("category") or "").upper() in journey_lib.CATEGORY_TO_MODULE
+        }
+        stages = journey_lib.ordered_stages(list(by_module.keys()))
+        out = [{
+            "module": m, "label": journey_lib.LABEL[m], "phase": journey_lib.PHASE[m],
+            "total_sessions": int(by_module[m].get("total_sessions") or 0),
+            "passed_sessions": int(by_module[m].get("passed_sessions") or 0),
+            "pass_rate": by_module[m].get("pass_rate"),
+        } for m in stages]
+        return WidgetPreview(widget_id=w.id, ok=len(out) >= 2, rows=out,
+                             error=None if len(out) >= 2 else "fewer than 2 real modules for a journey")
+
     # ── Trend line: monthly avg score ──
     if w.type == WidgetType.line_chart:
         rows = await _rolplay_app_sql(
@@ -319,6 +353,13 @@ async def _coach_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
 
     conn = CoachAppConnector()
     frm, to = _date_range(cfg)
+
+    if w.type == WidgetType.journey:
+        # schema_discovery._analytics_schema never sets schema.modules for
+        # coach_app_sql at all (no per-module discovery exists for this
+        # connector yet) — _auto_journey_widget never creates one here for
+        # exactly that reason. Same defensive rejection as pharma_kpi above.
+        return WidgetPreview(widget_id=w.id, ok=False, error="journey requires canonical modules; not available for coach_app_sql")
 
     # ── Trend line: daily session count + avg score ──
     if w.type == WidgetType.line_chart:

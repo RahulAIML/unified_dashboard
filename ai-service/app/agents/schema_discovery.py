@@ -6,6 +6,7 @@ exercise ids and the data date-range. Nothing hardcoded per company.
 """
 from __future__ import annotations
 
+from .. import journey as journey_lib
 from ..config import get_settings
 from ..http import get_json, post_json
 from ..rolplay_score import score_stats_inner
@@ -142,13 +143,13 @@ async def _exceltis_schema(k, svc, schema, exercise_ids, log) -> None:
         await log("schema_discovery", "info", "This client records qualitative results — counts-only dashboard")
 
 
-# r_simulator.category -> dashboard module name. 'SB' is DELIBERATELY EXCLUDED:
-# Second Brain data comes from its own token-authenticated API, which is the
-# verified source. Mirrors SOLUTION_TO_CATEGORY in the Next.js
-# lib/bridge-rolplay-app.ts and the note in lib/journey.ts — same rule, kept
-# in sync across both codebases so a rolplay-app session is never counted
-# through two disagreeing paths.
-_CATEGORY_TO_MODULE = {"COACH": "coach", "SIM": "simulator", "SEGMENT": "certification"}
+# r_simulator.category -> dashboard module name. Single source of truth in
+# ../journey.py (also used by preview_fetch.py's journey widget query) — see
+# that module's docstring for why 'SB' is excluded. Mirrors SOLUTION_TO_CATEGORY
+# in the Next.js lib/bridge-rolplay-app.ts and the note in lib/journey.ts —
+# same rule, kept in sync across both codebases so a rolplay-app session is
+# never counted through two disagreeing paths.
+_CATEGORY_TO_MODULE = journey_lib.CATEGORY_TO_MODULE
 
 
 async def _rolplay_app_schema(svc, schema, log: LogFn) -> None:
