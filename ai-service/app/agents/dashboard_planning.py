@@ -153,6 +153,7 @@ def _build_from_plan(plan: dict, schema: NormalizedSchema, metrics: dict):
     # copies of the same query — so they bypass the one-per-type dedup above
     # and are always all included, one widget per source action.
     charts.extend(_auto_table_widgets(schema))
+    charts.extend(_auto_donut_widgets(schema, {c.id for c in charts}))
 
     rows: list[DashboardRow] = []
     if tiles:
@@ -162,6 +163,40 @@ def _build_from_plan(plan: dict, schema: NormalizedSchema, metrics: dict):
     filters = _filters(schema)
     recs = [str(r) for r in plan.get("recommendations", []) if isinstance(r, str)][:6] or _recs(schema, metrics)
     return rows, filters, recs
+
+
+def _auto_donut_widgets(schema: NormalizedSchema, existing_ids: set[str]) -> list[WidgetConfig]:
+    """Every connector's preview layer already computes a per-category
+    breakdown (session share) and, wherever a pass/fail concept exists, a
+    passed count alongside it (see preview_fetch.py's _approval_donut) — but
+    until now nothing ever turned that into a donut, because the LLM planner
+    only proposes one at its own discretion. A real client's hand-built
+    Overview page (the bar we're matching) always pairs its bar/table
+    breakdown with a session-share donut AND a pass/fail donut; adding both
+    here deterministically means every dashboard gets that same variety
+    regardless of what Gemini happened to plan, for any connector — donut
+    rendering for both metric_key variants is already implemented per-kind in
+    preview_fetch.py, and reuses the SAME rows the bar_chart/table already
+    fetch, so this adds zero extra queries.
+    """
+    extra: list[WidgetConfig] = []
+    dim = next((m for m in schema.metrics if m.type == MetricType.dimension), None)
+    if not dim:
+        return extra
+    if "donut_breakdown" not in existing_ids:
+        extra.append(WidgetConfig(
+            id="donut_breakdown", type=WidgetType.donut, title=f"{dim.label} — Share",
+            dimension=schema.dimensions[0] if schema.dimensions else "category",
+            source_kind=dim.source_kind, source_action=dim.source_action, span=2,
+        ))
+    if "donut_approval" not in existing_ids and any(m.type == MetricType.rate for m in schema.metrics):
+        extra.append(WidgetConfig(
+            id="donut_approval", type=WidgetType.donut, title="Pass / Fail Breakdown",
+            metric_key="approval_breakdown",
+            dimension=schema.dimensions[0] if schema.dimensions else "category",
+            source_kind=dim.source_kind, source_action=dim.source_action, span=2,
+        ))
+    return extra
 
 
 def _auto_table_widgets(schema: NormalizedSchema) -> list[WidgetConfig]:
@@ -192,6 +227,7 @@ def _heuristic(schema: NormalizedSchema, metrics: dict):
                                    metrics=[k for k in ("total_sessions", "avg_score", "pass_rate") if k in metrics],
                                    source_kind=dim.source_kind, source_action=dim.source_action, span=4))
     charts.extend(_auto_table_widgets(schema))
+    charts.extend(_auto_donut_widgets(schema, {c.id for c in charts}))
     rows: list[DashboardRow] = []
     if tiles:
         rows.append(DashboardRow(id="row_kpis", title="Overview", widgets=tiles))

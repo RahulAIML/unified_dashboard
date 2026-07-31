@@ -25,7 +25,7 @@
  */
 import { describe, it, expect, vi } from 'vitest'
 import { render } from '@testing-library/react'
-import { MiniChart, MiniTable, DashboardRenderer, humanizeConnector } from '../DashboardRenderer'
+import { MiniChart, MiniDonut, MiniTable, DashboardRenderer, humanizeConnector } from '../DashboardRenderer'
 
 vi.mock('recharts', () => {
   const Pass = ({ children }: { children?: React.ReactNode }) => <>{children}</>
@@ -41,8 +41,15 @@ vi.mock('recharts', () => {
     ResponsiveContainer: Pass,
     BarChart: ChartStub('bar-chart'),
     LineChart: ChartStub('line-chart'),
-    Bar: () => null,
+    PieChart: Pass,
+    Bar: ({ dataKey, name }: { dataKey?: string; name?: string }) =>
+      <div data-testid="bar-series" data-key={dataKey} data-name={name} />,
     Line: () => null,
+    Pie: ({ data, children }: { data: unknown[]; children?: React.ReactNode }) => (
+      <div data-testid="pie" data-points={JSON.stringify(data)}>{children}</div>
+    ),
+    Cell: () => null,
+    Legend: () => <div data-testid="legend" />,
     XAxis: () => null,
     YAxis: () => null,
     CartesianGrid: () => null,
@@ -51,7 +58,7 @@ vi.mock('recharts', () => {
   }
 })
 
-function chartData(container: HTMLElement, testId: string): { label: string; value: number }[] {
+function chartData(container: HTMLElement, testId: string): { label: string; value: number; passedValue: number | null }[] {
   const el = container.querySelector(`[data-testid="${testId}"]`)
   if (!el) return []
   return JSON.parse(el.getAttribute('data-points') ?? '[]')
@@ -119,6 +126,66 @@ describe('MiniChart', () => {
     expect(container.querySelector('[data-testid="bar-chart"]')).toBeNull()
     expect(container.querySelector('[data-testid="line-chart"]')).toBeNull()
   })
+
+  it('renders only a single Total bar series when no passed-count data is available', () => {
+    const { container } = render(
+      <MiniChart bar series={[{ simulator: 'A', total_sessions: 10 }]} />,
+    )
+    expect(container.querySelectorAll('[data-testid="bar-series"]').length).toBe(1)
+  })
+
+  it('renders a grouped Total-vs-Passed bar chart when a passed count is present', () => {
+    // Mirrors the real hand-built Overview page's "Sessions by Use Case"
+    // chart (Passed vs Total Sessions) — several connectors now return a
+    // passed_sessions/passed count alongside the total.
+    const { container } = render(
+      <MiniChart bar series={[{ simulator: 'A', total_sessions: 10, passed_sessions: 8 }]} />,
+    )
+    const series = container.querySelectorAll('[data-testid="bar-series"]')
+    expect(series.length).toBe(2)
+    const keys = Array.from(series).map(s => s.getAttribute('data-key'))
+    expect(keys).toEqual(['value', 'passedValue'])
+    const data = chartData(container, 'bar-chart')
+    expect(data[0].passedValue).toBe(8)
+  })
+})
+
+describe('MiniDonut', () => {
+  it('renders a slice per category with the real value', () => {
+    const { container } = render(
+      <MiniDonut rows={[{ simulator: 'A', total_sessions: 10 }, { simulator: 'B', total_sessions: 5 }]} />,
+    )
+    const pieData = JSON.parse(container.querySelector('[data-testid="pie"]')?.getAttribute('data-points') ?? '[]')
+    const byLabel = new Map(pieData.map((d: { label: string; value: number }) => [d.label, d.value]))
+    expect(byLabel.get('A')).toBe(10)
+    expect(byLabel.get('B')).toBe(5)
+  })
+
+  it('renders an exact Passed/Failed split for an approval_breakdown widget', () => {
+    const { container } = render(
+      <MiniDonut rows={[{ label: 'Passed', value: 9 }, { label: 'Failed', value: 6 }]} />,
+    )
+    const pieData = JSON.parse(container.querySelector('[data-testid="pie"]')?.getAttribute('data-points') ?? '[]')
+    const byLabel = new Map(pieData.map((d: { label: string; value: number }) => [d.label, d.value]))
+    expect(byLabel.get('Passed')).toBe(9)
+    expect(byLabel.get('Failed')).toBe(6)
+  })
+
+  it('collapses a long tail into a single "Other" slice so it stays legible', () => {
+    const rows = Array.from({ length: 10 }, (_, i) => ({ activity: `Activity ${i}`, total_sessions: 10 - i }))
+    const { container } = render(<MiniDonut rows={rows} />)
+    const pieData = JSON.parse(container.querySelector('[data-testid="pie"]')?.getAttribute('data-points') ?? '[]')
+    // 7 real slices + 1 "Other" bucket, not all 10.
+    expect(pieData.length).toBe(8)
+    const other = pieData.find((d: { label: string }) => d.label === 'Other')
+    expect(other).toBeTruthy()
+  })
+
+  it('shows a placeholder rather than an empty chart for no rows', () => {
+    const { container, getByText } = render(<MiniDonut rows={[]} />)
+    expect(getByText('—')).toBeTruthy()
+    expect(container.querySelector('[data-testid="pie"]')).toBeNull()
+  })
 })
 
 describe('MiniTable', () => {
@@ -157,6 +224,22 @@ describe('DashboardRenderer — end to end with real widget shapes', () => {
     const chart = container.querySelector('[data-testid="line-chart"]')
     expect(chart).not.toBeNull()
     expect(chartData(container, 'line-chart')[0].value).toBe(24)
+  })
+
+  it('renders a real donut for a donut widget with real API data', () => {
+    const config = {
+      company: 'Apotex', slug: 'apotex', title: 'Apotex Analytics', connector: 'pharma_kpi',
+      rows: [{ id: 'r1', widgets: [{ id: 'donut_approval', type: 'donut', title: 'Pass / Fail Breakdown' }] }],
+      recommendations: [],
+    }
+    const preview = { widgets: [{ widget_id: 'donut_approval', ok: true, rows: [{ label: 'Passed', value: 9 }, { label: 'Failed', value: 6 }] }] }
+
+    const { container } = render(<DashboardRenderer config={config} preview={preview} />)
+
+    const pieData = JSON.parse(container.querySelector('[data-testid="pie"]')?.getAttribute('data-points') ?? '[]')
+    const byLabel = new Map(pieData.map((d: { label: string; value: number }) => [d.label, d.value]))
+    expect(byLabel.get('Passed')).toBe(9)
+    expect(byLabel.get('Failed')).toBe(6)
   })
 
   it('shows a "no data" note only when the widget genuinely failed', () => {
