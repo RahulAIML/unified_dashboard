@@ -15,6 +15,13 @@ from .models import DashboardConfig, ServiceKind, WidgetConfig, WidgetPreview, W
 
 PASS_THRESHOLD = 70
 
+# Must match dashboard_planning.py's _auto_donut_widgets id for the pass/fail
+# donut — routed by id, not metric_key, since metric_key is validation.py's
+# "must be a real schema_discovery-verified metric" contract, and this donut
+# is an aggregation of already-real per-category rows rather than a
+# standalone discovered metric.
+APPROVAL_DONUT_ID = "donut_approval"
+
 
 def _norm_score(row: dict) -> float | None:
     """Normalize a sim.demorp6 row's score to a 0-100 percentage.
@@ -120,10 +127,10 @@ async def _kpi(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
         trend = (body or {}).get("trend", []) if isinstance(body, dict) else []
         series = [{"date": t["period"], "value": t.get("avg_score"), "sessions": t.get("sessions")} for t in trend]
         return WidgetPreview(widget_id=w.id, ok=bool(series), series=series)
-    # bar/donut/table/approval_breakdown → activity_summary
+    # bar/donut/table/approval-donut → activity_summary
     _, body = await post_json(base, {"action": "kpi.activity_summary", "date_from": frm, "date_to": to}, hdr)
     acts = [a for a in ((body or {}).get("activities", []) if isinstance(body, dict) else []) if int(a.get("sessions") or 0) > 0]
-    if w.metric_key == "approval_breakdown":
+    if w.id == APPROVAL_DONUT_ID:
         return _approval_donut((int(a.get("sessions") or 0) for a in acts),
                                 (int(a.get("sessions_pass") or 0) for a in acts), w.id)
     rows = [{"activity": a.get("activity_name"), "total_sessions": a.get("sessions"),
@@ -244,8 +251,8 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
                 "pct": round(100 * int(r.get("count") or 0) / total, 1)} for r in rows]
         return WidgetPreview(widget_id=w.id, ok=bool(out), rows=out)
 
-    # ── Per-simulator breakdown (bar_chart / donut / table / approval_breakdown) ──
-    if w.type in (WidgetType.bar_chart, WidgetType.donut, WidgetType.table) or w.metric_key == "approval_breakdown":
+    # ── Per-simulator breakdown (bar_chart / donut / table / approval-donut) ──
+    if w.type in (WidgetType.bar_chart, WidgetType.donut, WidgetType.table) or w.id == APPROVAL_DONUT_ID:
         rows = await _rolplay_app_sql(
             "SELECT COALESCE(sim.name, CONCAT('Simulator ', s.simulator_id)) simulator, "
             f"COUNT(*) total_sessions, ROUND(AVG({SCORE_SQL}),2) avg_score, "
@@ -255,7 +262,7 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
             f"LEFT JOIN r_simulator sim ON sim.ID=s.simulator_id WHERE u.client_id={cid} "
             "GROUP BY s.simulator_id, sim.name ORDER BY total_sessions DESC"
         )
-        if w.metric_key == "approval_breakdown":
+        if w.id == APPROVAL_DONUT_ID:
             return _approval_donut((int(r.get("total_sessions") or 0) for r in rows),
                                     (int(r.get("passed_sessions") or 0) for r in rows), w.id)
         return WidgetPreview(widget_id=w.id, ok=bool(rows), rows=rows)
@@ -328,13 +335,13 @@ async def _coach_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
                   for r in (rows or [])]
         return WidgetPreview(widget_id=w.id, ok=bool(series), series=series)
 
-    # ── Per-usecase breakdown (bar_chart / donut / table / approval_breakdown) ──
+    # ── Per-usecase breakdown (bar_chart / donut / table / approval-donut) ──
     # 'user' is also a declared dimension (schema_discovery._analytics_schema)
     # but no widget requesting it has been observed live yet -- only usecase
     # is implemented here. A 'user'-dimension widget would currently fall
     # through to the tile branch below and report an unsupported metric_key,
     # which is honest (visibly wrong) rather than silently empty.
-    if w.type in (WidgetType.bar_chart, WidgetType.donut, WidgetType.table) or w.metric_key == "approval_breakdown":
+    if w.type in (WidgetType.bar_chart, WidgetType.donut, WidgetType.table) or w.id == APPROVAL_DONUT_ID:
         rows = await conn._sql(
             f"SELECT rfc.usecase_id, uc.usecase_name, "
             f"COUNT(DISTINCT rfc.saved_report_id) AS total_sessions, "
@@ -349,7 +356,7 @@ async def _coach_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
             f"GROUP BY rfc.usecase_id, uc.usecase_name ORDER BY total_sessions DESC LIMIT 30",
             [customer_id, frm, to],
         )
-        if w.metric_key == "approval_breakdown":
+        if w.id == APPROVAL_DONUT_ID:
             return _approval_donut((int(r.get("total_sessions") or 0) for r in (rows or [])),
                                     (int(r.get("passed_sessions") or 0) for r in (rows or [])), w.id)
         out = [{"usecase": (r.get("usecase_name") or f"Usecase {r.get('usecase_id')}"),

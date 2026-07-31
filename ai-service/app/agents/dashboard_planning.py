@@ -175,9 +175,17 @@ def _auto_donut_widgets(schema: NormalizedSchema, existing_ids: set[str]) -> lis
     breakdown with a session-share donut AND a pass/fail donut; adding both
     here deterministically means every dashboard gets that same variety
     regardless of what Gemini happened to plan, for any connector — donut
-    rendering for both metric_key variants is already implemented per-kind in
+    rendering for both widget ids is already implemented per-kind in
     preview_fetch.py, and reuses the SAME rows the bar_chart/table already
     fetch, so this adds zero extra queries.
+
+    The pass/fail donut is routed by widget id ("donut_approval"), not by
+    metric_key: metric_key is validation.py's contract for "a real,
+    schema_discovery-verified metric" (never invent metrics), and this donut
+    is a genuine aggregation of already-real per-category rows rather than a
+    standalone discovered metric — giving it a metric_key that isn't in
+    schema.metrics would trip validation's missing_metric check even though
+    the underlying data is completely real.
     """
     extra: list[WidgetConfig] = []
     dim = next((m for m in schema.metrics if m.type == MetricType.dimension), None)
@@ -192,7 +200,6 @@ def _auto_donut_widgets(schema: NormalizedSchema, existing_ids: set[str]) -> lis
     if "donut_approval" not in existing_ids and any(m.type == MetricType.rate for m in schema.metrics):
         extra.append(WidgetConfig(
             id="donut_approval", type=WidgetType.donut, title="Pass / Fail Breakdown",
-            metric_key="approval_breakdown",
             dimension=schema.dimensions[0] if schema.dimensions else "category",
             source_kind=dim.source_kind, source_action=dim.source_action, span=2,
         ))
