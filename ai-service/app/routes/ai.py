@@ -181,3 +181,26 @@ async def render_dashboard(slug: str) -> dict:
         raise HTTPException(status_code=404, detail="dashboard not found")
     pv = await preview.run(cfg, _noop_log)
     return {"config": cfg.model_dump(), "preview": pv.model_dump()}
+
+
+@router.get("/dashboard-versions/{slug}")
+async def list_dashboard_versions(slug: str) -> dict:
+    """Every publish has always appended a snapshot here; this is the first
+    thing that ever reads it back — dashboard_versions.py's docstring
+    explains why publishing was effectively irreversible before this."""
+    from .. import dashboard_versions
+    return {"slug": slug, "versions": await dashboard_versions.list_versions(slug)}
+
+
+class RollbackIn(BaseModel):
+    slug: str
+    version: int
+
+
+@router.post("/dashboard-versions/rollback")
+async def rollback_dashboard(body: RollbackIn) -> dict:
+    from .. import dashboard_versions
+    restored = await dashboard_versions.rollback_to(body.slug, body.version)
+    if not restored:
+        raise HTTPException(status_code=404, detail=f"no version {body.version} found for '{body.slug}'")
+    return {"slug": body.slug, "restored_from_version": body.version, "new_version": restored.version}

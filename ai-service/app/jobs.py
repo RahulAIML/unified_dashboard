@@ -1,7 +1,23 @@
-"""In-process async job manager for long-running generation jobs."""
+"""In-process async job manager for long-running generation jobs.
+
+_JOBS (in-memory) stays the source of truth WHILE the process is running —
+every existing read (get_job/submit_ids/submit_services/latest_for_slug)
+is unchanged, sync, and just as fast as before. On top of that, every
+update now also write-through persists to Postgres (job_state table, same
+shared auth DB every other ai-service table already uses), and
+hydrate_from_db() — called once at FastAPI startup — reloads everything
+back into _JOBS before the app serves its first request.
+
+This is what closes ROADMAP's B6: before this, a process restart silently
+lost every in-flight and completed job (a manager mid-review_services, or
+a finished-but-not-yet-published dashboard, both just vanished). With no
+AUTH_DATABASE_URL configured, get_pool() returns None and this degrades
+to exactly the old in-memory-only behaviour -- never a hard dependency.
+"""
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import datetime, timezone
 
 from .models import GenerateRequest, JobPhase, JobState
@@ -9,6 +25,48 @@ from .workflow import resume_with_ids, resume_with_services, run_generation
 
 _JOBS: dict[str, JobState] = {}
 _counter = 0
+
+
+async def _persist(job: JobState) -> None:
+    from .db import get_pool
+
+    pool = await get_pool()
+    if not pool:
+        return
+    try:
+        await pool.execute(
+            """INSERT INTO job_state (job_id, phase, payload, updated_at)
+                 VALUES ($1,$2,$3::jsonb,NOW())
+               ON CONFLICT (job_id) DO UPDATE SET
+                 phase=EXCLUDED.phase, payload=EXCLUDED.payload, updated_at=NOW()""",
+            job.job_id, job.phase.value, job.model_dump_json(by_alias=True),
+        )
+    except Exception:
+        # Persistence is a durability nice-to-have, not a correctness
+        # requirement while the process is alive -- _JOBS already has the
+        # authoritative state. Never let a DB hiccup break a running job.
+        pass
+
+
+async def hydrate_from_db() -> None:
+    """Reload every job from job_state into _JOBS. Called once at startup
+    (see main.py) so a restart doesn't leave get_job() returning None for
+    a job a manager was actively reviewing moments before."""
+    from .db import get_pool
+
+    pool = await get_pool()
+    if not pool:
+        return
+    try:
+        rows = await pool.fetch("SELECT payload FROM job_state")
+    except Exception:
+        return
+    for row in rows:
+        try:
+            job = JobState.model_validate(json.loads(row["payload"]))
+        except Exception:
+            continue  # one malformed row must never block every other job
+        _JOBS[job.job_id] = job
 
 
 async def _run(job: JobState, update) -> None:
@@ -35,6 +93,7 @@ def _next_id() -> str:
 async def _update(job: JobState) -> None:
     job.updated_at = datetime.now(timezone.utc)
     _JOBS[job.job_id] = job
+    await _persist(job)
 
 
 def create_job(req: GenerateRequest) -> JobState:

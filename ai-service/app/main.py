@@ -1,15 +1,28 @@
 """FastAPI entrypoint for the Rolplay AI dashboard-builder service."""
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from . import jobs
 from .config import get_settings
 from .routes.ai import router as ai_router
 
 settings = get_settings()
 
-app = FastAPI(title=settings.service_name, version="0.1.0")
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    # Reload in-flight/completed jobs persisted before the last restart —
+    # see jobs.py's module docstring. A no-op (fast) when AUTH_DATABASE_URL
+    # isn't configured, so this never delays startup in dev.
+    await jobs.hydrate_from_db()
+    yield
+
+
+app = FastAPI(title=settings.service_name, version="0.1.0", lifespan=_lifespan)
 
 app.add_middleware(
     CORSMiddleware,

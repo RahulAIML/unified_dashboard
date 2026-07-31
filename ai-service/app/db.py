@@ -70,5 +70,11 @@ async def _ensure_schema(pool: asyncpg.Pool) -> None:
           report      JSONB NOT NULL,
           created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
+        CREATE TABLE IF NOT EXISTS job_state (
+          job_id      TEXT PRIMARY KEY,
+          phase       TEXT NOT NULL,
+          payload     JSONB NOT NULL,
+          updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
         """
     )
