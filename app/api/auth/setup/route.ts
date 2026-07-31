@@ -117,10 +117,19 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // customer_id is NOT unique: it's 0 for every non-coach tenant, and
+    // lib/db-branding.ts keys rows by tenant_key (per-user or per-tenant-
+    // domain), so many rows legitimately share customer_id=0. An earlier
+    // version of this table had `customer_id INTEGER UNIQUE NOT NULL`, which
+    // silently capped the WHOLE table at one branding row ever (see
+    // migrations/008_branding_settings_bootstrap.sql) — the DROP CONSTRAINT
+    // below clears that if this endpoint runs against a DB stuck in that
+    // state instead of a fresh one.
     await authExec(`
       CREATE TABLE IF NOT EXISTS branding_settings (
         id              SERIAL PRIMARY KEY,
-        customer_id     INTEGER UNIQUE NOT NULL,
+        customer_id     INTEGER NOT NULL DEFAULT 0,
+        tenant_key      TEXT,
         logo_url        TEXT,
         primary_color   TEXT NOT NULL DEFAULT '#DC2626',
         secondary_color TEXT NOT NULL DEFAULT '#1F2937',
@@ -128,6 +137,11 @@ export async function GET(request: NextRequest) {
         updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `)
+    await authExec(`ALTER TABLE branding_settings DROP CONSTRAINT IF EXISTS branding_settings_customer_id_key`)
+    await authExec(`ALTER TABLE branding_settings ADD COLUMN IF NOT EXISTS tenant_key TEXT`)
+    await authExec(`UPDATE branding_settings SET tenant_key = 'cust:' || customer_id WHERE tenant_key IS NULL`)
+    await authExec(`ALTER TABLE branding_settings ALTER COLUMN tenant_key SET NOT NULL`)
+    await authExec(`CREATE UNIQUE INDEX IF NOT EXISTS branding_settings_tenant_key_uidx ON branding_settings (tenant_key)`)
     await authExec(`CREATE INDEX IF NOT EXISTS idx_branding_customer_id ON branding_settings (customer_id)`)
     steps.branding_table = 'created or already exists ✓'
   } catch (err) {

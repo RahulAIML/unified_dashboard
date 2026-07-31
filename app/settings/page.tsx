@@ -107,6 +107,7 @@ export default function SettingsPage() {
   const [copied,    setCopied]    = useState<string | null>(null)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [activePreset, setActivePreset] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   // Initialise draft from brand once loaded
   useEffect(() => {
@@ -150,10 +151,17 @@ export default function SettingsPage() {
 
   const doSave = useCallback(async (settings: BrandingSettings) => {
     setSaving(true)
+    setSaveError(null)
     try {
       await brand.saveBranding(settings)
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
+    } catch (error) {
+      // Without this, a failed save (e.g. the auth DB's branding_settings
+      // table missing on a fresh deployment) reverted silently — the button
+      // just went back to "unsaved changes" with no explanation, which reads
+      // exactly like "the app is ignoring my change."
+      setSaveError(error instanceof Error ? error.message : "Failed to save")
     } finally {
       setSaving(false)
     }
@@ -171,6 +179,7 @@ export default function SettingsPage() {
   const handleReset = () => {
     setDraft(DEFAULT_BRANDING_SETTINGS)
     setActivePreset('rolplay')
+    setSaveError(null)
   }
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -197,11 +206,13 @@ export default function SettingsPage() {
     }
     setDraft(next)
     setActivePreset(preset.id)
+    setSaveError(null)
   }
 
   const updateColor = (field: keyof BrandingSettings, value: string) => {
     setDraft(prev => ({ ...(prev ?? current), [field]: value }))
     setActivePreset(null)
+    setSaveError(null)
   }
 
   const copyToClipboard = (color: string, key: string) => {
@@ -470,7 +481,12 @@ export default function SettingsPage() {
           </button>
 
           <div className="flex items-center gap-3">
-            {hasUnsaved && !saving && !saved && (
+            {saveError && (
+              <p className="text-xs text-destructive font-medium max-w-[220px]" role="alert">
+                {saveError}
+              </p>
+            )}
+            {!saveError && hasUnsaved && !saving && !saved && (
               <p className="text-xs text-amber-500 font-medium animate-pulse">
                 {t.settingsUnsaved}
               </p>
