@@ -82,10 +82,18 @@ def _origin_from(raw_url: str) -> str | None:
 
 
 def _credentials_from_bundle(bundle: dict[str, str]) -> LmsCredentials | None:
-    raw_url = bundle.get("api_url")
-    client_id = bundle.get("client_id")
-    client_secret = bundle.get("client_secret")
-    access_token = bundle.get("access_token")
+    # Confirmed live against a real stored credential: a trailing newline in
+    # a stored field (however it originally got there — pasted from a
+    # multi-line source, an env var set with a literal newline, etc.) is
+    # tolerated by Node's fetch() (the Next.js app's LMS page works fine
+    # with the identical stored value) but httpx REJECTS it outright when
+    # building the Authorization header ("Illegal header value ...\\n").
+    # Stripping whitespace/control characters here is the fix, not
+    # upstream — credential VALUES should never be assumed pre-sanitized.
+    raw_url = (bundle.get("api_url") or "").strip() or None
+    client_id = (bundle.get("client_id") or "").strip()
+    client_secret = (bundle.get("client_secret") or "").strip()
+    access_token = (bundle.get("access_token") or "").strip() or None
     if not raw_url:
         return None
     if not access_token and not (client_id and client_secret):
@@ -93,7 +101,7 @@ def _credentials_from_bundle(bundle: dict[str, str]) -> LmsCredentials | None:
     origin = _origin_from(raw_url)
     if not origin:
         return None
-    return LmsCredentials(origin=origin, client_id=client_id or "", client_secret=client_secret or "", access_token=access_token)
+    return LmsCredentials(origin=origin, client_id=client_id, client_secret=client_secret, access_token=access_token)
 
 
 async def resolve_lms_credentials(tenant_key: str | None, warn: WarnFn = None) -> LmsCredentials | None:

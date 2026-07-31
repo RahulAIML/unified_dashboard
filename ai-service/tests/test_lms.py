@@ -28,6 +28,43 @@ class OriginParsingTests(unittest.TestCase):
         self.assertIsNone(lms._origin_from("://///"))
 
 
+class CredentialsFromBundleTests(unittest.TestCase):
+    """Confirmed live in production against a real stored Apotex credential:
+    httpx raises 'Illegal header value' on an access_token with a trailing
+    newline, while Node's fetch (the working TS LMS integration) tolerates
+    it. _credentials_from_bundle must sanitize every field it hands back,
+    since those values go straight into an Authorization header."""
+
+    def test_strips_trailing_newline_from_access_token(self):
+        creds = lms._credentials_from_bundle({
+            "api_url": "https://academiaapotex.learnworlds.com",
+            "access_token": "nbgl2ngCCYbUtwbHW8bYmcyYhlI2dQuVTNZN9G7g\n",
+        })
+        self.assertEqual(creds.access_token, "nbgl2ngCCYbUtwbHW8bYmcyYhlI2dQuVTNZN9G7g")
+
+    def test_strips_whitespace_from_client_id_and_secret(self):
+        creds = lms._credentials_from_bundle({
+            "api_url": "https://x.learnworlds.com",
+            "client_id": " cid \n",
+            "client_secret": "\tsecret\r\n",
+        })
+        self.assertEqual(creds.client_id, "cid")
+        self.assertEqual(creds.client_secret, "secret")
+
+    def test_strips_whitespace_from_api_url(self):
+        creds = lms._credentials_from_bundle({
+            "api_url": " https://x.learnworlds.com/admin/api/ \n",
+            "access_token": "tok",
+        })
+        self.assertEqual(creds.origin, "https://x.learnworlds.com")
+
+    def test_none_when_access_token_is_only_whitespace(self):
+        self.assertIsNone(lms._credentials_from_bundle({
+            "api_url": "https://x.learnworlds.com",
+            "access_token": "   \n",
+        }))
+
+
 class DateKeyTests(unittest.TestCase):
     def test_unix_seconds(self):
         self.assertEqual(lms._to_date_key(1700000000), "2023-11-14")
