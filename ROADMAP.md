@@ -51,11 +51,12 @@ Ordered so nothing is built against two sources of truth.
 - [x] `S3`+`A1` Encrypted per-tenant credential store — AES-256-GCM envelope, master key in Render env, ciphertext in Postgres (`migrations/006`). `/api/admin/credentials` writes it; `GET` never returns values. LMS switched over: resolution no longer depends on an env var NAME matching the tenant key. Env fallback per field, so existing tenants are untouched. **27 + 10 tests.**
 - [x] `A2` Capability drop is now a **compile error** — `satisfies Record<keyof TenantConfig, unknown>` on the merge; proven by adding a field and observing TS1360, then reverting. `migrations/007` adds the missing `has_lms` / `has_simulator` as **nullable** tri-state (a NOT NULL DEFAULT FALSE column would have disabled every tenant's Simulator tab). Write path wired through upsert + admin route with COALESCE. **14 tests.**
 - [~] `S2` SQL transport — client-side hardening DONE (read-only guard rejecting non-SELECT and stacked statements; `X-Rolplay-Auth` sent when `ROLPLAY_APP_SQL_TOKEN` is set, so cutover needs no deploy). **The server-side fix is NOT in this repo — see B3, now escalated.**
-- [ ] `A4` Redis-backed shared cache + pub/sub invalidation — **needs a Redis instance** (see B5)
+- [x] `S6` (new, found in a full re-audit 2026-07-31) **ai-service had zero auth of its own.** Deployed on Render as a public `type: web` service; `app/main.py` only configures CORS (browser-only protection, does nothing against a direct/curl call to the service's own URL). Anyone who found its Render URL could call `generate-dashboard`/`publish`/`knowledge/{slug}` DELETE directly, bypassing the Next.js proxy's admin gate entirely. **Fixed:** shared-secret gate (`X-Internal-Auth` / `INTERNAL_SHARED_SECRET`) on every `/ai/*` route, sent by the proxy when `AI_SERVICE_SHARED_SECRET` is set. Unenforced when unset, matching the existing `BRIDGE_SECRET` pattern — **you must set both env vars in production or this gap remains open.** 6+2 tests.
+- [ ] `A4` Redis-backed shared cache + pub/sub invalidation — **needs a Redis instance** (see B5). Re-confirmed 2026-07-31: zero Redis references anywhere in either codebase.
 - [~] Connector Interface — `lib/connectors/types.ts` defined; **rolplay-app connector done** as a pure adapter over the unmodified bridge module (22 tests asserting numeric equivalence). Remaining: pharma-bridge, banco-second-brain, exceltis-rest, learnworlds-lms adapters, then the registry + route cutover.
 - [ ] Capability Engine (generalise `/api/dashboard/modules`)
-- [ ] Metadata + Semantic layer · KPI Registry · Version Manager
-- [ ] Journey / Progress / Dependency engines (generalise `lib/journey.ts`)
+- [ ] Metadata + Semantic layer · KPI Registry · Version Manager — re-confirmed 2026-07-31: `DiscoveredMetric`/`ServiceDescriptor` (ai-service/app/models.py) carry no confidence/evidence fields; no semantic-mapping structure exists anywhere (only the fixed 5-module journey ontology below). `DashboardConfig.version` increments on publish and prior configs land in `dashboard_versions`, but nothing reads that table back — publish has no rollback.
+- [x] Journey engine (generalise `lib/journey.ts`) — **done for evidence-backed connectors, 2026-07-31.** `ai-service/app/journey.py` ports the canonical LMS→Coach→Simulator→Certification→Second-Brain order/phases; a `journey` widget is generated deterministically (never LLM-proposed) only when a connector's discovered modules are ALL canonical names (today: `rolplay_app_sql`, via its existing `r_simulator.category` mapping) and there are ≥2 of them. `pharma_kpi` (raw `activity_type` strings) and `coach_app_sql` (no module discovery at all) explicitly decline rather than guess. 13+ tests; live-verified on Siigo/Takeda (correctly omitted — each has only 1 real module in the current data window).
 - [ ] `A5` Collapse per-route `orgType` branching onto the interface
 
 ---
@@ -63,8 +64,17 @@ Ordered so nothing is built against two sources of truth.
 ## Phase 3 — Self-service platform `[ ]`
 Onboarding wizard · connector/schema/metric/KPI/journey/capability discovery · widget + dashboard recommendation · brand discovery · preview · publish · rollback · versioning. **Success test: onboard a tenant end-to-end with zero redeploy.**
 
-## Phase 4 — Dashboard Builder `[ ]`
+## Phase 4 — Dashboard Builder `[~]`
 Metadata-driven generation (never hand-written React): KPIs · widgets · layout · filters · drilldowns · branding · journey · validate · preview · publish · version · rollback.
+
+**Re-audited 2026-07-31 — substantial progress, but a real product gap found:**
+- [x] KPIs, bar/line/donut/histogram/table/journey widgets, filters (metadata field exists), validate, preview, publish (writes domain routing) — all real, live-verified with real data across `rolplay_app_sql`/`pharma_kpi`/`coach_app_sql`.
+- [x] Widget Registry is complete — all 7 `WidgetType` values have a matching renderer in `DashboardRenderer.tsx`, confirmed by direct comparison.
+- [ ] **Drilldowns: absent.** No AI-generated widget has a click-through anywhere (confirmed: zero `Link`/`onClick` in `DashboardRenderer.tsx`) — the hand-built `/drilldown/[id]` page is not wired to anything the builder produces.
+- [ ] **Version/rollback: write-only.** `dashboard_versions` gets a row every publish, but nothing reads it back — there is no rollback path today.
+- [ ] **Branding: hardcoded, not per-tenant.** `dashboard_config.py` sets `branding={"primary_color": "#DC2626"}` literally for every tenant; it never reads `lib/db-branding.ts`'s real per-tenant values.
+- [ ] **Page Generator: single-page only.** The reference app has 10 distinct hand-built solution pages (LMS, Coach, Simulator, Organization, Reports, …); the AI builder always produces exactly one flat page at `/d/[slug]`, with no navigation/multi-page concept — a structural gap versus the "complete analytics application" goal, not a bug to patch.
+- [ ] **The bigger open question — published dashboards are never shown to real tenant users.** `publish()` only writes domain→tenant routing metadata (`pharma_tenant_domains` / `rolplay_app_domains`) so a tenant's login continues to route to the *existing hand-built* Overview/LMS/Coach pages — confirmed live (Apotex's real end user sees the static Overview page, not `/d/apotex`). `/d/[slug]` itself is reachable only by an admin (by design — it's the builder's own review surface, not a customer route). **This means every widget shipped in this phase (donuts, journey, grouped bars) is currently visible only to admins previewing the builder, never to the tenant it was generated for.** Whether `/d/[slug]` should become the real customer-facing dashboard (replacing the hand-built pages) or stay an admin preview alongside them is a product decision, not something to decide silently — needs your call before more widget work is worth prioritizing over closing this loop.
 
 ## Phase 5 — AI layer `[ ]`
 Insight · recommendation · executive summary · weekly report · risk detection · trend + root-cause analysis · NL dashboard / Q&A.
@@ -87,7 +97,7 @@ Screenshots, videos, traces, HTML reports, retries. Every page/API/workflow/tena
 ## Phase 11 — Production validation `[!]`
 Docker · migrations · cold start · horizontal scaling · autoscaling · zero downtime · blue-green · backups · recovery · probes · Render deploy.
 
-**BLOCKED — needs external access I do not have:** Render dashboard/env/database, the production secret store, and the FastAPI AI service repo. I can produce every artefact (Dockerfiles, compose, probes, migration runbooks, deploy scripts) and validate them locally, but I cannot execute or verify a production deployment. Deploying is yours.
+**BLOCKED — needs external access I do not have:** Render dashboard/env/database, and the production secret store. (Corrected 2026-07-31: the FastAPI ai-service is NOT a separate external repo — it's `ai-service/` in this same checkout, and has been directly audited and modified this session.) I can produce every artefact (Dockerfiles, compose, probes, migration runbooks, deploy scripts) and validate them locally, but I cannot execute or verify a production deployment, or set Render env vars myself. Deploying is yours.
 
 ---
 
@@ -96,10 +106,12 @@ Docker · migrations · cold start · horizontal scaling · autoscaling · zero 
 | # | Blocker | Blocks | Smallest next action |
 |---|---|---|---|
 | B1 | No access to Render env/DB | Phase 11; verifying the Apotex LMS fix | You paste `/api/dashboard/lms` response (`lmsEnvPrefix`, `tenantKey`, `configured`) |
-| B2 | FastAPI AI service is outside this repo | Phases 4–5 completeness; its auth/resumability unaudited | Point me at that repo, or confirm it's out of scope |
-| B3 | **ESCALATED — CONFIRMED LIVE.** Internet-reachable endpoint executing SQL on the production DB with no authentication (client sends only Content-Type; default host is public and hardcoded). "SELECT-only" was a comment, not verified code. | Production data confidentiality | **Today:** require the shared secret in `remote-access.php` + IP-allowlist. The client already sends `X-Rolplay-Auth` once `ROLPLAY_APP_SQL_TOKEN` is set. |
+| B2 | ~~FastAPI AI service is outside this repo~~ **STALE — it's `ai-service/` in this same repo,** extensively audited and modified since this was written (donut/pass-fail/journey widgets, the S6 auth gate, etc.). Its auth (S6, fixed), resumability (in-memory only — see below), and orchestration ARE now audited. | — | — |
+| B3 | **ESCALATED — CONFIRMED LIVE, still unresolved.** `remote-access.php` (rolplay.app) executes arbitrary SQL over HTTP with no authentication (client sends only Content-Type; default host is public and hardcoded). Re-confirmed 2026-07-31 by independent code audit. | Production data confidentiality | **Today:** require the shared secret in `remote-access.php` + IP-allowlist. The client already sends `X-Rolplay-Auth` once `ROLPLAY_APP_SQL_TOKEN` is set. **This is outside this repo — the rolplay.app PHP backend team must make this change; nothing further can be done from here.** |
 | B4 | ~~Secret manager undecided~~ **RESOLVED: Render secrets**, adapted to envelope encryption (one master key in Render, per-tenant ciphertext in Postgres) because Render secrets alone still require a redeploy per tenant | — | Set `SECRET_ENCRYPTION_KEY` (`openssl rand -base64 32`) and run migrations 006 + 007 |
 | B5 | No Redis instance provisioned | `A4`, Phase 6 caching, Phase 12 live sync | Provision Redis and give me the URL; I'll build the abstraction with an in-process fallback meanwhile |
+| B6 | (new) **ai-service builder state is in-memory only** (`ai-service/app/jobs.py`'s `_JOBS: dict`) — a process restart silently loses every in-flight and completed job. A second, formal LangGraph orchestrator exists (`ai-service/app/graph.py`) but is dead code — `jobs.py` explicitly avoids it due to an unresolved bug where its conditional edges re-execute early nodes and hang indefinitely. | Phase 4's "Builder runs are resumable" criterion; horizontal scaling of ai-service | Either fix `graph.py`'s re-execution bug and cut over, or delete it to stop it misleading future work — plus persist `JobState` to Postgres (the DB is already reachable from ai-service) so a restart doesn't lose in-flight builds. |
+| B7 | (new) No Playwright E2E, no CI pipeline (`.github/workflows` doesn't exist; Render's build steps don't run either test suite) | Phases 9–10; confidence that a deploy didn't break something a human would have caught by clicking through | Decide whether GitHub Actions or another CI host is acceptable, and whether Playwright is worth the setup cost now vs. later |
 
 ---
 
@@ -108,7 +120,7 @@ Docker · migrations · cold start · horizontal scaling · autoscaling · zero 
 | Criterion | Status |
 |---|---|
 | All critical audit findings resolved | `[~]` Phase 1 done; `S2`/`S3`/`A1`–`A4` in Phase 2 |
-| Zero failing tests | `[x]` 210/210 |
+| Zero failing tests | `[x]` 361/361 (305 vitest + 56 pytest, re-verified 2026-07-31) |
 | Zero TypeScript errors | `[x]` |
 | Zero ESLint errors | `[x]` clean on all changed files; full-repo sweep pending |
 | Zero build warnings | `[ ]` not yet verified |
