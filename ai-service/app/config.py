@@ -21,6 +21,14 @@ class Settings(BaseSettings):
     port: int = 8088
     # Comma-separated origins allowed to call this service (the Next.js app).
     cors_origins: str = "http://localhost:3000,https://rolplaypro-dashboard.onrender.com"
+    # Shared secret the Next.js proxy (app/api/ai/[...path]/route.ts) must send
+    # as X-Internal-Auth. CORS only constrains BROWSER-originated requests —
+    # it does nothing against a direct server-to-server or curl call to this
+    # service's own public Render URL, and this service (render.yaml: type=web)
+    # has no other auth of its own. Empty (dev default) means unenforced, so
+    # local development without the var set keeps working; it MUST be set in
+    # production or this service is reachable by anyone who finds its URL.
+    internal_shared_secret: str = ""
 
     # ── Persistence (reuses the Next.js auth Postgres DB; new tables only) ──────
     auth_database_url: str | None = None

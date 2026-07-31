@@ -146,4 +146,39 @@ describe('AI proxy authorisation', () => {
     expect(res.status).toBe(413)
     expect(fetchSpy).not.toHaveBeenCalled()
   })
+
+  // The AI service is a public Render web service with no auth of its own —
+  // CORS only stops browser-originated calls, not a direct request to its
+  // URL. This shared secret is its only gate against being reached directly,
+  // bypassing the admin check above entirely.
+  describe('internal shared secret to the AI service', () => {
+    const ORIGINAL_SECRET = process.env.AI_SERVICE_SHARED_SECRET
+
+    afterEach(() => {
+      if (ORIGINAL_SECRET === undefined) delete process.env.AI_SERVICE_SHARED_SECRET
+      else process.env.AI_SERVICE_SHARED_SECRET = ORIGINAL_SECRET
+    })
+
+    it('sends X-Internal-Auth to the AI service when configured', async () => {
+      process.env.AI_SERVICE_SHARED_SECRET = 'test-internal-secret'
+      requireAdminFromRequest.mockResolvedValue({ email: 'admin@rolplay.ai', role: 'admin' })
+      const { POST } = await loadRoute()
+
+      await POST(req('POST', '{}'), ctx(['confirm-services']))
+
+      const [, init] = fetchSpy.mock.calls[0]
+      expect(init.headers['X-Internal-Auth']).toBe('test-internal-secret')
+    })
+
+    it('omits X-Internal-Auth when unset, so local dev without it keeps working', async () => {
+      delete process.env.AI_SERVICE_SHARED_SECRET
+      requireAdminFromRequest.mockResolvedValue({ email: 'admin@rolplay.ai', role: 'admin' })
+      const { POST } = await loadRoute()
+
+      await POST(req('POST', '{}'), ctx(['confirm-services']))
+
+      const [, init] = fetchSpy.mock.calls[0]
+      expect(init.headers['X-Internal-Auth']).toBeUndefined()
+    })
+  })
 })

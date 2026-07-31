@@ -67,9 +67,20 @@ async function forward(request: NextRequest, path: string[]): Promise<NextRespon
   const search = request.nextUrl.search
   const url = `${AI_SERVICE_URL.replace(/\/+$/, '')}/ai/${suffix}${search}`
 
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  // The AI service is a public Render web service with no auth of its own
+  // (CORS only constrains browser-originated calls, not a direct request to
+  // its URL) — this shared secret is its only gate against being reached
+  // directly, bypassing the admin check above entirely. Unset in dev, so
+  // local development against a service without AI_SERVICE_SHARED_SECRET
+  // configured keeps working — but it MUST match internal_shared_secret on
+  // the ai-service in production.
+  const internalSecret = process.env.AI_SERVICE_SHARED_SECRET
+  if (internalSecret) headers['X-Internal-Auth'] = internalSecret
+
   const init: RequestInit = {
     method: request.method,
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     cache: 'no-store',
     signal: AbortSignal.timeout(120_000),
   }

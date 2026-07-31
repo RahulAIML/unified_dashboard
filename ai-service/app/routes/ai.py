@@ -1,17 +1,40 @@
 """AI service HTTP API."""
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 
 from .. import jobs
 from ..agents import company_discovery, publish
 from ..agents.service_discovery import pick_primary
 from ..agents import service_discovery, schema_discovery
+from ..config import get_settings
 from ..knowledge import delete_knowledge, get_knowledge, put_knowledge
 from ..models import CompanyKnowledge, DashboardConfig, GenerateRequest, JobState
 
-router = APIRouter(prefix="/ai", tags=["ai"])
+
+async def require_internal_secret(x_internal_auth: str | None = Header(default=None)) -> None:
+    """This service is deployed as a public Render web service (render.yaml:
+    type=web) with no auth of its own beyond CORS — which only constrains
+    BROWSER-originated requests, not a direct server-to-server or curl call to
+    this service's own URL. Every route under /ai/* provisions tenants,
+    generates/publishes dashboards, or reads company analytics data, so all of
+    them are gated here, not just the mutating ones.
+
+    Unenforced when internal_shared_secret is unset (the dev default), so a
+    local checkout without the env var configured keeps working. It MUST be
+    set in production (matching AI_SERVICE_SHARED_SECRET on the Next.js proxy,
+    app/api/ai/[...path]/route.ts) or this service remains reachable by anyone
+    who finds its URL, bypassing the Next.js admin gate entirely.
+    """
+    secret = get_settings().internal_shared_secret
+    if not secret:
+        return
+    if x_internal_auth != secret:
+        raise HTTPException(status_code=401, detail="invalid or missing internal auth")
+
+
+router = APIRouter(prefix="/ai", tags=["ai"], dependencies=[Depends(require_internal_secret)])
 
 
 @router.get("/health")

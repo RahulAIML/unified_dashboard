@@ -33,3 +33,8 @@ services:
         sync: false
       - key: CORS_ORIGINS
         value: https://rolplaypro-dashboard.onrender.com
+      # Must match AI_SERVICE_SHARED_SECRET on the Next.js service — this
+      # service has no auth of its own otherwise (CORS only stops browser
+      # calls, not a direct request to this service's own public URL).
+      - key: INTERNAL_SHARED_SECRET
+        sync: false
