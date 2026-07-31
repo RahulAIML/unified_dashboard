@@ -27,16 +27,33 @@ async def run(cfg: DashboardConfig, domains: list[str], log: LogFn) -> bool:
         return True
 
     # 1) store the metadata-driven config (source of truth for dynamic rendering)
-    await pool.execute(
+    #
+    # BUG FIXED, found live 2026-07-31 while testing the new rollback
+    # feature: dashboard_versions was ALWAYS inserted with cfg.version --
+    # which dashboard_config.py hardcodes to 1 on every single generation,
+    # never incremented anywhere before this. The ON CONFLICT clause below
+    # correctly increments dashboard_metadata's OWN version server-side, but
+    # that incremented value was never read back before the dashboard_versions
+    # insert that follows -- so Apotex, published 5 times over this project,
+    # has 5 dashboard_versions rows that ALL claim to be "version 1",
+    # indistinguishable except by timestamp. RETURNING captures the real,
+    # actually-incremented version so every future publish gets a correct,
+    # unique version number; existing duplicate rows are untouched (harmless
+    # history, not corrected retroactively) but every new one going forward
+    # is right.
+    row = await pool.fetchrow(
         """INSERT INTO dashboard_metadata (slug, company, config, version, published, updated_at)
            VALUES ($1,$2,$3::jsonb,$4,TRUE,NOW())
            ON CONFLICT (slug) DO UPDATE SET company=EXCLUDED.company, config=EXCLUDED.config,
-             version=dashboard_metadata.version+1, published=TRUE, updated_at=NOW()""",
+             version=dashboard_metadata.version+1, published=TRUE, updated_at=NOW()
+           RETURNING version""",
         cfg.slug, cfg.company, cfg.model_dump_json(), cfg.version,
     )
+    real_version = row["version"] if row else cfg.version
+    snapshot = cfg.model_copy(update={"version": real_version})
     await pool.execute(
         "INSERT INTO dashboard_versions (slug, version, config) VALUES ($1,$2,$3::jsonb)",
-        cfg.slug, cfg.version, cfg.model_dump_json(),
+        cfg.slug, real_version, snapshot.model_dump_json(),
     )
 
     # 2) make it live via the existing pharma_tenants pipeline (if pharma)

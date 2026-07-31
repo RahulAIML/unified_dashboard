@@ -45,8 +45,16 @@ async def get_version_config(slug: str, version: int) -> DashboardConfig | None:
     pool = await get_pool()
     if not pool:
         return None
+    # ORDER BY + LIMIT for determinism: publish.py had a bug (fixed
+    # alongside this) where every publish before 2026-07-31 stored the SAME
+    # hardcoded version=1, so some existing slugs have several DIFFERENT
+    # real configs all sharing that version number. Without an explicit
+    # order, which one this returns is whatever Postgres happens to pick --
+    # picking the most recent keeps behaviour predictable for that
+    # already-ambiguous historical data; every publish going forward has a
+    # correctly unique version and this ORDER BY is a no-op for those.
     row = await pool.fetchrow(
-        "SELECT config FROM dashboard_versions WHERE slug=$1 AND version=$2",
+        "SELECT config FROM dashboard_versions WHERE slug=$1 AND version=$2 ORDER BY created_at DESC LIMIT 1",
         slug, version,
     )
     if not row:
