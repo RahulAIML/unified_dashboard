@@ -16,13 +16,17 @@ import os
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from app.agents import dashboard_config
+from app.agents import dashboard_config, validation
 from app.config import get_settings
 from app.preview_fetch import fetch_widget
 from app.models import (
     CompanyKnowledge,
+    DashboardConfig,
     DashboardFilter,
     DashboardPage,
+    DashboardRow,
+    DiscoveredMetric,
+    MetricType,
     NormalizedSchema,
     ServiceDescriptor,
     ServiceKind,
@@ -166,6 +170,103 @@ class SecondaryWidgetFetchDispatchTests(unittest.TestCase):
 
         self.assertTrue(preview.ok)
         self.assertEqual(preview.value, 3)
+
+
+class SecondaryWidgetDateRangeTests(unittest.TestCase):
+    """Found live testing Besins: the primary's narrow discovered window
+    (rolplay_app_sql's real 4-day window, '2026-04-13'..'2026-04-16') got
+    applied to the SECONDARY (coach_app_sql) page's queries too, making 17
+    real sessions read as "no data" -- they just weren't in that unrelated
+    4-day slice. A secondary-page widget must fall back to the wide default
+    instead of inheriting the primary's window."""
+
+    def test_primary_widget_uses_the_configured_narrow_window(self):
+        from app.preview_fetch import _date_range
+        cfg = DashboardConfig(
+            company="Besins", slug="besins", title="t", connector=ServiceKind.rolplay_app_sql,
+            connector_handle={"date_range": ["2026-04-13", "2026-04-16"]},
+        )
+        w = WidgetConfig(id="w", type=WidgetType.kpi_tile, title="t", source_kind=ServiceKind.rolplay_app_sql,
+                         source_action="r_user_session")
+        self.assertEqual(_date_range(cfg, w), ("2026-04-13", "2026-04-16"))
+
+    def test_secondary_widget_ignores_the_primarys_narrow_window(self):
+        from app.config import get_settings
+        from app.preview_fetch import _date_range
+        cfg = DashboardConfig(
+            company="Besins", slug="besins", title="t", connector=ServiceKind.rolplay_app_sql,
+            connector_handle={"date_range": ["2026-04-13", "2026-04-16"]},
+        )
+        w = WidgetConfig(id="w", type=WidgetType.kpi_tile, title="t", source_kind=ServiceKind.coach_app_sql,
+                         source_action="report_field_current")
+        s = get_settings()
+        self.assertEqual(_date_range(cfg, w), (s.discovery_wide_date_from, s.discovery_wide_date_to))
+
+    def test_no_widget_argument_keeps_the_old_behaviour(self):
+        # Backward compatible for any caller that doesn't pass a widget.
+        from app.preview_fetch import _date_range
+        cfg = DashboardConfig(
+            company="X", slug="x", title="t", connector=ServiceKind.rolplay_app_sql,
+            connector_handle={"date_range": ["2026-01-01", "2026-01-31"]},
+        )
+        self.assertEqual(_date_range(cfg), ("2026-01-01", "2026-01-31"))
+
+
+class SecondaryWidgetValidationTests(unittest.TestCase):
+    """Found live testing Besins: validation.py only checked widget
+    metric_keys against the PRIMARY's schema, so the secondary
+    (coach_app_sql) page's avg_score/pass_rate tiles -- perfectly real,
+    backed by the SECONDARY's own schema -- were flagged as
+    'missing_metric' errors. 2 real widgets, 2 false validation errors."""
+
+    def _cfg_with_secondary_page(self):
+        primary_widget = WidgetConfig(
+            id="tile_total_sessions", type=WidgetType.kpi_tile, title="Total Sessions",
+            metric_key="total_sessions", source_kind=ServiceKind.rolplay_app_sql, source_action="r_user_session",
+        )
+        secondary_widget = WidgetConfig(
+            id="secondary_coach_app_sql_tile_avg_score", type=WidgetType.kpi_tile, title="Average Score",
+            metric_key="avg_score", source_kind=ServiceKind.coach_app_sql, source_action="report_field_current",
+        )
+        return DashboardConfig(
+            company="Besins", slug="besins", title="Besins Analytics", connector=ServiceKind.rolplay_app_sql,
+            pages=[
+                DashboardPage(id="overview", title="Overview", rows=[DashboardRow(id="row_kpis", widgets=[primary_widget])]),
+                DashboardPage(id="secondary_coach_app_sql", title="Coach Analytics",
+                             rows=[DashboardRow(id="row_kpis", widgets=[secondary_widget])]),
+            ],
+        )
+
+    def _primary_schema(self):
+        # Counts-only, matching Besins' real rolplay_app_sql schema -- no
+        # avg_score/pass_rate metric exists here at all.
+        return NormalizedSchema(company="Besins", slug="besins", metrics=[
+            DiscoveredMetric(key="total_sessions", label="Total Sessions", type=MetricType.count,
+                             source_kind=ServiceKind.rolplay_app_sql, source_action="r_user_session"),
+        ])
+
+    def _secondary_schema(self):
+        return NormalizedSchema(company="Besins", slug="besins", metrics=[
+            DiscoveredMetric(key="avg_score", label="Average Score", type=MetricType.score,
+                             source_kind=ServiceKind.coach_app_sql, source_action="report_field_current"),
+        ])
+
+    def test_without_the_secondary_schema_it_falsely_errors(self):
+        # Pins the bug as observed, so a future refactor can't silently
+        # reintroduce it without a test noticing.
+        cfg = self._cfg_with_secondary_page()
+        service = ServiceDescriptor(kind=ServiceKind.rolplay_app_sql, name="x", base_url="x", has_data=True)
+        report = _run(validation.run(cfg, self._primary_schema(), service, _noop_log))
+        self.assertFalse(report.ok)
+        self.assertTrue(any(i.code == "missing_metric" for i in report.issues))
+
+    def test_with_the_secondary_schema_it_validates_clean(self):
+        cfg = self._cfg_with_secondary_page()
+        service = ServiceDescriptor(kind=ServiceKind.rolplay_app_sql, name="x", base_url="x", has_data=True)
+        report = _run(validation.run(
+            cfg, self._primary_schema(), service, _noop_log, secondary_schema=self._secondary_schema(),
+        ))
+        self.assertTrue(report.ok, report.issues)
 
 
 if __name__ == "__main__":

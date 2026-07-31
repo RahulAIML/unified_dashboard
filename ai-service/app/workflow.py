@@ -210,7 +210,7 @@ async def _continue_from_planning(job: JobState, knowledge, primary: ServiceDesc
         job.dashboard = cfg; job.percent = 76; await update(job)
 
         job.phase = JobPhase.validation; await update(job)
-        report = await validation.run(cfg, schema, primary, log)
+        report = await validation.run(cfg, schema, primary, log, secondary_schema=job.secondary_schema)
         job.validation = report; job.percent = 84; await update(job)
 
         job.phase = JobPhase.preview; await update(job)

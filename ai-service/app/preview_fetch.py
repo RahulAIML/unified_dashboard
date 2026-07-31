@@ -50,7 +50,20 @@ def _norm_score(row: dict) -> float | None:
     return float(cal) if _num(cal) else None
 
 
-def _date_range(cfg: DashboardConfig) -> tuple[str, str]:
+def _date_range(cfg: DashboardConfig, w: WidgetConfig | None = None) -> tuple[str, str]:
+    """cfg.connector_handle["date_range"] is the PRIMARY connector's own
+    discovered window (dashboard_config.py sets it from the primary's
+    schema) -- narrow and correct for the primary's widgets, but found live
+    to silently starve a SECONDARY page's widgets: Besins' rolplay_app_sql
+    window is a 4-day slice, and applying that same slice to its
+    coach_app_sql page (an unrelated data source with its own timeline)
+    made 17 real sessions read as "no data" for a query that was actually
+    just scoped to the wrong 4 days. Skip the primary's window for any
+    widget whose OWN source differs from the primary connector.
+    """
+    if w is not None and w.source_kind != cfg.connector:
+        s = get_settings()
+        return s.discovery_wide_date_from, s.discovery_wide_date_to
     dr = cfg.connector_handle.get("date_range")
     if isinstance(dr, list) and len(dr) == 2:
         return dr[0], dr[1]
@@ -106,7 +119,7 @@ async def _generic_pharma_action(cfg: DashboardConfig, w: WidgetConfig) -> Widge
     "stats.avg_best_score") out of the response. Works for any action name —
     nothing here is specific to one company or one bridge's vocabulary."""
     slug = cfg.connector_handle.get("tenant", cfg.slug)
-    frm, to = _date_range(cfg)
+    frm, to = _date_range(cfg, w)
     ids = cfg.connector_handle.get("exercise_ids", [])
     base = cfg.connector_handle.get("base_url") or f"{get_settings().pharma_bridge_base_url.rstrip('/')}/{slug}/bridge/"
     params: dict[str, Any] = {"action": w.source_action, "date_from": frm, "date_to": to}
@@ -131,7 +144,7 @@ async def _generic_pharma_action(cfg: DashboardConfig, w: WidgetConfig) -> Widge
 
 # ── LMS (LearnWorlds; independent of the primary connector) ─────────────────────
 async def _lms(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
-    frm, to = _date_range(cfg)
+    frm, to = _date_range(cfg, w)
     data = await lms_client.lms_dashboard(cfg.slug, frm, to)
     if not data.get("configured"):
         return WidgetPreview(widget_id=w.id, ok=False, error="LMS not configured for this tenant")
@@ -159,7 +172,7 @@ async def _lms(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
 # ── pharma kpi ──────────────────────────────────────────────────────────────────
 async def _kpi(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
     slug = cfg.connector_handle.get("tenant", cfg.slug)
-    frm, to = _date_range(cfg)
+    frm, to = _date_range(cfg, w)
     hdr = {"X-Tenant": slug}
     # Always prefer the exact URL discovery already verified works — never
     # reconstruct from slug, which silently breaks for tenants whose bridge
@@ -210,11 +223,11 @@ def _approval_donut(totals, passeds, widget_id: str) -> WidgetPreview:
 
 
 # ── exceltis_rest ─────────────────────────────────────────────────────────────────
-async def _exceltis_rows(cfg: DashboardConfig) -> list[dict]:
+async def _exceltis_rows(cfg: DashboardConfig, w: WidgetConfig) -> list[dict]:
     ids = cfg.connector_handle.get("exercise_ids", [])
     if not ids:
         return []
-    frm, to = _date_range(cfg)
+    frm, to = _date_range(cfg, w)
     q = "&".join(f"id={i}" for i in ids)
     base = f"{get_settings().pharma_host_root.rstrip('/')}/{cfg.slug}"
     _, rows = await get_json(f"{base}/api/rol_play_sim_extractor?{q}&fecha_inicio={frm}&fecha_fin={to}")
@@ -222,7 +235,7 @@ async def _exceltis_rows(cfg: DashboardConfig) -> list[dict]:
 
 
 async def _exceltis(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
-    rows = await _exceltis_rows(cfg)
+    rows = await _exceltis_rows(cfg, w)
     scored = [s for s in (_norm_score(r) for r in rows) if s is not None]
     if w.type == WidgetType.kpi_tile:
         if w.metric_key == "total_sessions":
@@ -247,7 +260,7 @@ async def _sale_exercises(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPrevie
     if not ids:
         return WidgetPreview(widget_id=w.id, ok=False, error="no exercise ids")
     slug = cfg.connector_handle.get("tenant", cfg.slug)
-    frm, to = _date_range(cfg)
+    frm, to = _date_range(cfg, w)
     # BUG FIXED: two sale_exercises tenants (Adium, Weser) live at the bridge
     # HOST ROOT (serv.aux-rolplay.com/{slug}/bridge/), not under /unified/ like
     # Sanfer — reconstructing the URL from the unified base always 404'd for
@@ -413,7 +426,7 @@ async def _coach_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
         return WidgetPreview(widget_id=w.id, ok=False, error="no customer_id resolved for this tenant")
 
     conn = CoachAppConnector()
-    frm, to = _date_range(cfg)
+    frm, to = _date_range(cfg, w)
 
     if w.type == WidgetType.journey:
         # schema_discovery._analytics_schema never sets schema.modules for

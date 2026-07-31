@@ -15,9 +15,19 @@ from .base import LogFn
 _NEEDS_IDS = {ServiceKind.pharma_exceltis_rest, ServiceKind.pharma_sale_exercises}
 
 
-async def run(cfg: DashboardConfig, schema: NormalizedSchema, service: ServiceDescriptor, log: LogFn) -> ValidationReport:
+async def run(
+    cfg: DashboardConfig, schema: NormalizedSchema, service: ServiceDescriptor, log: LogFn,
+    secondary_schema: NormalizedSchema | None = None,
+) -> ValidationReport:
     issues: list[ValidationIssue] = []
+    # Found live: a secondary connector's page (dashboard_planning.py's
+    # _secondary_page, e.g. Besins' coach_app_sql page) carries widgets
+    # whose metric_key (avg_score/pass_rate) only exists in the SECONDARY's
+    # schema -- checking against `schema` (the primary's) alone flagged them
+    # as missing_metric even though they're backed by perfectly real data.
     metric_keys = {m.key for m in schema.metrics}
+    if secondary_schema:
+        metric_keys |= {m.key for m in secondary_schema.metrics}
     seen_ids: set[str] = set()
     # Walk every page's rows, not just cfg.rows (which is Overview only, kept
     # for backward compatibility) -- otherwise LMS/per-module page widgets
