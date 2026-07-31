@@ -32,8 +32,23 @@ _LMS_METRIC_KEYS = {
     "lms_modules_completed", "lms_completion_trend", "lms_courses",
 }
 
+# Human-readable page title per connector kind, used ONLY for a secondary
+# connector's page (see _secondary_page) — the primary connector's page is
+# always titled "Overview" regardless of kind. Generic on purpose: this maps
+# a CONNECTOR KIND to a label, never a tenant/company name.
+_KIND_LABEL = {
+    ServiceKind.pharma_kpi: "Activity Tracking",
+    ServiceKind.pharma_sale_exercises: "Practice Sessions",
+    ServiceKind.pharma_exceltis_rest: "Activity Tracking",
+    ServiceKind.rolplay_app_sql: "Practice Simulator",
+    ServiceKind.coach_app_sql: "Coach Analytics",
+    ServiceKind.second_brain: "Second Brain",
+}
 
-async def run(schema: NormalizedSchema, log: LogFn) -> tuple[list[DashboardPage], list[DashboardFilter], list[str]]:
+
+async def run(
+    schema: NormalizedSchema, log: LogFn, secondary_schema: NormalizedSchema | None = None,
+) -> tuple[list[DashboardPage], list[DashboardFilter], list[str]]:
     metrics = {m.key: m for m in schema.metrics}
 
     plan = None
@@ -45,7 +60,7 @@ async def run(schema: NormalizedSchema, log: LogFn) -> tuple[list[DashboardPage]
     if plan:
         overview_rows, filters, recs = _build_from_plan(plan, schema, metrics)
         if any(r.widgets for r in overview_rows):
-            pages = _assemble_pages(schema, metrics, overview_rows)
+            pages = _assemble_pages(schema, metrics, overview_rows, secondary_schema)
             total = sum(len(r.widgets) for p in pages for r in p.rows)
             await log("dashboard_planning", "success",
                       f"Gemini plan → {total} widget(s) across {len(pages)} page(s), {len(filters)} filter(s)")
@@ -53,28 +68,71 @@ async def run(schema: NormalizedSchema, log: LogFn) -> tuple[list[DashboardPage]
         await log("dashboard_planning", "warn", "Gemini plan had no valid widgets — using heuristic")
 
     overview_rows, filters, recs = _heuristic(schema, metrics)
-    pages = _assemble_pages(schema, metrics, overview_rows)
+    pages = _assemble_pages(schema, metrics, overview_rows, secondary_schema)
     total = sum(len(r.widgets) for p in pages for r in p.rows)
     await log("dashboard_planning", "success",
               f"Heuristic plan → {total} widget(s) across {len(pages)} page(s), {len(filters)} filter(s)")
     return pages, filters, recs
 
 
-def _assemble_pages(schema: NormalizedSchema, metrics: dict, overview_rows: list[DashboardRow]) -> list[DashboardPage]:
+def _assemble_pages(
+    schema: NormalizedSchema, metrics: dict, overview_rows: list[DashboardRow],
+    secondary_schema: NormalizedSchema | None = None,
+) -> list[DashboardPage]:
     """Turns the existing single-page widget set into a real multi-page
     dashboard: Overview (unchanged content) + an LMS page (when LMS was
     discovered — see lms_discovery.py) + one page per canonical module the
     connector can query in isolation (today: rolplay_app_sql only — see
-    _module_pages' own docstring for why pharma_kpi doesn't get these yet).
-    Always at least one page (Overview), so nothing regresses for a schema
-    with no LMS and no scoped-module connector.
+    _module_pages' own docstring for why pharma_kpi doesn't get these yet)
+    + one page for a SECONDARY connector's own data, if one was found
+    alongside the primary (see agents/service_discovery.py::pick_secondary —
+    e.g. Besins' 17 real coach_app_sql sessions, previously dropped entirely
+    because rolplay_app_sql won primary). Always at least one page
+    (Overview), so nothing regresses for a schema with none of the above.
     """
     pages = [DashboardPage(id="overview", title="Overview", rows=overview_rows)]
     lms_page = _lms_page(metrics)
     if lms_page:
         pages.append(lms_page)
     pages.extend(_module_pages(schema, metrics))
+    secondary_page = _secondary_page(secondary_schema)
+    if secondary_page:
+        pages.append(secondary_page)
     return pages
+
+
+def _secondary_page(secondary_schema: NormalizedSchema | None) -> DashboardPage | None:
+    """A page built entirely from a SECONDARY connector's own schema — reuses
+    _heuristic()'s generic tile/chart-building (it already works for any
+    NormalizedSchema, regardless of which connector produced it), so this
+    adds no new widget-construction logic, just a distinct titled page.
+    Returns None when there's no secondary source, or it has no real metrics
+    (e.g. it needs exercise IDs the pipeline doesn't have — additive only,
+    never blocks the rest of the dashboard).
+    """
+    if not secondary_schema or not secondary_schema.metrics:
+        return None
+    rows, _filters_unused, _recs_unused = _heuristic(secondary_schema, {m.key: m for m in secondary_schema.metrics})
+    if not any(r.widgets for r in rows):
+        return None
+    kind = secondary_schema.metrics[0].source_kind
+    title = _KIND_LABEL.get(kind, kind.value.replace("_", " ").title())
+    # _heuristic() ids its widgets generically ("tile_total_sessions",
+    # "chart_trend", ...) -- fine when it's the only page, but the primary's
+    # Overview page uses the exact same scheme for the exact same common
+    # metric keys (total_sessions/avg_score/...), so without a prefix the
+    # two pages would emit COLLIDING widget ids across the dashboard (found
+    # by test_no_duplicate_widget_ids_across_the_whole_dashboard's sibling
+    # test for this page). Prefix every widget id with the connector kind to
+    # keep them unique dashboard-wide, matching how _module_pages prefixes
+    # with the module name for the same reason.
+    prefix = f"secondary_{kind.value}_"
+    prefixed_rows = [
+        DashboardRow(id=f"{prefix}{row.id}", title=row.title,
+                     widgets=[w.model_copy(update={"id": f"{prefix}{w.id}"}) for w in row.widgets])
+        for row in rows
+    ]
+    return DashboardPage(id=f"secondary_{kind.value}", title=title, rows=prefixed_rows)
 
 
 def _lms_page(metrics: dict) -> DashboardPage | None:
@@ -279,6 +337,7 @@ def _build_from_plan(plan: dict, schema: NormalizedSchema, metrics: dict):
     charts.extend(_auto_table_widgets(schema))
     charts.extend(_auto_donut_widgets(schema, {c.id for c in charts}))
     charts.extend(_auto_journey_widget(schema, {c.id for c in charts}))
+    charts.extend(_auto_drilldown_table(schema, {c.id for c in charts}))
 
     rows: list[DashboardRow] = []
     if tiles:
@@ -361,6 +420,35 @@ def _auto_donut_widgets(schema: NormalizedSchema, existing_ids: set[str]) -> lis
     return extra
 
 
+def _auto_drilldown_table(schema: NormalizedSchema, existing_ids: set[str]) -> list[WidgetConfig]:
+    """A 'Recent Sessions' table whose rows are individually click-through-
+    able to /drilldown/[id] (the existing hand-built session-detail page).
+
+    ONLY for coach_app_sql, because that's the one connector kind with a
+    VERIFIED matching backend for it: lib/data-provider.ts's getDrilldown ->
+    lib/bridge-client.ts's bridgeDrilldown queries the EXACT SAME
+    report_field_current/saved_reports tables preview_fetch.py's _coach_app
+    already queries, scoped server-side by the viewer's own customer_id.
+    pharma_kpi/sale_exercises/exceltis_rest tenants resolve through a
+    DIFFERENT drilldown path (pharmaDashboardDrilldown) that this pipeline
+    has no verified handle-mapping for yet, and rolplay_app_sql has no
+    working drilldown path documented anywhere — guessing wiring for either
+    would risk linking to the wrong tenant's data or a 404, so both
+    correctly get no drilldown table rather than a wrong one, matching this
+    pipeline's rule throughout: never wire what isn't verified.
+    """
+    if "table_recent_sessions" in existing_ids or not schema.metrics:
+        return []
+    if not any(m.source_kind == ServiceKind.coach_app_sql for m in schema.metrics):
+        return []
+    src = next(m for m in schema.metrics if m.source_kind == ServiceKind.coach_app_sql)
+    return [WidgetConfig(
+        id="table_recent_sessions", type=WidgetType.table, title="Recent Sessions",
+        id_field="saved_report_id", source_kind=src.source_kind,
+        source_action="report_field_current", span=4,
+    )]
+
+
 def _auto_table_widgets(schema: NormalizedSchema) -> list[WidgetConfig]:
     # LMS's own table metric (lms_courses) is deliberately excluded — it
     # already gets a widget on the dedicated LMS page (_lms_page), and
@@ -395,6 +483,7 @@ def _heuristic(schema: NormalizedSchema, metrics: dict):
     charts.extend(_auto_table_widgets(schema))
     charts.extend(_auto_donut_widgets(schema, {c.id for c in charts}))
     charts.extend(_auto_journey_widget(schema, {c.id for c in charts}))
+    charts.extend(_auto_drilldown_table(schema, {c.id for c in charts}))
     rows: list[DashboardRow] = []
     if tiles:
         rows.append(DashboardRow(id="row_kpis", title="Overview", widgets=tiles))

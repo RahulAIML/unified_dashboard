@@ -18,7 +18,7 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 from app.agents import dashboard_planning, preview, validation
-from app.agents.dashboard_planning import _assemble_pages, _lms_page, _module_pages
+from app.agents.dashboard_planning import _assemble_pages, _lms_page, _module_pages, _secondary_page
 from app.models import (
     DashboardConfig,
     DashboardPage,
@@ -174,6 +174,73 @@ class AssemblePagesTests(unittest.TestCase):
         pages = _assemble_pages(schema, metrics, [DashboardRow(id="row_kpis", widgets=[])])
         self.assertEqual([p.id for p in pages], ["overview", "simulator", "certification"])
 
+    def test_besins_shaped_schema_gets_a_secondary_coach_app_sql_page(self):
+        # rolplay_app_sql (primary, coach-only) + coach_app_sql (secondary,
+        # dropped entirely before this fix) -- both should now produce pages.
+        schema = _rolplay_app_schema(["coach"])
+        secondary = _coach_app_sql_schema()
+        metrics = {m.key: m for m in schema.metrics}
+        pages = _assemble_pages(schema, metrics, [DashboardRow(id="row_kpis", widgets=[])], secondary)
+        self.assertEqual([p.id for p in pages], ["overview", "coach", "secondary_coach_app_sql"])
+        self.assertEqual(pages[-1].title, "Coach Analytics")
+
+    def test_no_secondary_page_when_none_was_found(self):
+        schema = _rolplay_app_schema(["simulator"])
+        metrics = {m.key: m for m in schema.metrics}
+        pages = _assemble_pages(schema, metrics, [DashboardRow(id="row_kpis", widgets=[])], None)
+        self.assertEqual([p.id for p in pages], ["overview", "simulator"])
+
+
+def _coach_app_sql_schema() -> NormalizedSchema:
+    return NormalizedSchema(
+        company="Besins", slug="besins",
+        dimensions=["usecase"],
+        metrics=[
+            DiscoveredMetric(key="total_sessions", label="Total Sessions", type=MetricType.count,
+                             source_kind=ServiceKind.coach_app_sql, source_action="report_field_current"),
+            DiscoveredMetric(key="avg_score", label="Average Score", type=MetricType.score,
+                             source_kind=ServiceKind.coach_app_sql, source_action="report_field_current"),
+            DiscoveredMetric(key="pass_rate", label="Pass Rate", type=MetricType.rate,
+                             source_kind=ServiceKind.coach_app_sql, source_action="report_field_current"),
+        ],
+    )
+
+
+class SecondaryPageTests(unittest.TestCase):
+    """_secondary_page reuses _heuristic() for widget-building -- these pin
+    the composition, not the widget shapes (already covered elsewhere)."""
+
+    def test_none_when_no_secondary_schema(self):
+        self.assertIsNone(_secondary_page(None))
+
+    def test_none_when_secondary_has_no_metrics(self):
+        self.assertIsNone(_secondary_page(NormalizedSchema(company="X", slug="x")))
+
+    def test_builds_a_titled_page_from_the_secondary_schema(self):
+        page = _secondary_page(_coach_app_sql_schema())
+        self.assertEqual(page.id, "secondary_coach_app_sql")
+        self.assertEqual(page.title, "Coach Analytics")
+        widget_ids = {w.id for r in page.rows for w in r.widgets}
+        # Prefixed with the connector kind so it can never collide with the
+        # primary Overview page's widget ids for the same common metric keys.
+        self.assertIn("secondary_coach_app_sql_tile_total_sessions", widget_ids)
+        # Every widget must carry the SECONDARY's source_kind, not the
+        # primary's -- otherwise preview_fetch would route it to the wrong
+        # connector's fetcher and it would silently 404/misquery.
+        for r in page.rows:
+            for w in r.widgets:
+                self.assertEqual(w.source_kind, ServiceKind.coach_app_sql)
+
+    def test_falls_back_to_a_titleized_kind_for_an_unmapped_connector(self):
+        # ServiceKind.unknown has no entry in _KIND_LABEL -- must not crash,
+        # and should produce a readable fallback title from the kind itself.
+        schema = NormalizedSchema(company="X", slug="x", metrics=[
+            DiscoveredMetric(key="total_sessions", label="Total Sessions", type=MetricType.count,
+                             source_kind=ServiceKind.unknown, source_action="x"),
+        ])
+        page = _secondary_page(schema)
+        self.assertEqual(page.title, "Unknown")
+
 
 class LmsMetricsNeverLeakOntoOverviewTests(unittest.TestCase):
     """End-to-end through the real heuristic planner (no LLM) -- the most
@@ -196,6 +263,16 @@ class LmsMetricsNeverLeakOntoOverviewTests(unittest.TestCase):
         pages = _run(dashboard_planning.run(schema, _noop_log))[0]
         all_ids = [w.id for p in pages for r in p.rows for w in r.widgets]
         self.assertEqual(len(all_ids), len(set(all_ids)), all_ids)
+
+    def test_run_threads_a_secondary_schema_through_to_its_own_page(self):
+        schema = _rolplay_app_schema(["coach"])
+        secondary = _coach_app_sql_schema()
+        pages = _run(dashboard_planning.run(schema, _noop_log, secondary_schema=secondary))[0]
+        self.assertEqual([p.id for p in pages], ["overview", "coach", "secondary_coach_app_sql"])
+        overview_widget_ids = {w.id for r in pages[0].rows for w in r.widgets}
+        secondary_widget_ids = {w.id for r in pages[-1].rows for w in r.widgets}
+        # No collision between the primary's and secondary's widget ids.
+        self.assertEqual(overview_widget_ids & secondary_widget_ids, set())
 
 
 class CategoryClauseTests(unittest.TestCase):

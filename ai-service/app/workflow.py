@@ -29,7 +29,7 @@ from .agents import (
     service_discovery,
     validation,
 )
-from .agents.service_discovery import pick_primary
+from .agents.service_discovery import pick_primary, pick_secondary
 from .knowledge import put_knowledge
 from .models import JobPhase, JobState, NormalizedSchema, ServiceDescriptor, ServiceKind
 
@@ -131,6 +131,22 @@ async def _continue_from_schema_discovery(job: JobState, knowledge, primary: Ser
     await lms_discovery.run(knowledge, schema, log)
     job.schema_ = schema; await update(job)
 
+    # A second alive-with-data connector (see pick_secondary's docstring —
+    # found live: Besins had 17 real coach_app_sql sessions that pick_primary
+    # correctly didn't choose as primary, but which were then silently
+    # dropped entirely). Additive only: never pauses the pipeline, never
+    # blocks on missing IDs -- a secondary that needs IDs we don't have is
+    # skipped rather than making the whole dashboard wait on it.
+    secondary = pick_secondary(knowledge, primary)
+    if secondary and not (secondary.kind in _NEEDS_IDS and not knowledge.exercise_ids):
+        secondary_schema = await schema_discovery.run(knowledge, secondary, job.request.exercise_ids, log)
+        if secondary_schema.metrics:
+            job.secondary_schema = secondary_schema
+            await log("service_discovery", "success",
+                      f"Also composing {secondary.kind.value} as its own page "
+                      f"({len(secondary_schema.metrics)} real metric(s)) instead of dropping it.")
+        await update(job)
+
     await put_knowledge(knowledge)  # persist learned services/ids
 
     if schema.modules:
@@ -180,11 +196,16 @@ async def _continue_from_planning(job: JobState, knowledge, primary: ServiceDesc
     req = job.request
     try:
         job.phase = JobPhase.dashboard_planning; await update(job)
-        pages, filters, recs = await dashboard_planning.run(schema, log)
+        pages, filters, recs = await dashboard_planning.run(schema, log, secondary_schema=job.secondary_schema)
         job.percent = 68; await update(job)
 
         job.phase = JobPhase.dashboard_config; await update(job)
-        cfg = await dashboard_config.run(knowledge, schema, primary, pages, filters, recs, log)
+        # Re-resolve the secondary service DESCRIPTOR (not just its schema,
+        # already persisted on job.secondary_schema) so dashboard_config can
+        # merge its connector handle (e.g. coach_app_sql's customer_id) in
+        # alongside the primary's -- cheap and deterministic, no re-probing.
+        secondary = pick_secondary(knowledge, primary) if job.secondary_schema else None
+        cfg = await dashboard_config.run(knowledge, schema, primary, pages, filters, recs, log, secondary=secondary)
         cfg.connector_handle["base_url"] = primary.base_url
         job.dashboard = cfg; job.percent = 76; await update(job)
 

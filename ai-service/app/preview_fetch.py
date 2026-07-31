@@ -24,6 +24,11 @@ PASS_THRESHOLD = 70
 # standalone discovered metric.
 APPROVAL_DONUT_ID = "donut_approval"
 
+# Must match dashboard_planning.py's _auto_drilldown_table id — same reason
+# as APPROVAL_DONUT_ID: this table's rows are individual real sessions, not
+# a standalone discovered metric, so it's routed by widget id.
+DRILLDOWN_TABLE_ID = "table_recent_sessions"
+
 
 def _norm_score(row: dict) -> float | None:
     """Normalize a sim.demorp6 row's score to a 0-100 percentage.
@@ -67,21 +72,29 @@ async def fetch_widget(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
         # action-dispatch fetcher regardless of connector kind, since the
         # dedicated per-kind functions below only know their own hardcoded
         # action set.
-        if w.raw_field is not None and cfg.connector in (ServiceKind.pharma_kpi, ServiceKind.pharma_sale_exercises):
+        if w.raw_field is not None and w.source_kind in (ServiceKind.pharma_kpi, ServiceKind.pharma_sale_exercises):
             return await _generic_pharma_action(cfg, w)
-        if cfg.connector == ServiceKind.pharma_kpi:
+        # Dispatch by the WIDGET's own source_kind, not cfg.connector (the
+        # dashboard's primary). For every widget on the primary's own pages
+        # these are identical, so this changes nothing for them — but a
+        # secondary-connector page's widgets (dashboard_planning.py's
+        # _secondary_page, e.g. Besins' coach_app_sql page on a
+        # rolplay_app_sql-primary dashboard) carry the SECONDARY's kind, and
+        # must be fetched from there, not force-routed through the primary's
+        # fetcher (which would query the wrong tables entirely).
+        if w.source_kind == ServiceKind.pharma_kpi:
             return await _kpi(cfg, w)
-        if cfg.connector == ServiceKind.pharma_exceltis_rest:
+        if w.source_kind == ServiceKind.pharma_exceltis_rest:
             return await _exceltis(cfg, w)
-        if cfg.connector == ServiceKind.pharma_sale_exercises:
+        if w.source_kind == ServiceKind.pharma_sale_exercises:
             return await _sale_exercises(cfg, w)
-        if cfg.connector == ServiceKind.rolplay_app_sql:
+        if w.source_kind == ServiceKind.rolplay_app_sql:
             return await _rolplay_app(cfg, w)
-        if cfg.connector == ServiceKind.coach_app_sql:
+        if w.source_kind == ServiceKind.coach_app_sql:
             return await _coach_app(cfg, w)
-        if cfg.connector == ServiceKind.second_brain:
+        if w.source_kind == ServiceKind.second_brain:
             return await _second_brain(cfg, w)
-        return WidgetPreview(widget_id=w.id, ok=False, error=f"no preview for {cfg.connector}")
+        return WidgetPreview(widget_id=w.id, ok=False, error=f"no preview for {w.source_kind}")
     except Exception as exc:
         return WidgetPreview(widget_id=w.id, ok=False, error=str(exc)[:200])
 
@@ -175,7 +188,7 @@ async def _kpi(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
     # bar/donut/table/approval-donut → activity_summary
     _, body = await post_json(base, {"action": "kpi.activity_summary", "date_from": frm, "date_to": to}, hdr)
     acts = [a for a in ((body or {}).get("activities", []) if isinstance(body, dict) else []) if int(a.get("sessions") or 0) > 0]
-    if w.id == APPROVAL_DONUT_ID:
+    if w.id.endswith(APPROVAL_DONUT_ID):
         return _approval_donut((int(a.get("sessions") or 0) for a in acts),
                                 (int(a.get("sessions_pass") or 0) for a in acts), w.id)
     rows = [{"activity": a.get("activity_name"), "total_sessions": a.get("sessions"),
@@ -334,7 +347,7 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
         return WidgetPreview(widget_id=w.id, ok=bool(out), rows=out)
 
     # ── Per-simulator breakdown (bar_chart / donut / table / approval-donut) ──
-    if w.type in (WidgetType.bar_chart, WidgetType.donut, WidgetType.table) or w.id == APPROVAL_DONUT_ID:
+    if w.type in (WidgetType.bar_chart, WidgetType.donut, WidgetType.table) or w.id.endswith(APPROVAL_DONUT_ID):
         rows = await _rolplay_app_sql(
             "SELECT COALESCE(sim.name, CONCAT('Simulator ', s.simulator_id)) simulator, "
             f"COUNT(*) total_sessions, ROUND(AVG({SCORE_SQL}),2) avg_score, "
@@ -344,7 +357,7 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
             f"LEFT JOIN r_simulator sim ON sim.ID=s.simulator_id WHERE u.client_id={cid}{_category_clause(w.module)} "
             "GROUP BY s.simulator_id, sim.name ORDER BY total_sessions DESC"
         )
-        if w.id == APPROVAL_DONUT_ID:
+        if w.id.endswith(APPROVAL_DONUT_ID):
             return _approval_donut((int(r.get("total_sessions") or 0) for r in rows),
                                     (int(r.get("passed_sessions") or 0) for r in rows), w.id)
         return WidgetPreview(widget_id=w.id, ok=bool(rows), rows=rows)
@@ -424,13 +437,41 @@ async def _coach_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
                   for r in (rows or [])]
         return WidgetPreview(widget_id=w.id, ok=bool(series), series=series)
 
+    # ── Recent sessions, individually (drill-through) ──
+    # Distinct from the usecase BREAKDOWN below (one row per usecase,
+    # aggregated) -- this is one row per real session, each carrying the
+    # saved_report_id the existing /drilldown/[id] page already resolves
+    # (lib/data-provider.ts's getDrilldown -> lib/bridge-client.ts's
+    # bridgeDrilldown, scoped server-side to the viewer's own customer_id --
+    # never trusted from the client). See dashboard_planning.py's
+    # _auto_drilldown_table for why this only exists for coach_app_sql: it's
+    # the one connector kind with a VERIFIED matching drilldown backend.
+    if w.id.endswith(DRILLDOWN_TABLE_ID):
+        rows = await conn._sql(
+            f"SELECT rfc.saved_report_id, DATE(rfc.report_created_at) AS date, "
+            f"uc.usecase_name, ROUND(AVG({_SCORE_CASE}),1) AS score, sr.passed_flag "
+            f"FROM rolplay_pro_analytics.report_field_current rfc "
+            f"JOIN coach_app.saved_reports sr ON sr.id = rfc.saved_report_id "
+            f"LEFT JOIN coach_app.usecases uc ON uc.id = rfc.usecase_id "
+            f"WHERE rfc.customer_id = ? AND rfc.report_created_at BETWEEN ? AND ? "
+            f"GROUP BY rfc.saved_report_id, rfc.report_created_at, uc.usecase_name, sr.passed_flag "
+            f"ORDER BY rfc.report_created_at DESC LIMIT 50",
+            [customer_id, frm, to],
+        )
+        out = [{
+            "saved_report_id": r.get("saved_report_id"), "date": r.get("date"),
+            "usecase": r.get("usecase_name") or "—", "score": r.get("score"),
+            "result": "Passed" if r.get("passed_flag") == 1 else ("Failed" if r.get("passed_flag") == 0 else "—"),
+        } for r in (rows or [])]
+        return WidgetPreview(widget_id=w.id, ok=bool(out), rows=out)
+
     # ── Per-usecase breakdown (bar_chart / donut / table / approval-donut) ──
     # 'user' is also a declared dimension (schema_discovery._analytics_schema)
     # but no widget requesting it has been observed live yet -- only usecase
     # is implemented here. A 'user'-dimension widget would currently fall
     # through to the tile branch below and report an unsupported metric_key,
     # which is honest (visibly wrong) rather than silently empty.
-    if w.type in (WidgetType.bar_chart, WidgetType.donut, WidgetType.table) or w.id == APPROVAL_DONUT_ID:
+    if w.type in (WidgetType.bar_chart, WidgetType.donut, WidgetType.table) or w.id.endswith(APPROVAL_DONUT_ID):
         rows = await conn._sql(
             f"SELECT rfc.usecase_id, uc.usecase_name, "
             f"COUNT(DISTINCT rfc.saved_report_id) AS total_sessions, "
@@ -445,7 +486,7 @@ async def _coach_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
             f"GROUP BY rfc.usecase_id, uc.usecase_name ORDER BY total_sessions DESC LIMIT 30",
             [customer_id, frm, to],
         )
-        if w.id == APPROVAL_DONUT_ID:
+        if w.id.endswith(APPROVAL_DONUT_ID):
             return _approval_donut((int(r.get("total_sessions") or 0) for r in (rows or [])),
                                     (int(r.get("passed_sessions") or 0) for r in (rows or [])), w.id)
         out = [{"usecase": (r.get("usecase_name") or f"Usecase {r.get('usecase_id')}"),

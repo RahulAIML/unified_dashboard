@@ -229,6 +229,38 @@ describe('MiniTable', () => {
     const { container } = render(<MiniTable rows={[]} />)
     expect(container.querySelector('table')).toBeNull()
   })
+
+  it('links each row to /drilldown/[id] when idField is set', () => {
+    const { getByText } = render(
+      <MiniTable
+        rows={[{ saved_report_id: 501, date: '2026-07-01', usecase: 'Objection Handling' }]}
+        idField="saved_report_id"
+      />,
+    )
+    const link = getByText('View →').closest('a')
+    expect(link?.getAttribute('href')).toBe('/drilldown/501')
+  })
+
+  it('never renders the raw id as its own column', () => {
+    const { queryByText } = render(
+      <MiniTable rows={[{ saved_report_id: 501, usecase: 'Objection Handling' }]} idField="saved_report_id" />,
+    )
+    expect(queryByText('501')).toBeNull()
+  })
+
+  it('omits the link for a row missing the id field', () => {
+    const { queryByText } = render(
+      <MiniTable rows={[{ usecase: 'Objection Handling' }]} idField="saved_report_id" />,
+    )
+    expect(queryByText('View →')).toBeNull()
+  })
+
+  it('adds no link column at all when idField is absent', () => {
+    const { queryByText } = render(
+      <MiniTable rows={[{ simulator: 'Exkruthera', total_sessions: 2 }]} />,
+    )
+    expect(queryByText('View →')).toBeNull()
+  })
 })
 
 describe('humanizeConnector', () => {

@@ -136,6 +136,14 @@ class WidgetConfig(BaseModel):
     # just that module instead of the connector's full aggregate. None means
     # unscoped (every existing widget, and Overview-page widgets).
     module: str | None = None
+    # For a table widget only: the key within each returned row that is a
+    # real, click-through-able report id (e.g. "saved_report_id") — the
+    # Next.js app's own /drilldown/[id] page already exists and resolves an
+    # id server-side, scoped to the VIEWER's own tenant, for any id from a
+    # connector with a verified matching drilldown backend (see
+    # dashboard_planning.py's _auto_drilldown_table). None means this
+    # table's rows have no drillable id (every widget before this one).
+    id_field: str | None = None
 
 
 class DashboardRow(BaseModel):
@@ -288,6 +296,14 @@ class JobState(BaseModel):
     logs: list[JobLog] = Field(default_factory=list)
     knowledge: CompanyKnowledge | None = None
     schema_: NormalizedSchema | None = Field(default=None, alias="schema")
+    # A second alive-with-data connector's own schema (agents/service_discovery.py's
+    # pick_secondary) -- e.g. Besins' 17 real coach_app_sql sessions, found
+    # alongside the rolplay_app_sql primary. Composed into its own page rather
+    # than silently dropped. None for the overwhelming majority of tenants
+    # (only one connector matches). Persisted here (not just a local variable
+    # in workflow.py) so it survives the review_services pause/resume, exactly
+    # like schema_ does for the primary.
+    secondary_schema: NormalizedSchema | None = None
     dashboard: DashboardConfig | None = None
     validation: ValidationReport | None = None
     preview: DashboardPreview | None = None

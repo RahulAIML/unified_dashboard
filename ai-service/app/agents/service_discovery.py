@@ -100,3 +100,32 @@ def pick_primary(knowledge: CompanyKnowledge) -> ServiceDescriptor | None:
         "rolplay_app_sql": 3, "coach_app_sql": 4, "second_brain": 5, "unknown": 9,
     }
     return sorted(pool, key=lambda s: order.get(s.kind.value, 9))[0]
+
+
+def pick_secondary(knowledge: CompanyKnowledge, primary: ServiceDescriptor | None) -> ServiceDescriptor | None:
+    """The next-best alive-with-data service, distinct from the primary.
+
+    pick_primary() already resolves which ONE connector the dashboard is
+    built from when several match — necessary because match-TYPE confidence
+    (e.g. an exact client-name match) is a stronger signal than which source
+    merely has more rows, confirmed correct for Takeda. But picking only one
+    silently drops every OTHER source's real data entirely: found live,
+    Besins had 17 real coach_app_sql sessions that never appeared anywhere
+    because rolplay_app_sql (3 sessions, a stronger name-match) won primary.
+
+    This returns that dropped source, if any, so the pipeline can compose it
+    as an additional page instead of losing it -- it never overrides
+    pick_primary's choice, only supplements it. Scoped to a single next-best
+    secondary (not every remaining service) to keep the composed dashboard
+    from growing unbounded when many connectors happen to match.
+    """
+    if not knowledge.services or primary is None:
+        return None
+    candidates = [s for s in knowledge.services if s.has_data and s.kind != primary.kind]
+    if not candidates:
+        return None
+    order = {
+        "pharma_kpi": 0, "pharma_sale_exercises": 1, "pharma_exceltis_rest": 2,
+        "rolplay_app_sql": 3, "coach_app_sql": 4, "second_brain": 5, "unknown": 9,
+    }
+    return sorted(candidates, key=lambda s: order.get(s.kind.value, 9))[0]

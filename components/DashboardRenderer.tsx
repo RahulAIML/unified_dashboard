@@ -8,13 +8,18 @@
  */
 
 import { useState } from 'react'
+import Link from 'next/link'
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis,
   CartesianGrid, Tooltip, LabelList, PieChart, Pie, Cell, Legend,
 } from 'recharts'
 
 export interface WidgetPreview { widget_id: string; ok: boolean; value?: number | string | null; series?: Record<string, unknown>[]; rows?: Record<string, unknown>[]; error?: string | null }
-export interface WidgetConfig { id: string; type: string; title: string; metric_key?: string | null; span?: number }
+// id_field: which key in each row of a `table` widget is a real, click-
+// through-able report id (see ai-service's WidgetConfig.id_field) — set only
+// for connectors with a verified matching /drilldown/[id] backend. Absent
+// means this table's rows have no drillable id.
+export interface WidgetConfig { id: string; type: string; title: string; metric_key?: string | null; span?: number; id_field?: string | null }
 export interface DashRow { id: string; title?: string | null; widgets: WidgetConfig[] }
 // A real navigable page (Overview/LMS/Coach/...) — see ai-service's
 // DashboardPage model. Optional/absent on a config built before multi-page
@@ -68,7 +73,7 @@ function DashboardRows({ rows, pv }: { rows: DashRow[]; pv: Map<string, WidgetPr
                     <MiniChart series={p?.series ?? p?.rows ?? []} bar={w.type !== 'line_chart'} />}
                   {w.type === 'donut' && <MiniDonut rows={p?.rows ?? []} />}
                   {w.type === 'journey' && <MiniJourney rows={p?.rows ?? []} />}
-                  {w.type === 'table' && <MiniTable rows={p?.rows ?? []} />}
+                  {w.type === 'table' && <MiniTable rows={p?.rows ?? []} idField={w.id_field} />}
                   {p && !p.ok && <div className="text-xs text-amber-600 dark:text-amber-400 mt-1">no data{p.error ? `: ${p.error}` : ''}</div>}
                 </div>
               )
@@ -367,17 +372,38 @@ export function MiniDonut({ rows }: { rows: Record<string, unknown>[] }) {
   )
 }
 
-export function MiniTable({ rows }: { rows: Record<string, unknown>[] }) {
+export function MiniTable({ rows, idField }: { rows: Record<string, unknown>[]; idField?: string | null }) {
   if (!rows.length) return <div className="text-sm text-muted-foreground">—</div>
-  const cols = Object.keys(rows[0]).slice(0, 5)
+  // The id itself isn't interesting to show as a column (it's an opaque
+  // report id) — it's what the "View" link's href is built from instead.
+  const cols = Object.keys(rows[0]).filter(c => c !== idField).slice(0, 5)
   return (
     <div className="overflow-x-auto mt-1">
       <table className="w-full text-xs">
-        <thead><tr className="text-muted-foreground text-left">{cols.map(c => <th key={c} className="py-1 pr-4 font-medium capitalize">{c.replace(/_/g, ' ')}</th>)}</tr></thead>
+        <thead>
+          <tr className="text-muted-foreground text-left">
+            {cols.map(c => <th key={c} className="py-1 pr-4 font-medium capitalize">{c.replace(/_/g, ' ')}</th>)}
+            {idField && <th className="py-1 pr-4 font-medium" />}
+          </tr>
+        </thead>
         <tbody>
-          {rows.slice(0, 10).map((r, i) => (
-            <tr key={i} className="border-t border-border/40">{cols.map(c => <td key={c} className="py-1 pr-4 text-foreground">{fmt(r[c])}</td>)}</tr>
-          ))}
+          {rows.slice(0, 10).map((r, i) => {
+            const id = idField ? r[idField] : null
+            return (
+              <tr key={i} className="border-t border-border/40">
+                {cols.map(c => <td key={c} className="py-1 pr-4 text-foreground">{fmt(r[c])}</td>)}
+                {idField && (
+                  <td className="py-1 pr-4">
+                    {id !== null && id !== undefined && (
+                      <Link href={`/drilldown/${id}`} className="text-primary hover:underline whitespace-nowrap">
+                        View →
+                      </Link>
+                    )}
+                  </td>
+                )}
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>
