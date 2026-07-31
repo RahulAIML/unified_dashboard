@@ -32,6 +32,12 @@ class Settings(BaseSettings):
 
     # ── Persistence (reuses the Next.js auth Postgres DB; new tables only) ──────
     auth_database_url: str | None = None
+    # Same master key as the Next.js app's SECRET_ENCRYPTION_KEY — required to
+    # decrypt tenant_credentials rows (see app/secret_crypto.py, a byte-for-byte
+    # port of lib/secret-crypto.ts). Must be the IDENTICAL value on both
+    # services, or every tenant's stored credentials fail to decrypt here even
+    # though the Next.js app reads them fine.
+    secret_encryption_key: str | None = None
 
     # ── Rolplay data sources (same values the Next.js app uses) ─────────────────
     # Pharma unified bridge base, e.g. https://serv.aux-rolplay.com/unified

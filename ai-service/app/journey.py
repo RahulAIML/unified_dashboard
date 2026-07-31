@@ -45,6 +45,11 @@ _CANONICAL_SET = set(CANONICAL_ORDER)
 # this one (see lib/bridge-rolplay-app.ts's matching note).
 CATEGORY_TO_MODULE: dict[str, str] = {"COACH": "coach", "SIM": "simulator", "SEGMENT": "certification"}
 
+# Reverse of the above — used to scope a per-module page's queries down to
+# just that module's sessions (e.g. dashboard_planning.py's per-module pages,
+# fetched via preview_fetch.py's _category_clause()).
+MODULE_TO_CATEGORY: dict[str, str] = {v: k for k, v in CATEGORY_TO_MODULE.items()}
+
 
 def is_canonical(modules: list[str]) -> bool:
     """True only if EVERY discovered module is a verified canonical name —

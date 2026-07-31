@@ -24,7 +24,7 @@
  * label once recharts actually draws it.
  */
 import { describe, it, expect, vi } from 'vitest'
-import { render } from '@testing-library/react'
+import { render, fireEvent } from '@testing-library/react'
 import { MiniChart, MiniDonut, MiniJourney, MiniTable, DashboardRenderer, humanizeConnector } from '../DashboardRenderer'
 
 vi.mock('recharts', () => {
@@ -304,5 +304,83 @@ describe('DashboardRenderer — end to end with real widget shapes', () => {
     const { getByText } = render(<DashboardRenderer config={config} preview={preview} />)
 
     expect(getByText(/no data/)).toBeTruthy()
+  })
+})
+
+describe('DashboardRenderer — multi-page navigation', () => {
+  // Before this, every AI-generated dashboard was exactly one flat page
+  // regardless of how many real pages the tenant's data supported. These
+  // tests cover the tab navigation this replaced that with, and confirm the
+  // fallback to flat rows for a config built before `pages` existed.
+  function multiPageConfig() {
+    return {
+      company: 'Siigo', slug: 'siigo', title: 'Siigo Analytics', connector: 'rolplay_app_sql',
+      rows: [{ id: 'row_kpis', widgets: [{ id: 'tile_total_sessions', type: 'kpi_tile', title: 'Total Sessions' }] }],
+      pages: [
+        { id: 'overview', title: 'Overview', rows: [{ id: 'row_kpis', widgets: [{ id: 'tile_total_sessions', type: 'kpi_tile', title: 'Total Sessions' }] }] },
+        { id: 'coach', title: 'Master Coach', rows: [{ id: 'coach_kpis', widgets: [{ id: 'coach_tile_total_sessions', type: 'kpi_tile', title: 'Total Sessions' }] }] },
+        { id: 'simulator', title: 'Practice Simulator', rows: [{ id: 'sim_kpis', widgets: [{ id: 'simulator_tile_total_sessions', type: 'kpi_tile', title: 'Total Sessions' }] }] },
+      ],
+      recommendations: [],
+    }
+  }
+  function multiPagePreview() {
+    return {
+      widgets: [
+        { widget_id: 'tile_total_sessions', ok: true, value: 144 },
+        { widget_id: 'coach_tile_total_sessions', ok: true, value: 237 },
+        { widget_id: 'simulator_tile_total_sessions', ok: true, value: 535 },
+      ],
+    }
+  }
+
+  it('renders a tab per page and shows the first page by default', () => {
+    const { getByText, getAllByRole } = render(<DashboardRenderer config={multiPageConfig()} preview={multiPagePreview()} />)
+    const tabs = getAllByRole('tab')
+    expect(tabs.map(t => t.textContent)).toEqual(['Overview', 'Master Coach', 'Practice Simulator'])
+    // Overview's own value (144) is visible; the other pages' values are not.
+    expect(getByText('144')).toBeTruthy()
+    expect(() => getByText('237')).toThrow()
+  })
+
+  it('switches to the clicked page and shows ONLY that page\'s widgets', () => {
+    const { getByText, getAllByRole } = render(<DashboardRenderer config={multiPageConfig()} preview={multiPagePreview()} />)
+    fireEvent.click(getAllByRole('tab')[1]) // "Master Coach"
+    expect(getByText('237')).toBeTruthy()
+    expect(() => getByText('144')).toThrow()
+    expect(() => getByText('535')).toThrow()
+  })
+
+  it('marks the active tab via aria-selected', () => {
+    const { getAllByRole } = render(<DashboardRenderer config={multiPageConfig()} preview={multiPagePreview()} />)
+    const tabs = getAllByRole('tab')
+    fireEvent.click(tabs[2]) // "Practice Simulator"
+    expect(tabs[2].getAttribute('aria-selected')).toBe('true')
+    expect(tabs[0].getAttribute('aria-selected')).toBe('false')
+  })
+
+  it('falls back to flat row rendering with no tabs when pages is absent', () => {
+    const config = {
+      company: 'X', slug: 'x', title: 'X', connector: 'rolplay_app_sql',
+      rows: [{ id: 'r1', widgets: [{ id: 'w1', type: 'kpi_tile', title: 'Sessions' }] }],
+      recommendations: [],
+    }
+    const preview = { widgets: [{ widget_id: 'w1', ok: true, value: 42 }] }
+    const { getByText, queryAllByRole } = render(<DashboardRenderer config={config} preview={preview} />)
+    expect(getByText('42')).toBeTruthy()
+    expect(queryAllByRole('tab')).toHaveLength(0)
+  })
+
+  it('renders no tab bar for a single-page config (nothing to switch between)', () => {
+    const config = {
+      company: 'X', slug: 'x', title: 'X', connector: 'rolplay_app_sql',
+      rows: [],
+      pages: [{ id: 'overview', title: 'Overview', rows: [{ id: 'r1', widgets: [{ id: 'w1', type: 'kpi_tile', title: 'Sessions' }] }] }],
+      recommendations: [],
+    }
+    const preview = { widgets: [{ widget_id: 'w1', ok: true, value: 7 }] }
+    const { getByText, queryAllByRole } = render(<DashboardRenderer config={config} preview={preview} />)
+    expect(getByText('7')).toBeTruthy()
+    expect(queryAllByRole('tab')).toHaveLength(0)
   })
 })

@@ -10,7 +10,7 @@ from ..models import (
     CompanyKnowledge,
     DashboardConfig,
     DashboardFilter,
-    DashboardRow,
+    DashboardPage,
     NormalizedSchema,
     ServiceDescriptor,
 )
@@ -21,7 +21,7 @@ async def run(
     knowledge: CompanyKnowledge,
     schema: NormalizedSchema,
     service: ServiceDescriptor,
-    rows: list[DashboardRow],
+    pages: list[DashboardPage],
     filters: list[DashboardFilter],
     recommendations: list[str],
     log: LogFn,
@@ -39,11 +39,16 @@ async def run(
         title=f"{knowledge.company} Analytics",
         connector=service.kind,
         connector_handle=handle,
-        rows=rows,
+        # `rows` stays populated (Overview's rows = pages[0]) so any consumer
+        # still reading the old flat field keeps working unchanged; `pages`
+        # is the new, real multi-page structure.
+        rows=pages[0].rows if pages else [],
+        pages=pages,
         filters=filters,
         recommendations=recommendations,
         branding={"primary_color": "#DC2626"},
         version=1,
     )
-    await log("dashboard_config", "success", f"Built dashboard config '{config.title}' ({service.kind.value})")
+    await log("dashboard_config", "success",
+              f"Built dashboard config '{config.title}' ({service.kind.value}) — {len(pages)} page(s)")
     return config

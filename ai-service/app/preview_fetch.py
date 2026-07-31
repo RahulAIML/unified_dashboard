@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from . import journey as journey_lib
+from . import lms as lms_client
 from .config import get_settings
 from .http import get_json, post_json
 from .rolplay_score import SCORE_SQL
@@ -54,6 +55,13 @@ def _date_range(cfg: DashboardConfig) -> tuple[str, str]:
 
 async def fetch_widget(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
     try:
+        # LMS widgets are discovered independently of the dashboard's PRIMARY
+        # connector (see agents/lms_discovery.py) — w.source_kind, not
+        # cfg.connector, says how to fetch them. A pharma_kpi-primary
+        # dashboard can still carry lms-sourced widgets, so this check must
+        # come before the cfg.connector dispatch below, not fall through to it.
+        if w.source_kind == ServiceKind.lms:
+            return await _lms(cfg, w)
         # raw_field is only ever set for auto-discovered metrics (see
         # agents/auto_discovery.py) — route those through the generic
         # action-dispatch fetcher regardless of connector kind, since the
@@ -106,6 +114,33 @@ async def _generic_pharma_action(cfg: DashboardConfig, w: WidgetConfig) -> Widge
         return WidgetPreview(widget_id=w.id, ok=bool(rows), rows=rows)
     val = node if isinstance(node, (int, float)) and not isinstance(node, bool) else None
     return WidgetPreview(widget_id=w.id, ok=val is not None, value=val)
+
+
+# ── LMS (LearnWorlds; independent of the primary connector) ─────────────────────
+async def _lms(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
+    frm, to = _date_range(cfg)
+    data = await lms_client.lms_dashboard(cfg.slug, frm, to)
+    if not data.get("configured"):
+        return WidgetPreview(widget_id=w.id, ok=False, error="LMS not configured for this tenant")
+
+    if w.type == WidgetType.kpi_tile:
+        val = {
+            "lms_enrolled_users": data["enrolledUsers"],
+            "lms_completion_rate": data["completionRate"],
+            # Null, not zero, when nothing is graded — matches lms.py's
+            # hasScoreData flag exactly (a flat 0 would read as catastrophic
+            # performance when nothing was ever graded).
+            "lms_avg_quiz_score": data["avgQuizScore"] if data["hasScoreData"] else None,
+            "lms_modules_completed": data["modulesCompleted"],
+        }.get(w.metric_key)
+        return WidgetPreview(widget_id=w.id, ok=val is not None, value=val)
+    if w.type == WidgetType.line_chart:
+        series = data["completionTrend"]
+        return WidgetPreview(widget_id=w.id, ok=bool(series), series=series)
+    if w.type == WidgetType.table:
+        rows = data["courses"]
+        return WidgetPreview(widget_id=w.id, ok=bool(rows), rows=rows)
+    return WidgetPreview(widget_id=w.id, ok=False, error=f"unsupported LMS widget type '{w.type}'")
 
 
 # ── pharma kpi ──────────────────────────────────────────────────────────────────
@@ -235,9 +270,22 @@ async def _rolplay_app_sql(sql: str) -> list[dict]:
     return (body or {}).get("data", []) if isinstance(body, dict) else []
 
 
+def _category_clause(module: str | None) -> str:
+    """SQL fragment restricting rolplay_app_sql sessions to one canonical
+    module (coach/simulator/certification) — mirrors categoryClause() in
+    lib/bridge-rolplay-app.ts exactly, same category mapping. '' (no
+    restriction) when module is None, matching every existing unscoped widget."""
+    if not module:
+        return ""
+    cat = journey_lib.MODULE_TO_CATEGORY.get(module)
+    if not cat:
+        return ""
+    return f" AND s.simulator_id IN (SELECT ID FROM r_simulator WHERE category = '{cat}')"
+
+
 async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
     cid = int(cfg.connector_handle.get("client_id"))
-    base = f"FROM r_user_session s JOIN r_user u ON u.ID=s.user_id WHERE u.client_id={cid}"
+    base = f"FROM r_user_session s JOIN r_user u ON u.ID=s.user_id WHERE u.client_id={cid}{_category_clause(w.module)}"
 
     # ── Solution journey: one row per canonical module, in journey order ──
     if w.type == WidgetType.journey:
@@ -293,7 +341,7 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
             f"SUM(CASE WHEN ({SCORE_SQL})>={PASS_THRESHOLD} THEN 1 ELSE 0 END) passed_sessions, "
             f"ROUND(100*SUM(CASE WHEN ({SCORE_SQL})>={PASS_THRESHOLD} THEN 1 ELSE 0 END)/COUNT(*),1) pass_rate "
             "FROM r_user_session s JOIN r_user u ON u.ID=s.user_id "
-            f"LEFT JOIN r_simulator sim ON sim.ID=s.simulator_id WHERE u.client_id={cid} "
+            f"LEFT JOIN r_simulator sim ON sim.ID=s.simulator_id WHERE u.client_id={cid}{_category_clause(w.module)} "
             "GROUP BY s.simulator_id, sim.name ORDER BY total_sessions DESC"
         )
         if w.id == APPROVAL_DONUT_ID:
@@ -306,7 +354,7 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
         "SELECT COUNT(s.ID) AS sessions, COUNT(DISTINCT u.ID) AS users, "
         f"ROUND(AVG({SCORE_SQL}),2) AS avg_score, "
         f"SUM(CASE WHEN ({SCORE_SQL})>={PASS_THRESHOLD} THEN 1 ELSE 0 END) AS passed "
-        f"FROM r_user u LEFT JOIN r_user_session s ON s.user_id=u.ID WHERE u.client_id={cid}"
+        f"FROM r_user u LEFT JOIN r_user_session s ON s.user_id=u.ID WHERE u.client_id={cid}{_category_clause(w.module)}"
     )
     row = data[0] if data else {}
     sessions = int(row.get("sessions") or 0)

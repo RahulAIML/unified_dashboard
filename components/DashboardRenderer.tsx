@@ -7,6 +7,7 @@
  * config describes. This is the "metadata over code generation" contract.
  */
 
+import { useState } from 'react'
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis,
   CartesianGrid, Tooltip, LabelList, PieChart, Pie, Cell, Legend,
@@ -15,7 +16,14 @@ import {
 export interface WidgetPreview { widget_id: string; ok: boolean; value?: number | string | null; series?: Record<string, unknown>[]; rows?: Record<string, unknown>[]; error?: string | null }
 export interface WidgetConfig { id: string; type: string; title: string; metric_key?: string | null; span?: number }
 export interface DashRow { id: string; title?: string | null; widgets: WidgetConfig[] }
-export interface DashboardConfig { company: string; slug: string; title: string; connector: string; rows: DashRow[]; recommendations: string[] }
+// A real navigable page (Overview/LMS/Coach/...) — see ai-service's
+// DashboardPage model. Optional/absent on a config built before multi-page
+// generation existed; DashboardRenderer falls back to flat `rows` then.
+export interface DashPage { id: string; title: string; rows: DashRow[] }
+export interface DashboardConfig {
+  company: string; slug: string; title: string; connector: string
+  rows: DashRow[]; pages?: DashPage[]; recommendations: string[]
+}
 
 export function fmt(v: unknown): string {
   if (v === null || v === undefined) return '—'
@@ -42,11 +50,10 @@ export function humanizeConnector(connector: string | null | undefined): string 
   return CONNECTOR_LABELS[connector] ?? connector.replace(/_/g, ' ')
 }
 
-export function DashboardRenderer({ config, preview }: { config: DashboardConfig; preview: { widgets: WidgetPreview[] } }) {
-  const pv = new Map(preview.widgets.map(w => [w.widget_id, w]))
+function DashboardRows({ rows, pv }: { rows: DashRow[]; pv: Map<string, WidgetPreview> }) {
   return (
     <div className="space-y-5">
-      {config.rows.map(row => (
+      {rows.map(row => (
         <div key={row.id}>
           {row.title && <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">{row.title}</div>}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -69,6 +76,51 @@ export function DashboardRenderer({ config, preview }: { config: DashboardConfig
           </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+/**
+ * Real page navigation (tabs), not one flat scrolling page — the reference
+ * hand-built app has ~10 distinct pages (Overview/LMS/Coach/Simulator/...);
+ * every AI-generated dashboard used to be exactly one page regardless. Falls
+ * back to the old flat-rows rendering when `config.pages` is absent/empty
+ * (a config built before multi-page generation existed, or one page's worth
+ * of content) — so nothing regresses for an older cached config.
+ */
+export function DashboardRenderer({ config, preview }: { config: DashboardConfig; preview: { widgets: WidgetPreview[] } }) {
+  const pv = new Map(preview.widgets.map(w => [w.widget_id, w]))
+  const pages = config.pages ?? []
+  const [activeId, setActiveId] = useState<string | null>(pages[0]?.id ?? null)
+
+  if (pages.length === 0) {
+    return <DashboardRows rows={config.rows} pv={pv} />
+  }
+
+  const active = pages.find(p => p.id === activeId) ?? pages[0]
+
+  return (
+    <div>
+      {pages.length > 1 && (
+        <div className="flex gap-1 mb-5 border-b border-border/60 overflow-x-auto" role="tablist">
+          {pages.map(p => (
+            <button
+              key={p.id}
+              role="tab"
+              aria-selected={p.id === active.id}
+              onClick={() => setActiveId(p.id)}
+              className={`px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+                p.id === active.id
+                  ? 'border-primary text-foreground'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {p.title}
+            </button>
+          ))}
+        </div>
+      )}
+      <DashboardRows rows={active.rows} pv={pv} />
     </div>
   )
 }

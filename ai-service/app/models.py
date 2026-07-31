@@ -27,6 +27,12 @@ class ServiceKind(str, Enum):
     coach_app_sql = "coach_app_sql"
     second_brain = "second_brain"
     rolplay_app_sql = "rolplay_app_sql"
+    # LearnWorlds LMS — gated purely on credential presence (app/lms.py),
+    # never on which analytics connector (pharma_kpi/rolplay_app_sql/
+    # coach_app_sql) a tenant uses. A tenant can independently have its own
+    # LearnWorlds school regardless of primary connector, exactly like the
+    # real Next.js app's hasLmsCredentialsAsync gate is independent of orgType.
+    lms = "lms"
     unknown = "unknown"
 
 
@@ -124,12 +130,29 @@ class WidgetConfig(BaseModel):
     # See DiscoveredMetric.raw_field — carried through so the generic preview
     # fetcher can pull the right field from an auto-discovered action's response.
     raw_field: str | None = None
+    # Canonical module name ('coach'/'simulator'/'certification') this widget
+    # is scoped to — set only for per-module page widgets (dashboard_planning.py's
+    # per-module pages), so preview_fetch.py can filter the underlying query to
+    # just that module instead of the connector's full aggregate. None means
+    # unscoped (every existing widget, and Overview-page widgets).
+    module: str | None = None
 
 
 class DashboardRow(BaseModel):
     id: str
     title: str | None = None
     widgets: list[WidgetConfig] = Field(default_factory=list)
+
+
+class DashboardPage(BaseModel):
+    """One navigable page of the generated dashboard (Overview/LMS/Coach/...).
+    Added so the AI builder can produce a real multi-page application instead
+    of one flat scrolling page — the reference (hand-built) dashboard has ~10
+    distinct pages; before this, every AI-generated dashboard had exactly one.
+    """
+    id: str
+    title: str
+    rows: list[DashboardRow] = Field(default_factory=list)
 
 
 class DashboardFilter(BaseModel):
@@ -146,7 +169,15 @@ class DashboardConfig(BaseModel):
     title: str
     connector: ServiceKind
     connector_handle: dict[str, Any] = Field(default_factory=dict)
+    # DEPRECATED but kept for backward compatibility with any consumer reading
+    # `rows` directly — always populated as the Overview page's rows (pages[0]
+    # when pages is non-empty). New code should read `pages`.
     rows: list[DashboardRow] = Field(default_factory=list)
+    # New: real multi-page structure. Empty for any config built before this
+    # field existed (old JSONB rows in dashboard_metadata deserialize fine —
+    # Pydantic defaults this to [] and DashboardRenderer.tsx falls back to
+    # rendering `rows` flat when `pages` is empty).
+    pages: list[DashboardPage] = Field(default_factory=list)
     filters: list[DashboardFilter] = Field(default_factory=list)
     recommendations: list[str] = Field(default_factory=list)
     branding: dict[str, Any] = Field(default_factory=dict)

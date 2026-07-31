@@ -17,6 +17,13 @@ services:
         value: gemini-3-flash-preview
       - key: AUTH_DATABASE_URL
         sync: false
+      # MUST be the IDENTICAL value as SECRET_ENCRYPTION_KEY on the Next.js
+      # service — this decrypts the SAME tenant_credentials rows (LMS
+      # credentials, etc.) that service already writes. A mismatched value
+      # means every tenant's credentials fail to decrypt here even though
+      # the Next.js app reads them fine.
+      - key: SECRET_ENCRYPTION_KEY
+        sync: false
       - key: PHARMA_BRIDGE_BASE_URL
         value: https://serv.aux-rolplay.com/unified
       - key: PHARMA_HOST_ROOT

@@ -13,9 +13,11 @@ from .. import journey as journey_lib
 from ..llm import gemini_json, llm_available
 from ..models import (
     DashboardFilter,
+    DashboardPage,
     DashboardRow,
     MetricType,
     NormalizedSchema,
+    ServiceKind,
     WidgetConfig,
     WidgetType,
 )
@@ -23,8 +25,15 @@ from .base import LogFn
 
 _ALLOWED_CHART = {"line_chart", "bar_chart", "donut", "histogram"}
 
+# Metric keys that belong on their own LMS page, never on Overview — see
+# agents/lms_discovery.py, which is the only thing that ever adds these.
+_LMS_METRIC_KEYS = {
+    "lms_enrolled_users", "lms_completion_rate", "lms_avg_quiz_score",
+    "lms_modules_completed", "lms_completion_trend", "lms_courses",
+}
 
-async def run(schema: NormalizedSchema, log: LogFn) -> tuple[list[DashboardRow], list[DashboardFilter], list[str]]:
+
+async def run(schema: NormalizedSchema, log: LogFn) -> tuple[list[DashboardPage], list[DashboardFilter], list[str]]:
     metrics = {m.key: m for m in schema.metrics}
 
     plan = None
@@ -34,17 +43,121 @@ async def run(schema: NormalizedSchema, log: LogFn) -> tuple[list[DashboardRow],
             await log("dashboard_planning", "info", "Gemini proposed the layout; validating against real metrics…")
 
     if plan:
-        rows, filters, recs = _build_from_plan(plan, schema, metrics)
-        if any(r.widgets for r in rows):
+        overview_rows, filters, recs = _build_from_plan(plan, schema, metrics)
+        if any(r.widgets for r in overview_rows):
+            pages = _assemble_pages(schema, metrics, overview_rows)
+            total = sum(len(r.widgets) for p in pages for r in p.rows)
             await log("dashboard_planning", "success",
-                      f"Gemini plan → {sum(len(r.widgets) for r in rows)} widget(s), {len(filters)} filter(s)")
-            return rows, filters, recs
+                      f"Gemini plan → {total} widget(s) across {len(pages)} page(s), {len(filters)} filter(s)")
+            return pages, filters, recs
         await log("dashboard_planning", "warn", "Gemini plan had no valid widgets — using heuristic")
 
-    rows, filters, recs = _heuristic(schema, metrics)
+    overview_rows, filters, recs = _heuristic(schema, metrics)
+    pages = _assemble_pages(schema, metrics, overview_rows)
+    total = sum(len(r.widgets) for p in pages for r in p.rows)
     await log("dashboard_planning", "success",
-              f"Heuristic plan → {sum(len(r.widgets) for r in rows)} widget(s), {len(filters)} filter(s)")
-    return rows, filters, recs
+              f"Heuristic plan → {total} widget(s) across {len(pages)} page(s), {len(filters)} filter(s)")
+    return pages, filters, recs
+
+
+def _assemble_pages(schema: NormalizedSchema, metrics: dict, overview_rows: list[DashboardRow]) -> list[DashboardPage]:
+    """Turns the existing single-page widget set into a real multi-page
+    dashboard: Overview (unchanged content) + an LMS page (when LMS was
+    discovered — see lms_discovery.py) + one page per canonical module the
+    connector can query in isolation (today: rolplay_app_sql only — see
+    _module_pages' own docstring for why pharma_kpi doesn't get these yet).
+    Always at least one page (Overview), so nothing regresses for a schema
+    with no LMS and no scoped-module connector.
+    """
+    pages = [DashboardPage(id="overview", title="Overview", rows=overview_rows)]
+    lms_page = _lms_page(metrics)
+    if lms_page:
+        pages.append(lms_page)
+    pages.extend(_module_pages(schema, metrics))
+    return pages
+
+
+def _lms_page(metrics: dict) -> DashboardPage | None:
+    tile_keys = ["lms_enrolled_users", "lms_completion_rate", "lms_avg_quiz_score", "lms_modules_completed"]
+    tiles = []
+    for key in tile_keys:
+        m = metrics.get(key)
+        if not m:
+            continue
+        tiles.append(WidgetConfig(id=f"lms_tile_{key}", type=WidgetType.kpi_tile, title=m.label,
+                                  metric_key=key, source_kind=m.source_kind, source_action=m.source_action))
+    if not tiles:
+        return None  # no LMS discovered for this tenant
+
+    rows = [DashboardRow(id="lms_kpis", title="Overview", widgets=tiles)]
+
+    charts: list[WidgetConfig] = []
+    trend_m = metrics.get("lms_completion_trend")
+    if trend_m:
+        charts.append(WidgetConfig(id="lms_trend", type=WidgetType.line_chart, title=trend_m.label,
+                                   source_kind=trend_m.source_kind, source_action=trend_m.source_action, span=4))
+    courses_m = metrics.get("lms_courses")
+    if courses_m:
+        charts.append(WidgetConfig(id="lms_courses_table", type=WidgetType.table, title="Courses",
+                                   source_kind=courses_m.source_kind, source_action=courses_m.source_action, span=4))
+    if charts:
+        rows.append(DashboardRow(id="lms_analytics", title="Analytics", widgets=charts))
+
+    return DashboardPage(id="lms", title="LMS", rows=rows)
+
+
+def _module_pages(schema: NormalizedSchema, metrics: dict) -> list[DashboardPage]:
+    """Per-module (Coach-only / Simulator-only / Certification-only) pages,
+    each with its own scoped KPIs/trend/table — matching the real hand-built
+    app's per-module pages, which show module-scoped numbers rather than one
+    aggregate across every module.
+
+    ONLY for connectors where the module->query scoping is exact and
+    verified, never a guess: today that's rolplay_app_sql, whose modules are
+    already the canonical r_simulator.category mapping (journey.py's
+    CATEGORY_TO_MODULE). pharma_kpi's modules are raw, unclassified
+    activity_type strings (e.g. "Coach evaluador") with no general
+    Coach-vs-Simulator classifier built yet — forcing them into per-module
+    pages here would mean guessing, so pharma_kpi tenants get Overview + LMS
+    only until that classification work exists, not a wrong per-module split.
+    """
+    dim = next((m for m in schema.metrics if m.type == MetricType.dimension), None)
+    if not dim or dim.source_kind != ServiceKind.rolplay_app_sql:
+        return []
+    canonical = [m for m in schema.modules if m in journey_lib.CANONICAL_ORDER]
+    if not canonical:
+        return []
+    ts = next((m for m in schema.metrics if m.type == MetricType.timeseries), None)
+
+    pages: list[DashboardPage] = []
+    for module in journey_lib.ordered_stages(canonical):
+        label = journey_lib.LABEL[module]
+        tiles = [
+            WidgetConfig(id=f"{module}_tile_total_sessions", type=WidgetType.kpi_tile, title="Total Sessions",
+                        metric_key="total_sessions", module=module,
+                        source_kind=dim.source_kind, source_action=dim.source_action),
+            WidgetConfig(id=f"{module}_tile_avg_score", type=WidgetType.kpi_tile, title="Average Score",
+                        metric_key="avg_score", module=module,
+                        source_kind=dim.source_kind, source_action=dim.source_action),
+            WidgetConfig(id=f"{module}_tile_pass_rate", type=WidgetType.kpi_tile, title="Pass Rate",
+                        metric_key="pass_rate", module=module,
+                        source_kind=dim.source_kind, source_action=dim.source_action),
+        ]
+        rows = [DashboardRow(id=f"{module}_kpis", title="Overview", widgets=tiles)]
+
+        charts: list[WidgetConfig] = []
+        if ts:
+            charts.append(WidgetConfig(id=f"{module}_trend", type=WidgetType.line_chart, title="Score Trend",
+                                       module=module, source_kind=ts.source_kind, source_action=ts.source_action, span=4))
+        charts.append(WidgetConfig(
+            id=f"{module}_table", type=WidgetType.table, title=f"{label} — detail",
+            dimension=schema.dimensions[0] if schema.dimensions else "category", module=module,
+            metrics=[k for k in ("total_sessions", "avg_score", "pass_rate") if k in metrics],
+            source_kind=dim.source_kind, source_action=dim.source_action, span=4,
+        ))
+        rows.append(DashboardRow(id=f"{module}_analytics", title="Analytics", widgets=charts))
+        pages.append(DashboardPage(id=module, title=label, rows=rows))
+    return pages
 
 
 # ── LLM path ─────────────────────────────────────────────────────────────────────
@@ -64,7 +177,11 @@ async def _llm_plan(schema: NormalizedSchema) -> dict | None:
     )
     payload = {
         "company": schema.company,
-        "metrics": [{"key": m.key, "label": m.label, "type": m.type.value} for m in schema.metrics],
+        # LMS metrics are deliberately excluded — they always get their own
+        # dedicated page (_lms_page), built deterministically, never left to
+        # the LLM to place alongside unrelated Overview metrics.
+        "metrics": [{"key": m.key, "label": m.label, "type": m.type.value}
+                    for m in schema.metrics if m.key not in _LMS_METRIC_KEYS],
         "dimensions": schema.dimensions,
         "modules": schema.modules,
         "date_range": schema.date_range,
@@ -87,8 +204,8 @@ def _build_from_plan(plan: dict, schema: NormalizedSchema, metrics: dict):
     tile_keys: set[str] = set()
     for key in plan.get("tiles", []):
         m = metrics.get(key)
-        if not m or m.type not in (MetricType.count, MetricType.score, MetricType.rate) or key in tile_keys:
-            continue  # enforce: real metric only
+        if not m or m.type not in (MetricType.count, MetricType.score, MetricType.rate) or key in tile_keys or key in _LMS_METRIC_KEYS:
+            continue  # enforce: real metric only, and never an LMS metric here — those get their own page
         tile_keys.add(key)
         tiles.append(WidgetConfig(id=f"tile_{key}", type=WidgetType.kpi_tile, title=m.label,
                                   metric_key=key, source_kind=m.source_kind, source_action=m.source_action,
@@ -98,7 +215,7 @@ def _build_from_plan(plan: dict, schema: NormalizedSchema, metrics: dict):
     # certification stats) must still show up — an LLM's own summarization
     # picking "3-5 typical KPIs" is not grounds to silently drop a real one.
     for m in schema.metrics:
-        if m.key in tile_keys or m.type not in (MetricType.count, MetricType.score, MetricType.rate):
+        if m.key in tile_keys or m.type not in (MetricType.count, MetricType.score, MetricType.rate) or m.key in _LMS_METRIC_KEYS:
             continue
         tile_keys.add(m.key)
         tiles.append(WidgetConfig(id=f"tile_{m.key}", type=WidgetType.kpi_tile, title=m.label,
@@ -126,8 +243,14 @@ def _build_from_plan(plan: dict, schema: NormalizedSchema, metrics: dict):
         dim = c.get("dimension")
         if dim and dim not in schema.dimensions:
             dim = schema.dimensions[0] if schema.dimensions else None
-        # a chart must be backed by a real metric or a real dimension
-        src_metric = metrics.get(mkey) if mkey in metrics else next(iter(schema.metrics), None)
+        # a chart must be backed by a real metric or a real dimension — never
+        # an LMS metric here, those only ever appear on their own page.
+        if mkey in _LMS_METRIC_KEYS:
+            mkey = None
+        src_metric = (
+            metrics.get(mkey) if mkey in metrics
+            else next((m for m in schema.metrics if m.key not in _LMS_METRIC_KEYS), None)
+        )
         if not src_metric:
             continue
         seen_types.add(ctype)
@@ -227,7 +350,9 @@ def _auto_donut_widgets(schema: NormalizedSchema, existing_ids: set[str]) -> lis
             dimension=schema.dimensions[0] if schema.dimensions else "category",
             source_kind=dim.source_kind, source_action=dim.source_action, span=2,
         ))
-    if "donut_approval" not in existing_ids and any(m.type == MetricType.rate for m in schema.metrics):
+    if "donut_approval" not in existing_ids and any(
+        m.type == MetricType.rate and m.key not in _LMS_METRIC_KEYS for m in schema.metrics
+    ):
         extra.append(WidgetConfig(
             id="donut_approval", type=WidgetType.donut, title="Pass / Fail Breakdown",
             dimension=schema.dimensions[0] if schema.dimensions else "category",
@@ -237,10 +362,13 @@ def _auto_donut_widgets(schema: NormalizedSchema, existing_ids: set[str]) -> lis
 
 
 def _auto_table_widgets(schema: NormalizedSchema) -> list[WidgetConfig]:
+    # LMS's own table metric (lms_courses) is deliberately excluded — it
+    # already gets a widget on the dedicated LMS page (_lms_page), and
+    # including it here too would duplicate it onto Overview.
     return [
         WidgetConfig(id=f"table_{m.key}", type=WidgetType.table, title=m.label,
                      source_kind=m.source_kind, source_action=m.source_action, raw_field=m.raw_field, span=4)
-        for m in schema.metrics if m.type == MetricType.table
+        for m in schema.metrics if m.type == MetricType.table and m.key not in _LMS_METRIC_KEYS
     ]
 
 
@@ -248,9 +376,10 @@ def _auto_table_widgets(schema: NormalizedSchema) -> list[WidgetConfig]:
 def _heuristic(schema: NormalizedSchema, metrics: dict):
     tiles = [WidgetConfig(id=f"tile_{m.key}", type=WidgetType.kpi_tile, title=m.label, metric_key=m.key,
                           source_kind=m.source_kind, source_action=m.source_action, raw_field=m.raw_field)
-             for m in schema.metrics if m.type in (MetricType.count, MetricType.score, MetricType.rate)]
+             for m in schema.metrics
+             if m.type in (MetricType.count, MetricType.score, MetricType.rate) and m.key not in _LMS_METRIC_KEYS]
     charts: list[WidgetConfig] = []
-    ts = next((m for m in schema.metrics if m.type == MetricType.timeseries), None)
+    ts = next((m for m in schema.metrics if m.type == MetricType.timeseries and m.key not in _LMS_METRIC_KEYS), None)
     if ts:
         charts.append(WidgetConfig(id="chart_trend", type=WidgetType.line_chart, title=ts.label,
                                    metrics=[ts.key], source_kind=ts.source_kind, source_action=ts.source_action, span=2))

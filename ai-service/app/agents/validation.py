@@ -19,7 +19,11 @@ async def run(cfg: DashboardConfig, schema: NormalizedSchema, service: ServiceDe
     issues: list[ValidationIssue] = []
     metric_keys = {m.key for m in schema.metrics}
     seen_ids: set[str] = set()
-    widgets = [w for r in cfg.rows for w in r.widgets]
+    # Walk every page's rows, not just cfg.rows (which is Overview only, kept
+    # for backward compatibility) -- otherwise LMS/per-module page widgets
+    # would never be checked at all.
+    page_rows = [r for p in cfg.pages for r in p.rows] if cfg.pages else cfg.rows
+    widgets = [w for r in page_rows for w in r.widgets]
 
     if not widgets:
         issues.append(ValidationIssue(severity=ValidationSeverity.error, code="no_widgets",

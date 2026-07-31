@@ -21,6 +21,7 @@ from .agents import (
     company_discovery,
     dashboard_config,
     dashboard_planning,
+    lms_discovery,
     planner,
     preview,
     publish,
@@ -124,6 +125,12 @@ async def _continue_from_schema_discovery(job: JobState, knowledge, primary: Ser
     await auto_discovery.run(schema, primary, job.request.exercise_ids, log)
     job.schema_ = schema; await update(job)
 
+    # Independent of the primary connector -- a tenant's LearnWorlds school
+    # (if any) is discovered regardless of whether the primary is pharma_kpi/
+    # rolplay_app_sql/coach_app_sql. See lms_discovery.py's docstring.
+    await lms_discovery.run(knowledge, schema, log)
+    job.schema_ = schema; await update(job)
+
     await put_knowledge(knowledge)  # persist learned services/ids
 
     if schema.modules:
@@ -173,11 +180,11 @@ async def _continue_from_planning(job: JobState, knowledge, primary: ServiceDesc
     req = job.request
     try:
         job.phase = JobPhase.dashboard_planning; await update(job)
-        rows, filters, recs = await dashboard_planning.run(schema, log)
+        pages, filters, recs = await dashboard_planning.run(schema, log)
         job.percent = 68; await update(job)
 
         job.phase = JobPhase.dashboard_config; await update(job)
-        cfg = await dashboard_config.run(knowledge, schema, primary, rows, filters, recs, log)
+        cfg = await dashboard_config.run(knowledge, schema, primary, pages, filters, recs, log)
         cfg.connector_handle["base_url"] = primary.base_url
         job.dashboard = cfg; job.percent = 76; await update(job)
 
