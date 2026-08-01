@@ -61,6 +61,18 @@ Ordered so nothing is built against two sources of truth.
 
 ---
 
+## Phase 2.5 — Analytics Application OS reframing (rolplay_app_sql slice) `[x]`
+
+2026-08-01: reframed the builder's output model toward the "Analytics Application Operating System" vocabulary (Capabilities, Business Concepts, Questions, Reports, Permissions, AI Insights) — scoped entirely to `rolplay_app_sql`, every other connector untouched. Live-verified end to end on Siigo:
+
+- [x] **Capability model with confidence.** `NormalizedSchema.capabilities` replaces the implicit modules list with typed objects (business_concept, confidence: verified/probable/unverified, evidence). rolplay_app_sql's are always `verified` — the category mapping is exact, never guessed.
+- [x] **Business Concepts & Questions.** Every metric/widget carries the real business question it answers (e.g. "How many practice sessions have reps completed?"), confirmed in the live job output.
+- [x] **Reports page.** A genuine paginated/searchable/exportable page — individual session rows (not aggregated), with a real `ReportsTable` frontend component (client-side search + pagination + CSV export), distinct from the small capped drilldown table.
+- [x] **AI Insights.** `agents/insights.py` runs after `preview.run()`, reasoning only over data ACTUALLY fetched — confidence-gated (skips rather than fabricates below 2 real data points). **Live-verified real output:** *"Siigo recorded a total of 144 sessions completed by 64 active users."* / *"The overall pass rate stands at 36.8% with an average score of 46.24 across all attempts."* — every number matches the real fetched data. **One real bug found and fixed live:** the first deploy crashed every generation immediately after building a perfectly good dashboard — `insights.py` logged with `phase="insights"`, not a real `JobPhase` enum member; every unit test's no-op log mock never caught it since it never validates the phase string against the real enum. Fixed (reuse the `"preview"` phase tag) and re-verified live.
+- [x] **Permissions plumbing.** `DashboardPage.visibility` ("all_users"/"admin_only") enforced server-side in `/api/dashboard-view/[slug]` (never left to the frontend alone). Only two roles exist anywhere in this system (confirmed by direct search) — no fabricated RBAC hierarchy. Every page defaults to "all_users" today (no policy invented), proving the enforcement path without restricting anything nobody asked for.
+
+**Explicitly not done in this pass:** the other 4 connectors (`pharma_kpi`, `pharma_sale_exercises`, `pharma_exceltis_rest`, `coach_app_sql`) get none of this — no capabilities, no business questions, no Reports page, no insights. Extending each requires the same "verify the query shape first, never guess" work already done here, connector by connector. A formal multi-stage "Reason → Plan" orchestrator distinct from the existing linear pipeline was also not built — the existing Discover→Understand→Plan→Generate→Validate→Publish sequence (workflow.py) already matches that shape; this pass added Insights as the "Improve" step but did not add a "Monitor" (post-publish health) step or restructure the orchestrator itself.
+
 ## Phase 3 — Self-service platform `[ ]`
 Onboarding wizard · connector/schema/metric/KPI/journey/capability discovery · widget + dashboard recommendation · brand discovery · preview · publish · rollback · versioning. **Success test: onboard a tenant end-to-end with zero redeploy.**
 
