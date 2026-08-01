@@ -17,6 +17,7 @@ from app.models import (
     DashboardPage,
     DashboardPreview,
     DashboardRow,
+    JobPhase,
     ServiceKind,
     WidgetConfig,
     WidgetPreview,
@@ -126,6 +127,58 @@ class InsightsGeneratedTests(unittest.TestCase):
              patch("app.agents.insights.gemini_json", new=AsyncMock(return_value=["real one", 42, None, ""])):
             result = _run(insights.run(cfg, pv, _noop_log))
         self.assertEqual(result, ["real one"])
+
+
+class LogPhaseValidityTests(unittest.TestCase):
+    """Found live: workflow.py's real log() (_mk_log) constructs an actual
+    JobPhase(phase) enum value -- a no-op test mock never validates this, so
+    insights.py logging with phase="insights" (not a real JobPhase member)
+    passed every unit test yet crashed the very first live generation
+    ("'insights' is not a valid JobPhase") immediately after a perfectly
+    good dashboard had already been built. This uses a REAL phase-validating
+    log function, exactly like production, through every branch."""
+
+    def _real_log(self):
+        calls = []
+
+        async def log(phase: str, level: str, message: str) -> None:
+            JobPhase(phase)  # raises exactly like _mk_log does for an invalid phase
+            calls.append((phase, level, message))
+        return log, calls
+
+    def test_confidence_gate_branch_logs_a_valid_phase(self):
+        cfg = _cfg()
+        pv = _preview({"tile_total_sessions": 100})  # below MIN_GROUNDED_WIDGETS
+        log, calls = self._real_log()
+        _run(insights.run(cfg, pv, log))
+        self.assertTrue(calls)
+
+    def test_llm_unavailable_branch_logs_a_valid_phase(self):
+        cfg = _cfg()
+        pv = _preview({"tile_total_sessions": 100, "tile_avg_score": 80})
+        log, calls = self._real_log()
+        with patch("app.agents.insights.llm_available", return_value=False):
+            _run(insights.run(cfg, pv, log))
+        self.assertTrue(calls)
+
+    def test_llm_returns_nothing_branch_logs_a_valid_phase(self):
+        cfg = _cfg()
+        pv = _preview({"tile_total_sessions": 100, "tile_avg_score": 80})
+        log, calls = self._real_log()
+        with patch("app.agents.insights.llm_available", return_value=True), \
+             patch("app.agents.insights.gemini_json", new=AsyncMock(return_value=None)):
+            _run(insights.run(cfg, pv, log))
+        self.assertTrue(calls)
+
+    def test_success_branch_logs_a_valid_phase(self):
+        cfg = _cfg()
+        pv = _preview({"tile_total_sessions": 772, "tile_avg_score": 61.03})
+        log, calls = self._real_log()
+        with patch("app.agents.insights.llm_available", return_value=True), \
+             patch("app.agents.insights.gemini_json", new=AsyncMock(return_value=["a real grounded insight"])):
+            result = _run(insights.run(cfg, pv, log))
+        self.assertEqual(result, ["a real grounded insight"])
+        self.assertTrue(calls)
 
 
 if __name__ == "__main__":

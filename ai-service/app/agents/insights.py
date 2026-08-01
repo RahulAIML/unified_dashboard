@@ -25,6 +25,14 @@ from .base import LogFn
 MIN_GROUNDED_WIDGETS = 2
 MAX_INSIGHTS = 4
 
+# Found live: log(phase, ...) constructs a real JobPhase enum value
+# (workflow.py's _mk_log does JobPhase(phase)) -- "insights" isn't one of
+# its members and JobPhase has no reason to grow one just for a log label
+# (it would need a matching frontend progress-step too), so every call here
+# reuses "preview", the phase this agent conceptually runs alongside. A
+# permissive test mock (log = a no-op accepting any string) is exactly why
+# this didn't get caught until a real live generation crashed on it.
+
 
 def _grounded_facts(cfg: DashboardConfig, preview: DashboardPreview) -> list[dict]:
     """One real fact per widget with an actual value/short row summary —
@@ -50,12 +58,12 @@ async def run(cfg: DashboardConfig, preview: DashboardPreview, log: LogFn) -> li
 
     facts = _grounded_facts(cfg, preview)
     if len(facts) < MIN_GROUNDED_WIDGETS:
-        await log("insights", "info",
+        await log("preview", "info",
                   f"Only {len(facts)} real data point(s) — not enough evidence for a grounded insight, skipping.")
         return []
 
     if not llm_available():
-        await log("insights", "info", "LLM unavailable — no insights generated (never fabricated without it).")
+        await log("preview", "info", "LLM unavailable — no insights generated (never fabricated without it).")
         return []
 
     system = (
@@ -70,10 +78,10 @@ async def run(cfg: DashboardConfig, preview: DashboardPreview, log: LogFn) -> li
     user = f"Company: {cfg.company}\nReal data points:\n{json.dumps(facts)}"
     result = await gemini_json(system, user)
     if not isinstance(result, list):
-        await log("insights", "warn", "LLM returned nothing usable — no insights generated.")
+        await log("preview", "warn", "LLM returned nothing usable — no insights generated.")
         return []
 
     insights = [str(s).strip() for s in result if isinstance(s, str) and s.strip()][:MAX_INSIGHTS]
     if insights:
-        await log("insights", "success", f"{len(insights)} evidence-backed insight(s) generated.")
+        await log("preview", "success", f"{len(insights)} evidence-backed insight(s) generated.")
     return insights
