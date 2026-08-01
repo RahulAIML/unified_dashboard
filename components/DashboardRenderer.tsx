@@ -7,19 +7,31 @@
  * config describes. This is the "metadata over code generation" contract.
  */
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis,
   CartesianGrid, Tooltip, LabelList, PieChart, Pie, Cell, Legend,
 } from 'recharts'
+import { ExportButton } from './ExportButton'
+import { csvFilename } from '@/lib/csv-export'
 
 export interface WidgetPreview { widget_id: string; ok: boolean; value?: number | string | null; series?: Record<string, unknown>[]; rows?: Record<string, unknown>[]; error?: string | null }
 // id_field: which key in each row of a `table` widget is a real, click-
 // through-able report id (see ai-service's WidgetConfig.id_field) — set only
 // for connectors with a verified matching /drilldown/[id] backend. Absent
 // means this table's rows have no drillable id.
-export interface WidgetConfig { id: string; type: string; title: string; metric_key?: string | null; span?: number; id_field?: string | null }
+// business_question: the real business question this widget answers, in
+// plain language (ai-service's semantic layer) — shown as a subtitle.
+// paginated/searchable/exportable: a Reports-page table (ai-service's
+// dashboard_planning.py::_reports_page), distinct from a small capped
+// breakdown/drilldown table — real client-side pagination/search over the
+// full fetched dataset, plus a CSV export of whatever is currently filtered.
+export interface WidgetConfig {
+  id: string; type: string; title: string; metric_key?: string | null; span?: number
+  id_field?: string | null; business_question?: string | null
+  paginated?: boolean; searchable?: boolean; exportable?: boolean
+}
 export interface DashRow { id: string; title?: string | null; widgets: WidgetConfig[] }
 // A real navigable page (Overview/LMS/Coach/...) — see ai-service's
 // DashboardPage model. Optional/absent on a config built before multi-page
@@ -28,6 +40,11 @@ export interface DashPage { id: string; title: string; rows: DashRow[] }
 export interface DashboardConfig {
   company: string; slug: string; title: string; connector: string
   rows: DashRow[]; pages?: DashPage[]; recommendations: string[]
+  // Evidence-backed narrative sentences generated from the ACTUAL fetched
+  // data (ai-service's agents/insights.py) — distinct from `recommendations`,
+  // which are derived from the schema alone before any real value exists.
+  // Absent/empty for every connector this hasn't been built for yet.
+  insights?: string[]
 }
 
 export function fmt(v: unknown): string {
@@ -68,12 +85,17 @@ function DashboardRows({ rows, pv }: { rows: DashRow[]; pv: Map<string, WidgetPr
               return (
                 <div key={w.id} className={`rounded-xl border border-border/60 bg-background p-4 ${wide ? 'col-span-2 md:col-span-4' : ''}`}>
                   <div className="text-xs text-muted-foreground mb-1">{w.title}</div>
+                  {w.business_question && (
+                    <div className="text-[11px] text-muted-foreground/70 italic mb-1.5">{w.business_question}</div>
+                  )}
                   {w.type === 'kpi_tile' && <div className="text-2xl font-bold text-foreground">{fmt(p?.value)}</div>}
                   {(w.type === 'line_chart' || w.type === 'bar_chart' || w.type === 'histogram') &&
                     <MiniChart series={p?.series ?? p?.rows ?? []} bar={w.type !== 'line_chart'} />}
                   {w.type === 'donut' && <MiniDonut rows={p?.rows ?? []} />}
                   {w.type === 'journey' && <MiniJourney rows={p?.rows ?? []} />}
-                  {w.type === 'table' && <MiniTable rows={p?.rows ?? []} idField={w.id_field} />}
+                  {w.type === 'table' && (w.paginated
+                    ? <ReportsTable rows={p?.rows ?? []} searchable={!!w.searchable} exportable={!!w.exportable} filenamePrefix={w.id} />
+                    : <MiniTable rows={p?.rows ?? []} idField={w.id_field} />)}
                   {p && !p.ok && <div className="text-xs text-amber-600 dark:text-amber-400 mt-1">no data{p.error ? `: ${p.error}` : ''}</div>}
                 </div>
               )
@@ -93,19 +115,37 @@ function DashboardRows({ rows, pv }: { rows: DashRow[]; pv: Map<string, WidgetPr
  * (a config built before multi-page generation existed, or one page's worth
  * of content) — so nothing regresses for an older cached config.
  */
+function AIInsights({ insights }: { insights: string[] }) {
+  if (!insights.length) return null
+  return (
+    <div className="mb-5 rounded-xl border border-primary/20 bg-primary/5 p-4">
+      <div className="text-xs font-semibold uppercase tracking-wide text-primary mb-2">AI Insights</div>
+      <ul className="space-y-1.5 text-sm text-foreground">
+        {insights.map((s, i) => <li key={i} className="leading-relaxed">{s}</li>)}
+      </ul>
+    </div>
+  )
+}
+
 export function DashboardRenderer({ config, preview }: { config: DashboardConfig; preview: { widgets: WidgetPreview[] } }) {
   const pv = new Map(preview.widgets.map(w => [w.widget_id, w]))
   const pages = config.pages ?? []
   const [activeId, setActiveId] = useState<string | null>(pages[0]?.id ?? null)
 
   if (pages.length === 0) {
-    return <DashboardRows rows={config.rows} pv={pv} />
+    return (
+      <div>
+        <AIInsights insights={config.insights ?? []} />
+        <DashboardRows rows={config.rows} pv={pv} />
+      </div>
+    )
   }
 
   const active = pages.find(p => p.id === activeId) ?? pages[0]
 
   return (
     <div>
+      <AIInsights insights={config.insights ?? []} />
       {pages.length > 1 && (
         <div className="flex gap-1 mb-5 border-b border-border/60 overflow-x-auto" role="tablist">
           {pages.map(p => (
@@ -406,6 +446,107 @@ export function MiniTable({ rows, idField }: { rows: Record<string, unknown>[]; 
           })}
         </tbody>
       </table>
+    </div>
+  )
+}
+
+const REPORTS_PAGE_SIZE = 25
+
+/**
+ * A real Reports table (ai-service's dashboard_planning.py::_reports_page):
+ * client-side search + pagination over the full fetched dataset (already
+ * capped to a bounded real row count server-side), plus CSV export of
+ * whatever the user currently has filtered — not a decorative flag, an
+ * actually usable report.
+ */
+export function ReportsTable({
+  rows, searchable, exportable, filenamePrefix,
+}: {
+  rows: Record<string, unknown>[]
+  searchable: boolean
+  exportable: boolean
+  filenamePrefix: string
+}) {
+  const [query, setQuery] = useState('')
+  const [page, setPage] = useState(0)
+
+  const cols = rows.length ? Object.keys(rows[0]) : []
+
+  const filtered = useMemo(() => {
+    if (!query.trim()) return rows
+    const q = query.toLowerCase()
+    return rows.filter(r => cols.some(c => fmt(r[c]).toLowerCase().includes(q)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, query])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / REPORTS_PAGE_SIZE))
+  const pageSafe = Math.min(page, totalPages - 1)
+  const visible = filtered.slice(pageSafe * REPORTS_PAGE_SIZE, (pageSafe + 1) * REPORTS_PAGE_SIZE)
+
+  if (!rows.length) return <div className="text-sm text-muted-foreground">—</div>
+
+  return (
+    <div className="mt-1 space-y-2">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        {searchable ? (
+          <input
+            type="search"
+            value={query}
+            onChange={e => { setQuery(e.target.value); setPage(0) }}
+            placeholder="Search…"
+            className="px-2.5 py-1.5 text-xs rounded-lg border border-border bg-muted/60 placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary w-48"
+          />
+        ) : <span />}
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-muted-foreground">{filtered.length} row{filtered.length === 1 ? '' : 's'}</span>
+          {exportable && (
+            <ExportButton
+              data={filtered}
+              columns={cols.map(c => ({ header: c.replace(/_/g, ' '), value: (r: Record<string, unknown>) => r[c] }))}
+              filename={csvFilename(filenamePrefix)}
+              minWidth="min-w-[90px]"
+            />
+          )}
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-muted-foreground text-left">
+              {cols.map(c => <th key={c} className="py-1 pr-4 font-medium capitalize">{c.replace(/_/g, ' ')}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {visible.map((r, i) => (
+              <tr key={i} className="border-t border-border/40">
+                {cols.map(c => <td key={c} className="py-1 pr-4 text-foreground">{fmt(r[c])}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {visible.length === 0 && <div className="py-6 text-center text-xs text-muted-foreground">No matching rows</div>}
+      </div>
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-1">
+          <p className="text-[11px] text-muted-foreground">Page {pageSafe + 1} of {totalPages}</p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+              disabled={pageSafe === 0}
+              className="px-2.5 py-1 text-xs rounded-lg border border-border bg-muted hover:bg-muted/70 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            <button
+              onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+              disabled={pageSafe >= totalPages - 1}
+              className="px-2.5 py-1 text-xs rounded-lg border border-border bg-muted hover:bg-muted/70 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

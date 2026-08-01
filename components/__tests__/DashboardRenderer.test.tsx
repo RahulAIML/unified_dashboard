@@ -24,8 +24,8 @@
  * label once recharts actually draws it.
  */
 import { describe, it, expect, vi } from 'vitest'
-import { render, fireEvent } from '@testing-library/react'
-import { MiniChart, MiniDonut, MiniJourney, MiniTable, DashboardRenderer, humanizeConnector } from '../DashboardRenderer'
+import { render, fireEvent, screen } from '@testing-library/react'
+import { MiniChart, MiniDonut, MiniJourney, MiniTable, ReportsTable, DashboardRenderer, humanizeConnector } from '../DashboardRenderer'
 
 vi.mock('recharts', () => {
   const Pass = ({ children }: { children?: React.ReactNode }) => <>{children}</>
@@ -414,5 +414,77 @@ describe('DashboardRenderer — multi-page navigation', () => {
     const { getByText, queryAllByRole } = render(<DashboardRenderer config={config} preview={preview} />)
     expect(getByText('7')).toBeTruthy()
     expect(queryAllByRole('tab')).toHaveLength(0)
+  })
+})
+
+describe('ReportsTable', () => {
+  const rows = Array.from({ length: 30 }, (_, i) => ({
+    date: `2026-07-${String((i % 28) + 1).padStart(2, '0')}`,
+    rep: i % 3 === 0 ? 'alice@siigo.com' : 'bob@siigo.com',
+    result: i % 2 === 0 ? 'Passed' : 'Failed',
+  }))
+
+  it('shows a placeholder for no rows', () => {
+    const { container } = render(<ReportsTable rows={[]} searchable exportable filenamePrefix="reports" />)
+    expect(container.querySelector('table')).toBeNull()
+  })
+
+  it('paginates real rows (25 per page)', () => {
+    render(<ReportsTable rows={rows} searchable exportable filenamePrefix="reports" />)
+    expect(screen.getAllByRole('row')).toHaveLength(1 + 25) // header + 25 body rows
+    expect(screen.getByText('Page 1 of 2')).toBeTruthy()
+  })
+
+  it('advances to the next page', () => {
+    render(<ReportsTable rows={rows} searchable exportable filenamePrefix="reports" />)
+    fireEvent.click(screen.getByText('Next'))
+    expect(screen.getByText('Page 2 of 2')).toBeTruthy()
+    expect(screen.getAllByRole('row')).toHaveLength(1 + 5) // remaining 5 rows
+  })
+
+  it('filters rows via the search box, across every column', () => {
+    render(<ReportsTable rows={rows} searchable exportable filenamePrefix="reports" />)
+    fireEvent.change(screen.getByPlaceholderText('Search…'), { target: { value: 'alice' } })
+    expect(screen.getByText('10 rows')).toBeTruthy() // 30/3 rows are alice's
+  })
+
+  it('omits the search box when searchable is false', () => {
+    render(<ReportsTable rows={rows} searchable={false} exportable filenamePrefix="reports" />)
+    expect(screen.queryByPlaceholderText('Search…')).toBeNull()
+  })
+
+  it('omits the export button when exportable is false', () => {
+    render(<ReportsTable rows={rows} searchable exportable={false} filenamePrefix="reports" />)
+    expect(screen.queryByText('Export CSV')).toBeNull()
+  })
+})
+
+describe('DashboardRenderer — AI Insights', () => {
+  const baseConfig = {
+    company: 'Siigo', slug: 'siigo', title: 'Siigo Analytics', connector: 'rolplay_app_sql',
+    rows: [], recommendations: [],
+  }
+
+  it('shows insight sentences when present', () => {
+    const config = { ...baseConfig, insights: ['Reps completed 772 sessions with an average score of 61.'] }
+    const { getByText } = render(<DashboardRenderer config={config} preview={{ widgets: [] }} />)
+    expect(getByText('AI Insights')).toBeTruthy()
+    expect(getByText('Reps completed 772 sessions with an average score of 61.')).toBeTruthy()
+  })
+
+  it('renders nothing when insights is empty or absent', () => {
+    const { queryByText } = render(<DashboardRenderer config={baseConfig} preview={{ widgets: [] }} />)
+    expect(queryByText('AI Insights')).toBeNull()
+  })
+
+  it('still shows insights on a multi-page config, above the tab bar', () => {
+    const config = {
+      ...baseConfig,
+      pages: [{ id: 'overview', title: 'Overview', rows: [] }, { id: 'reports', title: 'Reports', rows: [] }],
+      insights: ['A real grounded insight.'],
+    }
+    const { getByText } = render(<DashboardRenderer config={config} preview={{ widgets: [] }} />)
+    expect(getByText('A real grounded insight.')).toBeTruthy()
+    expect(getByText('Overview')).toBeTruthy()
   })
 })

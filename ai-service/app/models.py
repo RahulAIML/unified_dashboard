@@ -51,6 +51,40 @@ class ServiceDescriptor(BaseModel):
     note: str = ""
 
 
+class ConfidenceLevel(str, Enum):
+    """How sure the pipeline is that a discovered capability means what it
+    claims to mean — never invented, always tied to a concrete evidence
+    string. 'verified' means the mapping itself is exact and tested (e.g.
+    rolplay_app_sql's r_simulator.category -> canonical module map);
+    'probable' means a real match on weaker signal (e.g. a domain-LIKE
+    match rather than an exact name match); 'unverified' means real data
+    was found but nothing confirms what business concept it represents.
+    Never used to gate whether data is INCLUDED (has_data already does
+    that) — only to say how much a human should trust the SEMANTIC label
+    the pipeline put on it.
+    """
+    verified = "verified"
+    probable = "probable"
+    unverified = "unverified"
+
+
+class Capability(BaseModel):
+    """One discovered business capability — the semantic-layer replacement
+    for a bare 'modules: list[str]' string. Scoped to rolplay_app_sql only
+    for now (see schema_discovery.py's _rolplay_app_schema): that's the one
+    connector whose module mapping (r_simulator.category ->
+    canonical name, via journey.py's CATEGORY_TO_MODULE) is exact and
+    verified, never guessed. Other connectors continue to populate
+    NormalizedSchema.modules as before, unchanged, and leave `capabilities`
+    empty -- this is additive metadata, not a replacement for anything
+    those connectors already do.
+    """
+    business_concept: str  # human name, e.g. "Coach Training", "Practice Simulation"
+    module: str | None = None  # canonical module key, if this maps to one
+    confidence: ConfidenceLevel
+    evidence: str  # why this confidence level, in plain language
+
+
 class CompanyKnowledge(BaseModel):
     """Everything known about a company — the persisted knowledge base entry."""
     company: str
@@ -91,6 +125,12 @@ class DiscoveredMetric(BaseModel):
     # never seen a hardcoded name for — known metrics resolve by metric_key
     # via dedicated code and leave this unset.
     raw_field: str | None = None
+    # The real business question this KPI answers, in plain language (e.g.
+    # "How many practice sessions have reps completed?"). Populated only
+    # for rolplay_app_sql today (schema_discovery.py's _rolplay_app_schema)
+    # -- optional and unset for every other connector, exactly like
+    # raw_field's rollout pattern.
+    business_question: str | None = None
 
 
 class NormalizedSchema(BaseModel):
@@ -99,6 +139,10 @@ class NormalizedSchema(BaseModel):
     metrics: list[DiscoveredMetric] = Field(default_factory=list)
     dimensions: list[str] = Field(default_factory=list)
     modules: list[str] = Field(default_factory=list)  # simulator/coach/certification/...
+    # Semantic-layer form of `modules` — see Capability's docstring. Empty
+    # for every connector except rolplay_app_sql today; `modules` keeps
+    # working exactly as before for everyone, this is purely additive.
+    capabilities: list[Capability] = Field(default_factory=list)
     date_range: tuple[str, str] | None = None
     note: str = ""
 
@@ -144,6 +188,18 @@ class WidgetConfig(BaseModel):
     # dashboard_planning.py's _auto_drilldown_table). None means this
     # table's rows have no drillable id (every widget before this one).
     id_field: str | None = None
+    # See DiscoveredMetric.business_question — carried onto the widget so
+    # the renderer/API can surface it without re-joining back to the
+    # schema. Unset for every widget before this (rollout: rolplay_app_sql
+    # only, via dashboard_planning.py's report/business-question wiring).
+    business_question: str | None = None
+    # Reports-page table widgets only (dashboard_planning.py's
+    # _reports_page): real pagination/search/CSV-export, distinct from the
+    # small capped drilldown table (_auto_drilldown_table), which lists at
+    # most 50 rows with no search. False for every existing widget.
+    paginated: bool = False
+    searchable: bool = False
+    exportable: bool = False
 
 
 class DashboardRow(BaseModel):
@@ -161,6 +217,14 @@ class DashboardPage(BaseModel):
     id: str
     title: str
     rows: list[DashboardRow] = Field(default_factory=list)
+    # Permissions plumbing: which viewers this page is shown to. Only two
+    # roles exist anywhere in this system today (lib/auth-types.ts: 'user'
+    # | 'admin' — confirmed by direct search, no manager/rep role model
+    # exists), so this stays a plain two-way switch rather than a fabricated
+    # RBAC hierarchy. Every page defaults to "all_users" — nothing is
+    # hidden by default; this proves the enforcement path works without
+    # inventing a restriction nobody asked for.
+    visibility: Literal["all_users", "admin_only"] = "all_users"
 
 
 class DashboardFilter(BaseModel):
@@ -188,6 +252,13 @@ class DashboardConfig(BaseModel):
     pages: list[DashboardPage] = Field(default_factory=list)
     filters: list[DashboardFilter] = Field(default_factory=list)
     recommendations: list[str] = Field(default_factory=list)
+    # Narrative, evidence-backed insight sentences generated from the
+    # ACTUAL fetched preview data (agents/insights.py) — distinct from
+    # `recommendations`, which are short actionable suggestions derived
+    # from the schema alone, before any real values are fetched. Empty
+    # when there's too little data to say anything grounded (never
+    # fabricated to fill the space). rolplay_app_sql only, for now.
+    insights: list[str] = Field(default_factory=list)
     branding: dict[str, Any] = Field(default_factory=dict)
     version: int = 1
     created_at: datetime = Field(default_factory=_now)

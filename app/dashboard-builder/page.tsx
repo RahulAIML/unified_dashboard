@@ -12,10 +12,14 @@ type Phase =
 
 interface JobLog { ts: string; phase: Phase; level: 'info' | 'warn' | 'error' | 'success'; message: string }
 interface WidgetPreview { widget_id: string; ok: boolean; value?: number | string | null; series?: Record<string, unknown>[]; rows?: Record<string, unknown>[]; error?: string | null }
-interface WidgetConfig { id: string; type: string; title: string; metric_key?: string | null; span?: number; id_field?: string | null }
+interface WidgetConfig {
+  id: string; type: string; title: string; metric_key?: string | null; span?: number
+  id_field?: string | null; business_question?: string | null
+  paginated?: boolean; searchable?: boolean; exportable?: boolean
+}
 interface DashRow { id: string; title?: string | null; widgets: WidgetConfig[] }
 interface DashPage { id: string; title: string; rows: DashRow[] }
-interface DashboardConfig { company: string; slug: string; title: string; connector: string; rows: DashRow[]; pages?: DashPage[]; recommendations: string[] }
+interface DashboardConfig { company: string; slug: string; title: string; connector: string; rows: DashRow[]; pages?: DashPage[]; recommendations: string[]; insights?: string[] }
 interface ValidationIssue { severity: 'error' | 'warning' | 'info'; code: string; message: string }
 interface ValidationReport { ok: boolean; issues: ValidationIssue[]; summary: string }
 interface JobState {

@@ -29,6 +29,13 @@ APPROVAL_DONUT_ID = "donut_approval"
 # a standalone discovered metric, so it's routed by widget id.
 DRILLDOWN_TABLE_ID = "table_recent_sessions"
 
+# Must match dashboard_planning.py's _reports_page id — a Reports page lists
+# individual session rows (not aggregated by simulator, unlike the generic
+# bar_chart/donut/table branch below), so it must be routed by id too,
+# before that branch claims every `table`-typed widget.
+REPORTS_TABLE_ID = "table_reports"
+_REPORTS_ROW_LIMIT = 500
+
 
 def _norm_score(row: dict) -> float | None:
     """Normalize a sim.demorp6 row's score to a 0-100 percentage.
@@ -358,6 +365,24 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
                 "count": int(r.get("count") or 0),
                 "pct": round(100 * int(r.get("count") or 0) / total, 1)} for r in rows]
         return WidgetPreview(widget_id=w.id, ok=bool(out), rows=out)
+
+    # ── Reports: individual sessions, not aggregated by simulator ──
+    # Distinct from the per-simulator breakdown just below (one row per
+    # simulator) and from the drilldown table (capped at 50, no search) —
+    # this is the real Reports-page dataset: every real session as its own
+    # row, real rep identity, real date/score/result, up to a bounded cap
+    # the frontend paginates/searches over client-side.
+    if w.id.endswith(REPORTS_TABLE_ID):
+        rows = await _rolplay_app_sql(
+            "SELECT s.date_created AS date, u.email AS rep, "
+            "COALESCE(sim.name, CONCAT('Simulator ', s.simulator_id)) AS simulator, "
+            f"ROUND({SCORE_SQL},1) AS score, "
+            f"CASE WHEN ({SCORE_SQL})>={PASS_THRESHOLD} THEN 'Passed' ELSE 'Failed' END AS result "
+            "FROM r_user_session s JOIN r_user u ON u.ID=s.user_id "
+            f"LEFT JOIN r_simulator sim ON sim.ID=s.simulator_id WHERE u.client_id={cid}{_category_clause(w.module)} "
+            f"ORDER BY s.date_created DESC LIMIT {_REPORTS_ROW_LIMIT}"
+        )
+        return WidgetPreview(widget_id=w.id, ok=bool(rows), rows=rows)
 
     # ── Per-simulator breakdown (bar_chart / donut / table / approval-donut) ──
     if w.type in (WidgetType.bar_chart, WidgetType.donut, WidgetType.table) or w.id.endswith(APPROVAL_DONUT_ID):

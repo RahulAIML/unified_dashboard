@@ -21,6 +21,7 @@ from .agents import (
     company_discovery,
     dashboard_config,
     dashboard_planning,
+    insights,
     lms_discovery,
     planner,
     preview,
@@ -216,6 +217,12 @@ async def _continue_from_planning(job: JobState, knowledge, primary: ServiceDesc
         job.phase = JobPhase.preview; await update(job)
         pv = await preview.run(cfg, log)
         job.preview = pv; job.percent = 95; await update(job)
+
+        # AI Insights: must run AFTER preview — it reasons over the ACTUAL
+        # fetched values, never the schema alone. rolplay_app_sql only for
+        # now; a no-op (empty list) for every other connector, unchanged.
+        cfg.insights = await insights.run(cfg, pv, log)
+        job.dashboard = cfg; await update(job)
 
         if req.auto_publish and report.ok:
             job.phase = JobPhase.publish; await update(job)

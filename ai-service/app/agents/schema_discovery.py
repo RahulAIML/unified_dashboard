@@ -11,7 +11,9 @@ from ..config import get_settings
 from ..http import get_json, post_json
 from ..rolplay_score import score_stats_inner
 from ..models import (
+    Capability,
     CompanyKnowledge,
+    ConfidenceLevel,
     DiscoveredMetric,
     MetricType,
     NormalizedSchema,
@@ -169,9 +171,11 @@ async def _rolplay_app_schema(svc, schema, log: LogFn) -> None:
     schema.dimensions = ["simulator", "user"]
     metrics = [
         DiscoveredMetric(key="total_sessions", label="Total Sessions", type=MetricType.count,
-                         source_kind=svc.kind, source_action="r_user_session"),
+                         source_kind=svc.kind, source_action="r_user_session",
+                         business_question="How many practice sessions have reps completed?"),
         DiscoveredMetric(key="total_users", label="Active Users", type=MetricType.count,
-                         source_kind=svc.kind, source_action="r_user"),
+                         source_kind=svc.kind, source_action="r_user",
+                         business_question="How many reps are actively using the platform?"),
     ]
 
     client_id = int((svc.handle or {}).get("client_id") or 0)
@@ -210,6 +214,20 @@ async def _rolplay_app_schema(svc, schema, log: LogFn) -> None:
             if row.get("max_d"):
                 maxs.append(str(row["max_d"]))
         schema.modules = modules
+        # Semantic layer: each discovered module becomes a typed Capability
+        # rather than a bare string. Confidence is 'verified' because the
+        # module NAME itself came from an exact, tested mapping
+        # (r_simulator.category -> journey_lib.CATEGORY_TO_MODULE) -- never a
+        # guess. See models.py's Capability/ConfidenceLevel docstrings for
+        # why this is rolplay_app_sql-only for now.
+        schema.capabilities = [
+            Capability(
+                business_concept=journey_lib.LABEL.get(m, m.title()),
+                module=m, confidence=ConfidenceLevel.verified,
+                evidence=f"r_simulator.category maps exactly to '{m}' (journey.CATEGORY_TO_MODULE) — real session rows exist for it.",
+            )
+            for m in modules
+        ]
         if mins and maxs:
             schema.date_range = (min(mins)[:10], max(maxs)[:10])
         await log("schema_discovery", "info",
@@ -218,15 +236,19 @@ async def _rolplay_app_schema(svc, schema, log: LogFn) -> None:
     if scored > 0:
         metrics += [
             DiscoveredMetric(key="avg_score", label="Average Score", type=MetricType.score, unit="pts",
-                             source_kind=svc.kind, source_action="r_user_session"),
+                             source_kind=svc.kind, source_action="r_user_session",
+                             business_question="How well are reps performing in practice?"),
             DiscoveredMetric(key="pass_rate", label="Pass Rate", type=MetricType.rate, unit="%",
-                             source_kind=svc.kind, source_action="r_user_session"),
+                             source_kind=svc.kind, source_action="r_user_session",
+                             business_question="What share of practice sessions meet the passing bar?"),
             # A timeseries metric makes the planner emit a trend line_chart; a
             # dimension metric makes it emit a per-simulator breakdown + table.
             DiscoveredMetric(key="score_trend", label="Score Trend", type=MetricType.timeseries, unit="pts",
-                             source_kind=svc.kind, source_action="r_user_session"),
+                             source_kind=svc.kind, source_action="r_user_session",
+                             business_question="Is performance improving or declining over time?"),
             DiscoveredMetric(key="by_simulator", label="By Simulator", type=MetricType.dimension,
-                             source_kind=svc.kind, source_action="r_user_session"),
+                             source_kind=svc.kind, source_action="r_user_session",
+                             business_question="Which practice scenarios are reps using, and how do they perform on each?"),
         ]
         schema.note = f"Rolplay-app platform: {scored} scored session(s) (score from raw_closing_data/closing_analysis)."
         await log("schema_discovery", "success", f"Scores available — {scored} scored session(s); trend + breakdown enabled")

@@ -16,7 +16,7 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 from app.agents import schema_discovery
-from app.models import NormalizedSchema, ServiceDescriptor, ServiceKind
+from app.models import ConfidenceLevel, NormalizedSchema, ServiceDescriptor, ServiceKind
 
 
 def _svc(client_id: int) -> ServiceDescriptor:
@@ -107,6 +107,70 @@ class RolplayAppSchemaTests(unittest.TestCase):
         asyncio.run(schema_discovery._rolplay_app_schema(svc, schema, _noop_log))
         self.assertEqual(schema.modules, [])
         self.assertIsNone(schema.date_range)
+
+
+class CapabilityAndBusinessQuestionTests(unittest.TestCase):
+    """Semantic-layer additions: each rolplay_app_sql module becomes a typed
+    Capability (business_concept + confidence + evidence), and every metric
+    carries the real business question it answers -- never a bare metric
+    key. Additive only; the existing modules/date_range/metrics shape is
+    untouched (covered by RolplayAppSchemaTests above)."""
+
+    def _run(self, client_id: int, category_rows, scored_count: int) -> NormalizedSchema:
+        async def fake_post_json(_url, payload):
+            sql = payload["sql"]
+            if "GROUP BY sim.category" in sql:
+                return 200, {"result": "success", "data": category_rows}
+            return 200, {"result": "success", "data": [{"scored": scored_count}]}
+
+        schema = NormalizedSchema(company="Test Co", slug="test-co")
+        with patch("app.agents.schema_discovery.post_json", new=AsyncMock(side_effect=fake_post_json)):
+            asyncio.run(schema_discovery._rolplay_app_schema(_svc(client_id), schema, _noop_log))
+        return schema
+
+    def test_one_capability_per_discovered_module(self) -> None:
+        schema = self._run(
+            29,
+            [
+                {"category": "SIM", "min_d": "2026-06-23 00:00:00", "max_d": "2026-07-24 00:00:00"},
+                {"category": "SEGMENT", "min_d": "2026-06-01 00:00:00", "max_d": "2026-06-05 00:00:00"},
+            ],
+            scored_count=136,
+        )
+        self.assertEqual(len(schema.capabilities), 2)
+        modules = {c.module for c in schema.capabilities}
+        self.assertEqual(modules, {"simulator", "certification"})
+
+    def test_capabilities_are_verified_confidence_with_evidence(self) -> None:
+        schema = self._run(
+            13, [{"category": "COACH", "min_d": "2026-05-09 00:00:00", "max_d": "2026-05-11 00:00:00"}],
+            scored_count=5,
+        )
+        cap = schema.capabilities[0]
+        self.assertEqual(cap.confidence, ConfidenceLevel.verified)
+        self.assertTrue(cap.evidence)
+        self.assertEqual(cap.business_concept, "Master Coach")
+
+    def test_no_capabilities_without_a_client_id(self) -> None:
+        schema = NormalizedSchema(company="X", slug="x")
+        asyncio.run(schema_discovery._rolplay_app_schema(_svc(0), schema, _noop_log))
+        self.assertEqual(schema.capabilities, [])
+
+    def test_every_metric_carries_a_business_question(self) -> None:
+        schema = self._run(
+            13, [{"category": "COACH", "min_d": "2026-05-09 00:00:00", "max_d": "2026-05-11 00:00:00"}],
+            scored_count=5,
+        )
+        for m in schema.metrics:
+            self.assertTrue(m.business_question, f"{m.key} has no business_question")
+
+    def test_counts_only_metrics_still_carry_business_questions(self) -> None:
+        schema = self._run(
+            13, [{"category": "COACH", "min_d": "2026-05-09 00:00:00", "max_d": "2026-05-11 00:00:00"}],
+            scored_count=0,
+        )
+        keys = {m.key: m.business_question for m in schema.metrics}
+        self.assertIn("How many practice sessions have reps completed?", keys["total_sessions"])
 
 
 if __name__ == "__main__":

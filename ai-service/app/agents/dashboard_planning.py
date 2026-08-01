@@ -98,7 +98,34 @@ def _assemble_pages(
     secondary_page = _secondary_page(secondary_schema)
     if secondary_page:
         pages.append(secondary_page)
+    reports_page = _reports_page(schema)
+    if reports_page:
+        pages.append(reports_page)
     return pages
+
+
+def _reports_page(schema: NormalizedSchema) -> DashboardPage | None:
+    """A real Reports page: every individual session as its own row (not
+    aggregated by simulator, unlike Overview's breakdown table), with real
+    pagination/search/CSV-export metadata for the frontend to act on.
+
+    rolplay_app_sql ONLY, for now — that's the one connector with a proven
+    query shape for this (r_user_session/r_user/r_simulator, already used
+    by the breakdown and drilldown widgets), and the only one this pass
+    was scoped to touch. Other connectors are completely untouched.
+    """
+    if not any(m.source_kind == ServiceKind.rolplay_app_sql for m in schema.metrics):
+        return None
+    src = next(m for m in schema.metrics if m.source_kind == ServiceKind.rolplay_app_sql)
+    widget = WidgetConfig(
+        id="table_reports", type=WidgetType.table, title="Session Reports",
+        source_kind=src.source_kind, source_action="r_user_session", span=4,
+        paginated=True, searchable=True, exportable=True,
+        business_question="Which individual sessions were run, by whom, and with what result?",
+    )
+    return DashboardPage(id="reports", title="Reports", rows=[
+        DashboardRow(id="reports_table", title="All Sessions", widgets=[widget]),
+    ])
 
 
 def _secondary_page(secondary_schema: NormalizedSchema | None) -> DashboardPage | None:
@@ -267,7 +294,7 @@ def _build_from_plan(plan: dict, schema: NormalizedSchema, metrics: dict):
         tile_keys.add(key)
         tiles.append(WidgetConfig(id=f"tile_{key}", type=WidgetType.kpi_tile, title=m.label,
                                   metric_key=key, source_kind=m.source_kind, source_action=m.source_action,
-                                  raw_field=m.raw_field))
+                                  raw_field=m.raw_field, business_question=m.business_question))
     # Gemini picks which tiles to feature/order, but every count/score/rate
     # metric that schema_discovery genuinely confirmed real (e.g. Sanfer's
     # certification stats) must still show up — an LLM's own summarization
@@ -278,7 +305,7 @@ def _build_from_plan(plan: dict, schema: NormalizedSchema, metrics: dict):
         tile_keys.add(m.key)
         tiles.append(WidgetConfig(id=f"tile_{m.key}", type=WidgetType.kpi_tile, title=m.label,
                                   metric_key=m.key, source_kind=m.source_kind, source_action=m.source_action,
-                                  raw_field=m.raw_field))
+                                  raw_field=m.raw_field, business_question=m.business_question))
 
     # DEDUP GUARD: every connector's preview layer implements at most ONE real
     # query per widget TYPE (one trend series, one dimension breakdown) — see
@@ -463,7 +490,8 @@ def _auto_table_widgets(schema: NormalizedSchema) -> list[WidgetConfig]:
 # ── Heuristic fallback ─────────────────────────────────────────────────────────────
 def _heuristic(schema: NormalizedSchema, metrics: dict):
     tiles = [WidgetConfig(id=f"tile_{m.key}", type=WidgetType.kpi_tile, title=m.label, metric_key=m.key,
-                          source_kind=m.source_kind, source_action=m.source_action, raw_field=m.raw_field)
+                          source_kind=m.source_kind, source_action=m.source_action, raw_field=m.raw_field,
+                          business_question=m.business_question)
              for m in schema.metrics
              if m.type in (MetricType.count, MetricType.score, MetricType.rate) and m.key not in _LMS_METRIC_KEYS]
     charts: list[WidgetConfig] = []

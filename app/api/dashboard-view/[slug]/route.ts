@@ -36,23 +36,51 @@ const VIEW_WINDOW_MS = 60_000
 
 interface StoredConnectorHandle { client_id?: number | string }
 interface StoredConfig { connector: string; connector_handle?: StoredConnectorHandle }
+interface AuthCheck { authorized: boolean; isAdmin: boolean }
 
-async function isAuthorized(auth: ApiAuthContext, slug: string, cfg: StoredConfig): Promise<boolean> {
+async function checkAccess(auth: ApiAuthContext, slug: string, cfg: StoredConfig): Promise<AuthCheck> {
   const user = await findUserById(auth.userId).catch(() => null)
-  if (user?.role === 'admin') return true
+  const isAdmin = user?.role === 'admin'
+  if (isAdmin) return { authorized: true, isAdmin: true }
 
   if (PHARMA_KINDS.has(cfg.connector)) {
     const tenant = await resolvePharmaTenant(auth.email)
-    return tenant === slug
+    return { authorized: tenant === slug, isAdmin: false }
   }
   if (cfg.connector === 'rolplay_app_sql') {
     const clientId = await resolveRolplayAppAccess(auth.email)
     const owningClientId = Number(cfg.connector_handle?.client_id)
-    return clientId !== null && Number.isFinite(owningClientId) && clientId === owningClientId
+    return {
+      authorized: clientId !== null && Number.isFinite(owningClientId) && clientId === owningClientId,
+      isAdmin: false,
+    }
   }
   // coach_app_sql and anything else: no verified per-user access resolver
   // wired up against a slug yet — deny rather than guess who owns it.
-  return false
+  return { authorized: false, isAdmin: false }
+}
+
+/**
+ * Permissions enforcement: a page's `visibility` (ai-service's
+ * DashboardPage.visibility — "all_users" | "admin_only") is applied
+ * server-side, never left to the frontend alone to hide — the JSON
+ * response itself must not carry a non-admin-visible page's data to a
+ * non-admin viewer. Every page defaults to "all_users" (see models.py's
+ * DashboardPage docstring), so this is a no-op filter for every dashboard
+ * generated so far; it only bites once a page actually declares
+ * admin_only.
+ */
+function filterPagesForViewer(payload: unknown, isAdmin: boolean): unknown {
+  if (isAdmin || typeof payload !== 'object' || payload === null) return payload
+  const body = payload as { config?: { pages?: Array<{ visibility?: string }> } }
+  if (!Array.isArray(body.config?.pages)) return payload
+  return {
+    ...body,
+    config: {
+      ...body.config,
+      pages: body.config.pages.filter(p => p.visibility !== 'admin_only'),
+    },
+  }
 }
 
 export async function GET(request: NextRequest, ctx: { params: Promise<{ slug: string }> }) {
@@ -81,7 +109,8 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ slug: s
   }
   const cfg = (typeof row.config === 'string' ? JSON.parse(row.config) : row.config) as StoredConfig
 
-  if (!(await isAuthorized(auth, slug, cfg))) {
+  const access = await checkAccess(auth, slug, cfg)
+  if (!access.authorized) {
     return NextResponse.json({ error: 'You do not have access to this dashboard.' }, { status: 403 })
   }
 
@@ -95,10 +124,14 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ slug: s
       { headers, cache: 'no-store', signal: AbortSignal.timeout(30_000) },
     )
     const text = await res.text()
-    return new NextResponse(text, {
-      status: res.status,
-      headers: { 'Content-Type': res.headers.get('content-type') ?? 'application/json' },
-    })
+    if (res.status !== 200) {
+      return new NextResponse(text, {
+        status: res.status,
+        headers: { 'Content-Type': res.headers.get('content-type') ?? 'application/json' },
+      })
+    }
+    const filtered = filterPagesForViewer(JSON.parse(text), access.isAdmin)
+    return NextResponse.json(filtered)
   } catch (err) {
     return NextResponse.json(
       { error: `Dashboard service unreachable: ${(err as Error).message}` },

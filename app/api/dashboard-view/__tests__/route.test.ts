@@ -171,6 +171,49 @@ describe('GET /api/dashboard-view/[slug]', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1)
   })
 
+  it('strips admin_only pages from the response for a non-admin viewer', async () => {
+    getAuthContextFromRequest.mockResolvedValue({ userId: 1, email: 'real@siigo.com', customerId: 0 })
+    mockPublishedConfig('rolplay_app_sql', { client_id: 29 })
+    resolveRolplayAppAccess.mockResolvedValue(29)
+    fetchSpy.mockResolvedValue(new Response(JSON.stringify({
+      config: { pages: [{ id: 'overview', visibility: 'all_users' }, { id: 'secret', visibility: 'admin_only' }] },
+      preview: { widgets: [] },
+    }), { status: 200, headers: { 'content-type': 'application/json' } }))
+    const { GET } = await loadRoute()
+
+    const res = await GET(req(), ctx('siigo'))
+    const body = await res.json()
+
+    expect(body.config.pages.map((p: { id: string }) => p.id)).toEqual(['overview'])
+  })
+
+  it('keeps every page, including admin_only, for an admin viewer', async () => {
+    getAuthContextFromRequest.mockResolvedValue({ userId: 99, email: 'admin@rolplay.ai', customerId: 0 })
+    findUserById.mockResolvedValue({ role: 'admin' })
+    mockPublishedConfig('rolplay_app_sql', { client_id: 29 })
+    fetchSpy.mockResolvedValue(new Response(JSON.stringify({
+      config: { pages: [{ id: 'overview', visibility: 'all_users' }, { id: 'secret', visibility: 'admin_only' }] },
+      preview: { widgets: [] },
+    }), { status: 200, headers: { 'content-type': 'application/json' } }))
+    const { GET } = await loadRoute()
+
+    const res = await GET(req(), ctx('siigo'))
+    const body = await res.json()
+
+    expect(body.config.pages.map((p: { id: string }) => p.id)).toEqual(['overview', 'secret'])
+  })
+
+  it('leaves a config with no pages array untouched', async () => {
+    getAuthContextFromRequest.mockResolvedValue({ userId: 1, email: 'real@siigo.com', customerId: 0 })
+    mockPublishedConfig('rolplay_app_sql', { client_id: 29 })
+    resolveRolplayAppAccess.mockResolvedValue(29)
+    // default fetchSpy mock already returns { config: {}, preview: {...} }
+    const { GET } = await loadRoute()
+
+    const res = await GET(req(), ctx('siigo'))
+    expect(res.status).toBe(200)
+  })
+
   it('sends X-Internal-Auth to the ai-service when configured', async () => {
     process.env.AI_SERVICE_SHARED_SECRET = 'test-secret'
     getAuthContextFromRequest.mockResolvedValue({ userId: 1, email: 'real@siigo.com', customerId: 0 })
