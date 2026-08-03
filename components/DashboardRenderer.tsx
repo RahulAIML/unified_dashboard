@@ -16,7 +16,12 @@ import {
 import { ExportButton } from './ExportButton'
 import { csvFilename } from '@/lib/csv-export'
 
-export interface WidgetPreview { widget_id: string; ok: boolean; value?: number | string | null; series?: Record<string, unknown>[]; rows?: Record<string, unknown>[]; error?: string | null }
+// prev_value/delta_pct: period-over-period comparison (ai-service's
+// preview_fetch.py's _rolplay_app_kpi_metrics + WidgetPreview.delta_pct) —
+// mirrors the hand-built Overview's "vs previous period" arrows exactly
+// (lib/kpi-builder.ts's calcDeltaPct). Absent/null for every widget with no
+// real previous-period baseline to compare against (never fabricated).
+export interface WidgetPreview { widget_id: string; ok: boolean; value?: number | string | null; series?: Record<string, unknown>[]; rows?: Record<string, unknown>[]; error?: string | null; prev_value?: number | string | null; delta_pct?: number | null }
 // id_field: which key in each row of a `table` widget is a real, click-
 // through-able report id (see ai-service's WidgetConfig.id_field) — set only
 // for connectors with a verified matching /drilldown/[id] backend. Absent
@@ -47,6 +52,12 @@ export interface DashboardConfig {
   insights?: string[]
 }
 
+// Must match ai-service's preview_fetch.py BEST_PERFORMERS_ID — routed by
+// widget id (like id_field/paginated elsewhere), since this leaderboard's
+// rows are an aggregation of already-real per-user data, not a standalone
+// discovered metric with its own metric_key.
+const BEST_PERFORMERS_ID = 'table_best_performers'
+
 export function fmt(v: unknown): string {
   if (v === null || v === undefined) return '—'
   if (typeof v === 'number') return v % 1 === 0 ? v.toLocaleString() : v.toFixed(2)
@@ -72,6 +83,54 @@ export function humanizeConnector(connector: string | null | undefined): string 
   return CONNECTOR_LABELS[connector] ?? connector.replace(/_/g, ' ')
 }
 
+/**
+ * "vs previous period" arrow, mirroring the hand-built Overview's KPI cards
+ * (lib/kpi-builder.ts's calcDeltaPct + deltaDirection) — up/green for a
+ * positive change, down/red for negative, nothing at all when there's no
+ * real previous-period baseline (delta_pct is null/undefined), never a
+ * fabricated "0%" implying "no change" when there's simply no comparison.
+ */
+function DeltaBadge({ deltaPct }: { deltaPct?: number | null }) {
+  if (deltaPct === null || deltaPct === undefined) return null
+  if (deltaPct === 0) {
+    return <span className="text-xs font-medium text-muted-foreground">— 0%</span>
+  }
+  const up = deltaPct > 0
+  return (
+    <span className={`text-xs font-medium ${up ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+      {up ? '↑' : '↓'} {Math.abs(deltaPct)}%
+    </span>
+  )
+}
+
+/**
+ * Top-users-by-average-score leaderboard — mirrors the hand-built
+ * Overview's prominent Trophy-icon "Best Performers" card
+ * (components/DashboardContent.tsx), which every rolplay_app_sql tenant
+ * with real data sees today. Distinct from MiniTable: ranked, with a
+ * medal-style badge for the top 3, rather than a generic column dump.
+ */
+function Leaderboard({ rows }: { rows: Record<string, unknown>[] }) {
+  if (!rows.length) return <div className="text-sm text-muted-foreground">—</div>
+  const medal = ['🥇', '🥈', '🥉']
+  return (
+    <div className="mt-1 space-y-1.5">
+      {rows.slice(0, 10).map((r, i) => (
+        <div key={i} className="flex items-center justify-between gap-3 rounded-lg border border-border/40 px-3 py-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="text-sm w-5 text-center shrink-0">{medal[i] ?? i + 1}</span>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-foreground truncate">{fmt(r.user_name) !== '—' ? fmt(r.user_name) : fmt(r.user_email)}</p>
+              <p className="text-[11px] text-muted-foreground">{fmt(r.sessions)} sessions · {fmt(r.pass_rate)}% pass rate</p>
+            </div>
+          </div>
+          <div className="text-sm font-bold text-foreground shrink-0">{fmt(r.avg_score)}</div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function DashboardRows({ rows, pv }: { rows: DashRow[]; pv: Map<string, WidgetPreview> }) {
   return (
     <div className="space-y-5">
@@ -88,12 +147,18 @@ function DashboardRows({ rows, pv }: { rows: DashRow[]; pv: Map<string, WidgetPr
                   {w.business_question && (
                     <div className="text-[11px] text-muted-foreground/70 italic mb-1.5">{w.business_question}</div>
                   )}
-                  {w.type === 'kpi_tile' && <div className="text-2xl font-bold text-foreground">{fmt(p?.value)}</div>}
+                  {w.type === 'kpi_tile' && (
+                    <div className="flex items-baseline gap-2">
+                      <div className="text-2xl font-bold text-foreground">{fmt(p?.value)}</div>
+                      <DeltaBadge deltaPct={p?.delta_pct} />
+                    </div>
+                  )}
                   {(w.type === 'line_chart' || w.type === 'bar_chart' || w.type === 'histogram') &&
                     <MiniChart series={p?.series ?? p?.rows ?? []} bar={w.type !== 'line_chart'} />}
                   {w.type === 'donut' && <MiniDonut rows={p?.rows ?? []} />}
                   {w.type === 'journey' && <MiniJourney rows={p?.rows ?? []} />}
-                  {w.type === 'table' && (w.paginated
+                  {w.type === 'table' && w.id.endsWith(BEST_PERFORMERS_ID) && <Leaderboard rows={p?.rows ?? []} />}
+                  {w.type === 'table' && !w.id.endsWith(BEST_PERFORMERS_ID) && (w.paginated
                     ? <ReportsTable rows={p?.rows ?? []} searchable={!!w.searchable} exportable={!!w.exportable} filenamePrefix={w.id} />
                     : <MiniTable rows={p?.rows ?? []} idField={w.id_field} />)}
                   {p && !p.ok && <div className="text-xs text-amber-600 dark:text-amber-400 mt-1">no data{p.error ? `: ${p.error}` : ''}</div>}

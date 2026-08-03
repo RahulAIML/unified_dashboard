@@ -298,6 +298,14 @@ class WidgetPreview(BaseModel):
     series: list[dict[str, Any]] | None = None
     rows: list[dict[str, Any]] | None = None
     error: str | None = None
+    # Period-over-period comparison (kpi_tile only, rolplay_app_sql only for
+    # now — see preview_fetch.py's _rolplay_app) — mirrors
+    # rolplayAppOverview's prevTotalEvaluations/prevAvgScore/prevPassRate and
+    # lib/kpi-builder.ts's calcDeltaPct exactly, so the AI-generated
+    # dashboard shows the same "vs previous period" the hand-built one does.
+    # None for every widget that doesn't compute a previous-period baseline.
+    prev_value: Any | None = None
+    delta_pct: float | None = None
 
 
 class DashboardPreview(BaseModel):

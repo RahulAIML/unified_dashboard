@@ -11,6 +11,7 @@ import json
 
 from .. import journey as journey_lib
 from ..llm import gemini_json, llm_available
+from ..preview_fetch import BEST_PERFORMERS_ID, DAILY_PASSFAIL_ID
 from ..models import (
     DashboardFilter,
     DashboardPage,
@@ -365,6 +366,8 @@ def _build_from_plan(plan: dict, schema: NormalizedSchema, metrics: dict):
     charts.extend(_auto_donut_widgets(schema, {c.id for c in charts}))
     charts.extend(_auto_journey_widget(schema, {c.id for c in charts}))
     charts.extend(_auto_drilldown_table(schema, {c.id for c in charts}))
+    charts.extend(_auto_best_performers_widget(schema, {c.id for c in charts}))
+    charts.extend(_auto_daily_passfail_widget(schema, {c.id for c in charts}))
 
     rows: list[DashboardRow] = []
     if tiles:
@@ -476,6 +479,53 @@ def _auto_drilldown_table(schema: NormalizedSchema, existing_ids: set[str]) -> l
     )]
 
 
+def _auto_best_performers_widget(schema: NormalizedSchema, existing_ids: set[str]) -> list[WidgetConfig]:
+    """Top-users-by-average-score leaderboard, mirroring the hand-built
+    Overview page's prominent "Best Performers" card (lib/bridge-rolplay-
+    app.ts's rolplayAppBestPerformers, components/DashboardContent.tsx's
+    Trophy-icon card) -- confirmed via a full parity audit against the real
+    ERD/hand-built code to be entirely missing from every AI-generated
+    rolplay_app_sql dashboard until now.
+
+    rolplay_app_sql ONLY: the one connector with a verified per-user query
+    shape for this (r_user/r_user_session, already used by every other
+    widget here); no other connector's schema carries a per-user identity
+    this pipeline has verified yet.
+    """
+    if BEST_PERFORMERS_ID in existing_ids or not schema.metrics:
+        return []
+    if not any(m.source_kind == ServiceKind.rolplay_app_sql for m in schema.metrics):
+        return []
+    src = next(m for m in schema.metrics if m.source_kind == ServiceKind.rolplay_app_sql)
+    return [WidgetConfig(
+        id=BEST_PERFORMERS_ID, type=WidgetType.table, title="Best Performers",
+        source_kind=src.source_kind, source_action="r_user_session", span=4,
+        business_question="Which reps have the highest average score?",
+    )]
+
+
+def _auto_daily_passfail_widget(schema: NormalizedSchema, existing_ids: set[str]) -> list[WidgetConfig]:
+    """Daily session volume + passed count, mirroring the hand-built app's
+    separate evalCountTrend/passFailTrend series (lib/bridge-rolplay-
+    app.ts's rolplayAppTrends) -- the existing chart_trend/*_trend line_chart
+    widget only ever showed avg score over time; this adds the daily
+    volume/pass-rate half of that same picture, confirmed missing by the
+    same ERD/hand-built parity audit as the leaderboard above.
+
+    rolplay_app_sql ONLY, same reason as _auto_best_performers_widget.
+    """
+    if DAILY_PASSFAIL_ID in existing_ids or not schema.metrics:
+        return []
+    if not any(m.source_kind == ServiceKind.rolplay_app_sql for m in schema.metrics):
+        return []
+    src = next(m for m in schema.metrics if m.source_kind == ServiceKind.rolplay_app_sql)
+    return [WidgetConfig(
+        id=DAILY_PASSFAIL_ID, type=WidgetType.bar_chart, title="Daily Sessions & Pass Count",
+        source_kind=src.source_kind, source_action="r_user_session", span=4,
+        business_question="How many sessions run per day, and how many pass?",
+    )]
+
+
 def _auto_table_widgets(schema: NormalizedSchema) -> list[WidgetConfig]:
     # LMS's own table metric (lms_courses) is deliberately excluded — it
     # already gets a widget on the dedicated LMS page (_lms_page), and
@@ -512,6 +562,8 @@ def _heuristic(schema: NormalizedSchema, metrics: dict):
     charts.extend(_auto_donut_widgets(schema, {c.id for c in charts}))
     charts.extend(_auto_journey_widget(schema, {c.id for c in charts}))
     charts.extend(_auto_drilldown_table(schema, {c.id for c in charts}))
+    charts.extend(_auto_best_performers_widget(schema, {c.id for c in charts}))
+    charts.extend(_auto_daily_passfail_widget(schema, {c.id for c in charts}))
     rows: list[DashboardRow] = []
     if tiles:
         rows.append(DashboardRow(id="row_kpis", title="Overview", widgets=tiles))

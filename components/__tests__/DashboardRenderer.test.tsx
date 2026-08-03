@@ -337,6 +337,68 @@ describe('DashboardRenderer — end to end with real widget shapes', () => {
 
     expect(getByText(/no data/)).toBeTruthy()
   })
+
+  it('shows an up arrow with the real delta_pct for a KPI tile that improved', () => {
+    const config = {
+      company: 'Siigo', slug: 'siigo', title: 'Siigo Analytics', connector: 'rolplay_app_sql',
+      rows: [{ id: 'r1', widgets: [{ id: 'tile_total_sessions', type: 'kpi_tile', title: 'Total Sessions' }] }],
+      recommendations: [],
+    }
+    const preview = { widgets: [{ widget_id: 'tile_total_sessions', ok: true, value: 150, prev_value: 100, delta_pct: 50 }] }
+
+    const { getByText } = render(<DashboardRenderer config={config} preview={preview} />)
+
+    expect(getByText('↑ 50%')).toBeTruthy()
+  })
+
+  it('shows a down arrow for a KPI tile that regressed', () => {
+    const config = {
+      company: 'Siigo', slug: 'siigo', title: 'Siigo Analytics', connector: 'rolplay_app_sql',
+      rows: [{ id: 'r1', widgets: [{ id: 'tile_avg_score', type: 'kpi_tile', title: 'Average Score' }] }],
+      recommendations: [],
+    }
+    const preview = { widgets: [{ widget_id: 'tile_avg_score', ok: true, value: 40, prev_value: 80, delta_pct: -50 }] }
+
+    const { getByText } = render(<DashboardRenderer config={config} preview={preview} />)
+
+    expect(getByText('↓ 50%')).toBeTruthy()
+  })
+
+  it('shows no delta badge at all when delta_pct is absent (no real baseline)', () => {
+    const config = {
+      company: 'Siigo', slug: 'siigo', title: 'Siigo Analytics', connector: 'rolplay_app_sql',
+      rows: [{ id: 'r1', widgets: [{ id: 'tile_total_users', type: 'kpi_tile', title: 'Total Users' }] }],
+      recommendations: [],
+    }
+    const preview = { widgets: [{ widget_id: 'tile_total_users', ok: true, value: 12 }] }
+
+    const { queryByText } = render(<DashboardRenderer config={config} preview={preview} />)
+
+    expect(queryByText(/↑|↓/)).toBeNull()
+  })
+
+  it('renders the Best Performers leaderboard, ranked, for a table_best_performers widget', () => {
+    const config = {
+      company: 'Siigo', slug: 'siigo', title: 'Siigo Analytics', connector: 'rolplay_app_sql',
+      rows: [{ id: 'r1', widgets: [{ id: 'table_best_performers', type: 'table', title: 'Best Performers' }] }],
+      recommendations: [],
+    }
+    const preview = {
+      widgets: [{
+        widget_id: 'table_best_performers', ok: true,
+        rows: [
+          { user_email: 'a@siigo.com', user_name: 'Alice', sessions: 20, avg_score: 91.2, pass_rate: 90 },
+          { user_email: 'b@siigo.com', user_name: null, sessions: 15, avg_score: 85, pass_rate: 66.7 },
+        ],
+      }],
+    }
+
+    const { getByText } = render(<DashboardRenderer config={config} preview={preview} />)
+
+    expect(getByText('Alice')).toBeTruthy()
+    expect(getByText('b@siigo.com')).toBeTruthy()
+    expect(getByText('91.20')).toBeTruthy()
+  })
 })
 
 describe('DashboardRenderer — multi-page navigation', () => {

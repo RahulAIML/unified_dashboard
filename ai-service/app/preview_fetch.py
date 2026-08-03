@@ -6,6 +6,7 @@ Mirrors how the Next.js dashboard queries each pipeline.
 """
 from __future__ import annotations
 
+from datetime import date, datetime
 from typing import Any
 
 from . import journey as journey_lib
@@ -35,6 +36,24 @@ DRILLDOWN_TABLE_ID = "table_recent_sessions"
 # before that branch claims every `table`-typed widget.
 REPORTS_TABLE_ID = "table_reports"
 _REPORTS_ROW_LIMIT = 500
+
+# Must match dashboard_planning.py's _auto_best_performers_widget id — a
+# leaderboard of top users by avg score, mirroring rolplayAppBestPerformers()
+# exactly (GROUP BY user, HAVING at least one real score, ORDER BY avg DESC).
+# rolplay_app_sql only, same reason as the ids above: this is the one
+# connector with a verified query shape for it.
+BEST_PERFORMERS_ID = "table_best_performers"
+_BEST_PERFORMERS_LIMIT = 10
+
+# Must match dashboard_planning.py's _auto_daily_passfail_widget id — daily
+# session volume + passed count, mirroring rolplayAppTrends' evalCountTrend/
+# passFailTrend (the hand-built app returns 3 distinct daily series; this
+# preview layer's line_chart branch below only ever computed 1 of them,
+# avg score). Rendered as a Total-vs-Passed grouped bar via the SAME
+# MiniChart code path the per-simulator breakdown already uses (it already
+# draws a second "Passed" bar whenever a row carries `passed`/`passed_sessions`
+# alongside a total) -- no new frontend component needed.
+DAILY_PASSFAIL_ID = "chart_daily_pass_fail"
 
 
 def _norm_score(row: dict) -> float | None:
@@ -76,6 +95,45 @@ def _date_range(cfg: DashboardConfig, w: WidgetConfig | None = None) -> tuple[st
         return dr[0], dr[1]
     s = get_settings()
     return s.discovery_wide_date_from, s.discovery_wide_date_to
+
+
+def _sql_date_clause(column: str, frm: str, to: str) -> str:
+    """Mirrors lib/bridge-rolplay-app.ts's dateClause() exactly (same column,
+    same inclusive BETWEEN bound) -- every rolplayApp* adapter there applies
+    this to every query; preview_fetch.py's _rolplay_app previously applied
+    it to NONE, silently returning all-time totals for any range narrower
+    than "everything". frm/to are plain 'YYYY-MM-DD' dates (schema_discovery's
+    discovered window or the wide discovery default), so the bound is padded
+    to a full day on each end rather than truncating to midnight."""
+    if not frm or not to:
+        return ""
+    return f" AND {column} BETWEEN '{frm} 00:00:00' AND '{to} 23:59:59'"
+
+
+def _prev_period(frm: str, to: str) -> tuple[str, str] | None:
+    """The equal-length window immediately before `frm` -- mirrors
+    rolplayAppOverview's prevRange computation exactly (same "period
+    immediately preceding the current one" definition), so a period-over-
+    period KPI delta compares against the same baseline the hand-built app
+    would show for this same range."""
+    try:
+        f = datetime.combine(date.fromisoformat(frm), datetime.min.time())
+        t = datetime.combine(date.fromisoformat(to), datetime.min.time())
+    except ValueError:
+        return None
+    if t <= f:
+        return None
+    span = t - f
+    return (f - span).date().isoformat(), frm
+
+
+def _calc_delta_pct(current: float | None, prev: float | None) -> float | None:
+    """Mirrors lib/kpi-builder.ts's calcDeltaPct() exactly (0 decimals):
+    (current-prev)/abs(prev)*100, rounded, or None when there's no real
+    baseline to compare against (never a fabricated 0% to imply parity)."""
+    if current is None or prev is None or prev == 0:
+        return None
+    return round((current - prev) / abs(prev) * 100)
 
 
 async def fetch_widget(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
@@ -316,11 +374,48 @@ def _category_clause(module: str | None) -> str:
     return f" AND s.simulator_id IN (SELECT ID FROM r_simulator WHERE category = '{cat}')"
 
 
+async def _rolplay_app_kpi_metrics(cid: int, module: str | None, dc: str) -> dict[str, Any]:
+    """One scalar-KPI query, parameterised by an already-built date clause —
+    shared by the current-period fetch and (when a widget supports a
+    period-over-period delta) the previous-period fetch, so both windows are
+    computed by the exact same aggregation."""
+    data = await _rolplay_app_sql(
+        "SELECT COUNT(s.ID) AS sessions, COUNT(DISTINCT u.ID) AS users, "
+        f"ROUND(AVG({SCORE_SQL}),2) AS avg_score, "
+        f"SUM(CASE WHEN ({SCORE_SQL})>={PASS_THRESHOLD} THEN 1 ELSE 0 END) AS passed "
+        f"FROM r_user u LEFT JOIN r_user_session s ON s.user_id=u.ID "
+        f"WHERE u.client_id={cid}{_category_clause(module)}{dc}"
+    )
+    row = data[0] if data else {}
+    sessions = int(row.get("sessions") or 0)
+    passed = int(row.get("passed") or 0)
+    return {
+        "total_sessions": sessions,
+        "total_users": int(row.get("users") or 0),
+        "avg_score": float(row["avg_score"]) if row.get("avg_score") is not None else None,
+        "pass_rate": round(100 * passed / sessions, 1) if sessions else None,
+        "passed": passed,
+    }
+
+
+# KPI tile metric_keys that have a real "previous period" comparison in the
+# hand-built app (rolplayAppOverview's prevTotalEvaluations/prevAvgScore/
+# prevPassRate) -- total_users/passed don't, so those stay delta-less exactly
+# as before.
+_DELTA_METRIC_KEYS = {"total_sessions", "avg_score", "pass_rate"}
+
+
 async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
     cid = int(cfg.connector_handle.get("client_id"))
-    base = f"FROM r_user_session s JOIN r_user u ON u.ID=s.user_id WHERE u.client_id={cid}{_category_clause(w.module)}"
+    frm, to = _date_range(cfg, w)
+    dc = _sql_date_clause("s.date_created", frm, to)
+    base = f"FROM r_user_session s JOIN r_user u ON u.ID=s.user_id WHERE u.client_id={cid}{_category_clause(w.module)}{dc}"
 
     # ── Solution journey: one row per canonical module, in journey order ──
+    # Deliberately spans the tenant's FULL discovered history, not the
+    # current date-range window -- a journey shows "which stages this tenant
+    # has ever reached", the same all-time shape the hand-built /journey page
+    # shows, not a windowed slice that could make a real stage vanish.
     if w.type == WidgetType.journey:
         rows = await _rolplay_app_sql(
             "SELECT sim.category AS category, COUNT(*) total_sessions, "
@@ -343,6 +438,40 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
         } for m in stages]
         return WidgetPreview(widget_id=w.id, ok=len(out) >= 2, rows=out,
                              error=None if len(out) >= 2 else "fewer than 2 real modules for a journey")
+
+    # ── Daily session volume + passed count (Total vs Passed grouped bar) ──
+    # Must be checked before the generic bar_chart branch below claims every
+    # bar_chart-typed widget.
+    if w.id.endswith(DAILY_PASSFAIL_ID):
+        rows = await _rolplay_app_sql(
+            "SELECT day, COUNT(*) sessions, "
+            f"SUM(CASE WHEN sc>={PASS_THRESHOLD} THEN 1 ELSE 0 END) passed FROM ("
+            f"SELECT DATE(s.date_created) day, {SCORE_SQL} sc {base}) t "
+            "GROUP BY day ORDER BY day"
+        )
+        out = [{"date": str(r.get("day"))[:10], "sessions": int(r.get("sessions") or 0),
+                "passed": int(r.get("passed") or 0)} for r in rows]
+        return WidgetPreview(widget_id=w.id, ok=bool(out), rows=out)
+
+    # ── Best Performers: top users by average score ──
+    # Must be checked before the generic table branch below claims every
+    # table-typed widget.
+    if w.id.endswith(BEST_PERFORMERS_ID):
+        rows = await _rolplay_app_sql(
+            "SELECT u.email email, u.name name, COUNT(*) sessions, "
+            f"ROUND(AVG({SCORE_SQL}),2) avg_score, "
+            f"SUM(CASE WHEN ({SCORE_SQL})>={PASS_THRESHOLD} THEN 1 ELSE 0 END) passed "
+            f"{base} GROUP BY u.ID, u.email, u.name "
+            f"HAVING COUNT({SCORE_SQL}) > 0 "
+            f"ORDER BY avg_score DESC, sessions DESC LIMIT {_BEST_PERFORMERS_LIMIT}"
+        )
+        out = [{
+            "user_email": r.get("email"), "user_name": (r.get("name") or "").strip() or None,
+            "sessions": int(r.get("sessions") or 0),
+            "avg_score": float(r["avg_score"]) if r.get("avg_score") is not None else 0.0,
+            "pass_rate": round(100 * int(r.get("passed") or 0) / int(r["sessions"]), 1) if r.get("sessions") else 0.0,
+        } for r in rows]
+        return WidgetPreview(widget_id=w.id, ok=bool(out), rows=out)
 
     # ── Trend line: monthly avg score ──
     if w.type == WidgetType.line_chart:
@@ -379,7 +508,7 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
             f"ROUND({SCORE_SQL},1) AS score, "
             f"CASE WHEN ({SCORE_SQL})>={PASS_THRESHOLD} THEN 'Passed' ELSE 'Failed' END AS result "
             "FROM r_user_session s JOIN r_user u ON u.ID=s.user_id "
-            f"LEFT JOIN r_simulator sim ON sim.ID=s.simulator_id WHERE u.client_id={cid}{_category_clause(w.module)} "
+            f"LEFT JOIN r_simulator sim ON sim.ID=s.simulator_id WHERE u.client_id={cid}{_category_clause(w.module)}{dc} "
             f"ORDER BY s.date_created DESC LIMIT {_REPORTS_ROW_LIMIT}"
         )
         return WidgetPreview(widget_id=w.id, ok=bool(rows), rows=rows)
@@ -392,7 +521,7 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
             f"SUM(CASE WHEN ({SCORE_SQL})>={PASS_THRESHOLD} THEN 1 ELSE 0 END) passed_sessions, "
             f"ROUND(100*SUM(CASE WHEN ({SCORE_SQL})>={PASS_THRESHOLD} THEN 1 ELSE 0 END)/COUNT(*),1) pass_rate "
             "FROM r_user_session s JOIN r_user u ON u.ID=s.user_id "
-            f"LEFT JOIN r_simulator sim ON sim.ID=s.simulator_id WHERE u.client_id={cid}{_category_clause(w.module)} "
+            f"LEFT JOIN r_simulator sim ON sim.ID=s.simulator_id WHERE u.client_id={cid}{_category_clause(w.module)}{dc} "
             "GROUP BY s.simulator_id, sim.name ORDER BY total_sessions DESC"
         )
         if w.id.endswith(APPROVAL_DONUT_ID):
@@ -400,25 +529,25 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
                                     (int(r.get("passed_sessions") or 0) for r in rows), w.id)
         return WidgetPreview(widget_id=w.id, ok=bool(rows), rows=rows)
 
-    # ── KPI tiles (scalar) ──
-    data = await _rolplay_app_sql(
-        "SELECT COUNT(s.ID) AS sessions, COUNT(DISTINCT u.ID) AS users, "
-        f"ROUND(AVG({SCORE_SQL}),2) AS avg_score, "
-        f"SUM(CASE WHEN ({SCORE_SQL})>={PASS_THRESHOLD} THEN 1 ELSE 0 END) AS passed "
-        f"FROM r_user u LEFT JOIN r_user_session s ON s.user_id=u.ID WHERE u.client_id={cid}{_category_clause(w.module)}"
-    )
-    row = data[0] if data else {}
-    sessions = int(row.get("sessions") or 0)
-    passed = int(row.get("passed") or 0)
-    metrics = {
-        "total_sessions": sessions,
-        "total_users": int(row.get("users") or 0),
-        "avg_score": float(row["avg_score"]) if row.get("avg_score") is not None else None,
-        "pass_rate": round(100 * passed / sessions, 1) if sessions else None,
-        "passed": passed,
-    }
+    # ── KPI tiles (scalar), with a period-over-period delta for the 3 metrics
+    # the hand-built Overview compares (rolplayAppOverview's prevTotal
+    # Evaluations/prevAvgScore/prevPassRate) ──
+    metrics = await _rolplay_app_kpi_metrics(cid, w.module, dc)
+    sessions = metrics["total_sessions"]
     val = metrics.get(w.metric_key, sessions)
-    return WidgetPreview(widget_id=w.id, ok=val is not None, value=val)
+
+    prev_val: float | None = None
+    prev_window = _prev_period(frm, to)
+    if prev_window and w.metric_key in _DELTA_METRIC_KEYS:
+        prev_frm, prev_to = prev_window
+        prev_dc = _sql_date_clause("s.date_created", prev_frm, prev_to)
+        prev_metrics = await _rolplay_app_kpi_metrics(cid, w.module, prev_dc)
+        prev_val = prev_metrics.get(w.metric_key)
+
+    return WidgetPreview(
+        widget_id=w.id, ok=val is not None, value=val,
+        prev_value=prev_val, delta_pct=_calc_delta_pct(val, prev_val) if isinstance(val, (int, float)) else None,
+    )
 
 
 # ── coach_app_sql (customer_id-scoped analytics; Takeda, Besins) ─────────────────
