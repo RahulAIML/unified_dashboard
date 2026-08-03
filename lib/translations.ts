@@ -838,8 +838,8 @@ export const translations = {
     avgQuizScore:         'Puntuación Media de Cuestionario',
     modulesCompleted:     'Módulos Completados',
     // --- Journey de soluciones ---
-    navJourney:              'Journey',
-    journeyTitle:            'Journey de Soluciones',
+    navJourney:              'Recorrido',
+    journeyTitle:            'Recorrido de Soluciones',
     journeySub:              'Tus servicios Rolplay en el orden en que los recorren los participantes',
     journeyPhaseCognitive:   'Aprendizaje Cognitivo',
     journeyPhasePractice:    'Aprendizaje Práctico',

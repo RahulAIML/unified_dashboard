@@ -31,9 +31,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     loadSavedTheme()
+    // Always start light on first landing, regardless of OS/browser dark-mode
+    // preference -- a user can still switch to dark via toggle(), and that
+    // choice is what gets saved and restored below, every time after.
     const stored = localStorage.getItem("theme") as Theme | null
     if (stored) dispatch({ type: "set", theme: stored })
-    else if (window.matchMedia("(prefers-color-scheme: dark)").matches) dispatch({ type: "set", theme: "dark" })
   }, [])
 
   useEffect(() => {
