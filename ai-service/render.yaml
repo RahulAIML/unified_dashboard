@@ -45,3 +45,9 @@ services:
       # calls, not a direct request to this service's own public URL).
       - key: INTERNAL_SHARED_SECRET
         sync: false
+      # Optional (see app/cache.py) — unset means /ai/render/{slug} falls back
+      # to an in-process cache, correct for one instance but not shared across
+      # a scaled-out deploy. Set to a Render Redis/Key Value instance's
+      # connection string to share that cache across instances.
+      - key: REDIS_URL
+        sync: false

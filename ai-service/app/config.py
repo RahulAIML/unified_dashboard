@@ -66,6 +66,14 @@ class Settings(BaseSettings):
     discovery_wide_date_from: str = "2015-01-01"
     discovery_wide_date_to: str = "2035-12-31"
 
+    # ── Cache (see app/cache.py) ─────────────────────────────────────────────────
+    # Unset (dev default): app/cache.py falls back to an in-process dict --
+    # correct for a single instance, but each horizontally-scaled instance then
+    # pays /ai/render/{slug}'s full live-query cost separately. Set in
+    # production so a repeatedly-viewed published dashboard is served from a
+    # shared cache instead of re-running every widget's query on every view.
+    redis_url: str | None = None
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

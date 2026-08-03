@@ -111,8 +111,14 @@ Metadata-driven generation (never hand-written React): KPIs · widgets · layout
 ## Phase 5 — AI layer `[ ]`
 Insight · recommendation · executive summary · weekly report · risk detection · trend + root-cause analysis · NL dashboard / Q&A.
 
-## Phase 6 — Performance `[ ]`
+## Phase 6 — Performance `[~]`
 Redis · queue + background jobs · streaming · pagination · lazy load · batching · request coalescing · compression · profiling. **Known target: `/api/dashboard/lms` cold call measured at 14.2s.**
+
+- [x] **Redis caching layer, 2026-08-03 — first slice.** `lib/cache.ts` (Node) and `ai-service/app/cache.py` (Python) — Redis-backed via `REDIS_URL` when set, an in-process dict otherwise, same `getOrSetCache`/`get_or_set` contract on both sides so nothing crashes or behaves differently when Redis is unconfigured (local dev) or briefly unreachable (best-effort fallback, never a hard failure). Applied at the two clearest, highest-value choke points:
+  - `lib/lms-learnworlds.ts`'s `lmsDashboard()` already had its own ad hoc in-process `Map`-based cache (this is the exact "known target" above) — correct for one instance, but each horizontally-scaled instance previously paid the full LearnWorlds cold-call cost separately. Swapped its value-cache half for the shared layer (same key, same 60s TTL); in-flight de-dup stays local per-instance on purpose (collapsing concurrent requests within one process is a distinct, simpler concern than cross-instance value sharing). 24/24 existing LMS tests still pass unchanged — confirms the swap is a true drop-in.
+  - `ai-service`'s `/ai/render/{slug}` — every dashboard VIEW (builder preview and the published `/d/[slug]` page alike) hits this, and it re-ran every widget's live query from scratch on every single call. Now cached 30s, keyed on the config's own `version` — every publish increments that, so a republish busts the cache via a new key, needing no explicit invalidation.
+  - 15 new tests (`lib/__tests__/cache.test.ts`, `ai-service/tests/test_cache.py`, `test_render_cache.py`) covering get/set/TTL-expiry/no-redis-configured/version-bump-busts-cache. `render.yaml` documents the optional `REDIS_URL` env var.
+  - **Not yet done:** no other call site was touched (e.g. the pharma bridge calls, `rolplay_app_sql`'s raw-SQL endpoint calls themselves) — this is a first slice at the two highest-value points, not a caching layer applied uniformly everywhere. Queue/background jobs, streaming, pagination, request coalescing, and profiling are all still open.
 
 ## Phase 7 — Observability `[ ]`
 OpenTelemetry · Prometheus · tracing · health checks (incl. connector health) · alerting · structured logging · audit logs. **Priority: log *why* a capability was included/excluded — today's LMS bug was invisible without it.**

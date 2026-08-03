@@ -171,16 +171,35 @@ async def get_dashboard(slug: str) -> DashboardConfig:
     return cfg
 
 
+_RENDER_CACHE_TTL_SECONDS = 30
+
+
 @router.get("/render/{slug}")
 async def render_dashboard(slug: str) -> dict:
     """Return a published dashboard config PLUS live widget data — the Next.js
-    dynamic renderer draws a full dashboard page from this, for any connector."""
+    dynamic renderer draws a full dashboard page from this, for any connector.
+
+    Cached (see app/cache.py) for a short TTL, keyed on the config's own
+    `version` — every publish increments that (dashboard_config.py), so a
+    republish naturally busts the cache via a new key rather than needing
+    explicit invalidation. This is the one endpoint every dashboard VIEW hits
+    (builder preview and the published /d/[slug] page alike), and every
+    widget's live query re-runs from scratch on every call today — a
+    dashboard viewed repeatedly in a short window (a team refreshing during a
+    meeting, several people opening it around the same time) re-pays that
+    full cost each time with no cache at all.
+    """
     from ..agents import preview
     cfg = await _load_config(slug)
     if not cfg:
         raise HTTPException(status_code=404, detail="dashboard not found")
-    pv = await preview.run(cfg, _noop_log)
-    return {"config": cfg.model_dump(), "preview": pv.model_dump()}
+
+    async def _compute() -> dict:
+        pv = await preview.run(cfg, _noop_log)
+        return {"config": cfg.model_dump(mode="json"), "preview": pv.model_dump(mode="json")}
+
+    from .. import cache
+    return await cache.get_or_set(f"render:{slug}:v{cfg.version}", _RENDER_CACHE_TTL_SECONDS, _compute)
 
 
 @router.get("/dashboard-versions/{slug}")

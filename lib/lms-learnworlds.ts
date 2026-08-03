@@ -44,6 +44,7 @@
  * SERVER-ONLY. Never import from a client component: it reads secrets.
  */
 
+import { cacheGet, cacheSet } from './cache'
 import type { ApiTrendPoint, LmsApiResponse, LmsCourseRow } from './types'
 
 const TIMEOUT_MS = 25_000
@@ -333,9 +334,16 @@ function toDateKey(v: unknown): string | null {
   return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10)
 }
 
-interface CacheEntry { at: number; value: LmsApiResponse }
-const _cache = new Map<string, CacheEntry>()
+// Value cache is Redis-backed when REDIS_URL is configured (lib/cache.ts),
+// falling back to an in-process store otherwise -- shares the expensive
+// LearnWorlds aggregation (ROADMAP Phase 6's "known target: /api/dashboard/lms
+// cold call measured at 14.2s") across horizontally-scaled instances instead
+// of each one paying the cold-call cost separately. In-flight de-dup stays
+// LOCAL to this process on purpose: it collapses concurrent requests *within
+// one instance* into a single upstream call, a different (and simpler,
+// lock-free) concern than cross-instance value sharing.
 const _inflight = new Map<string, Promise<LmsApiResponse>>()
+const CACHE_TTL_SECONDS = CACHE_TTL_MS / 1000
 
 /**
  * Build the LMS payload for a date range.
@@ -361,8 +369,8 @@ export async function lmsDashboard(
   const toKey = to.toISOString().slice(0, 10)
   const cacheKey = `${creds.origin}|${tenantKey ?? '-'}|${fromKey}|${toKey}`
 
-  const cached = _cache.get(cacheKey)
-  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.value
+  const cached = await cacheGet<LmsApiResponse>(cacheKey)
+  if (cached) return cached
   const flying = _inflight.get(cacheKey)
   if (flying) return flying
 
@@ -482,7 +490,7 @@ export async function lmsDashboard(
       courses: courseRows,
     }
 
-    _cache.set(cacheKey, { at: Date.now(), value })
+    await cacheSet(cacheKey, value, CACHE_TTL_SECONDS)
     return value
   })()
 

@@ -10,3 +10,6 @@ langgraph==0.2.60
 # LLM providers are optional at runtime (agents fall back to heuristics when no
 # key is configured). Installed so the LLM path works when a key IS present.
 anthropic==0.42.0
+# app/cache.py is optional at runtime too (falls back to an in-process dict
+# when REDIS_URL is unset). Installed so the Redis path works when it IS set.
+redis==6.2.0
