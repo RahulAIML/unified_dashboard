@@ -111,6 +111,13 @@ Metadata-driven generation (never hand-written React): KPIs · widgets · layout
 ## Phase 5 — AI layer `[ ]`
 Insight · recommendation · executive summary · weekly report · risk detection · trend + root-cause analysis · NL dashboard / Q&A.
 
+**2026-08-03 research note — comparable platforms (Metabase, Looker, ThoughtSpot, Retool, Hex/Sisense, Cube/dbt MetricFlow).** Confirms this project's Discover→Understand→Plan→Generate→Validate→Publish pipeline + Capability confidence tiers (verified/probable/unverified) already matches the industry's emerging consensus: grounding in a governed intermediate metric layer beats direct LLM→SQL generation by double-digit accuracy points (arXiv semantic-layer benchmark), and ThoughtSpot's "trust layer" is structurally the same idea as our confidence tiers. Concrete next ideas, not yet built:
+1. Split a `MetricDefinition` layer (business concept → verified calculation, reusable across pages/tenants) out of today's dashboard-facing `Capability`/`WidgetConfig` — mirrors Cube/dbt MetricFlow's "define once" principle.
+2. Cache at the **metric** level (tenant, metric, granularity), not per-widget/per-render — so N widgets referencing the same KPI share one cached result. Today's new `/ai/render/{slug}` cache (see Phase 6) is a whole-page cache, not this.
+3. Turn "probable/unverified" into a governance workflow: surface the underlying query/field-mapping to a tenant admin for one-click confirm → promotes to verified, rather than a static badge.
+4. Codify tenant isolation as a connector-boundary contract (every query scoped by tenant id at the connector, never assembled with tenant context at the widget-rendering layer) before adding more connector types.
+5. Consider Metabase X-ray-style deterministic heuristics (date→trend, category→bar, id→count) as a cheap first pass ahead of the LLM Plan step — cuts LLM calls, gives a real fallback when confidence is low.
+
 ## Phase 6 — Performance `[~]`
 Redis · queue + background jobs · streaming · pagination · lazy load · batching · request coalescing · compression · profiling. **Known target: `/api/dashboard/lms` cold call measured at 14.2s.**
 
