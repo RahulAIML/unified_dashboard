@@ -348,7 +348,7 @@ describe('DashboardRenderer — end to end with real widget shapes', () => {
 
     const { getByText } = render(<DashboardRenderer config={config} preview={preview} />)
 
-    expect(getByText('↑ 50%')).toBeTruthy()
+    expect(getByText('+50%')).toBeTruthy()
   })
 
   it('shows a down arrow for a KPI tile that regressed', () => {
@@ -361,10 +361,10 @@ describe('DashboardRenderer — end to end with real widget shapes', () => {
 
     const { getByText } = render(<DashboardRenderer config={config} preview={preview} />)
 
-    expect(getByText('↓ 50%')).toBeTruthy()
+    expect(getByText('-50%')).toBeTruthy()
   })
 
-  it('shows no delta badge at all when delta_pct is absent (no real baseline)', () => {
+  it('shows a neutral "no comparison" pill when delta_pct is absent (no real baseline)', () => {
     const config = {
       company: 'Siigo', slug: 'siigo', title: 'Siigo Analytics', connector: 'rolplay_app_sql',
       rows: [{ id: 'r1', widgets: [{ id: 'tile_total_users', type: 'kpi_tile', title: 'Total Users' }] }],
@@ -372,9 +372,10 @@ describe('DashboardRenderer — end to end with real widget shapes', () => {
     }
     const preview = { widgets: [{ widget_id: 'tile_total_users', ok: true, value: 12 }] }
 
-    const { queryByText } = render(<DashboardRenderer config={config} preview={preview} />)
+    const { getByText, queryByText } = render(<DashboardRenderer config={config} preview={preview} />)
 
-    expect(queryByText(/↑|↓/)).toBeNull()
+    expect(queryByText(/^\+\d|^-\d/)).toBeNull()
+    expect(getByText('no comparison')).toBeTruthy()
   })
 
   it('renders the Best Performers leaderboard, ranked, for a table_best_performers widget', () => {

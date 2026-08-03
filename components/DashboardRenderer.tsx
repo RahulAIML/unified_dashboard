@@ -9,12 +9,15 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
+import { motion } from 'framer-motion'
+import { PlayCircle, Target, TrendingUp, TrendingDown, Minus, BadgeCheck, Trophy } from 'lucide-react'
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis,
   CartesianGrid, Tooltip, LabelList, PieChart, Pie, Cell, Legend,
 } from 'recharts'
 import { ExportButton } from './ExportButton'
 import { csvFilename } from '@/lib/csv-export'
+import { cn } from '@/lib/utils'
 
 // prev_value/delta_pct: period-over-period comparison (ai-service's
 // preview_fetch.py's _rolplay_app_kpi_metrics + WidgetPreview.delta_pct) —
@@ -83,85 +86,204 @@ export function humanizeConnector(connector: string | null | undefined): string 
   return CONNECTOR_LABELS[connector] ?? connector.replace(/_/g, ' ')
 }
 
+// Cycled by KPI position, matching DashboardContent.tsx's own `kpiIcons`
+// array exactly (PlayCircle/Target/TrendingUp/BadgeCheck) — the AI-generated
+// dashboard has no curated per-metric icon set, so this gives it the same
+// polished "every tile has an icon badge" feel without guessing a specific
+// icon per metric_key.
+const KPI_ICONS = [
+  <PlayCircle key="p" className="w-4 h-4" />,
+  <Target key="t" className="w-4 h-4" />,
+  <TrendingUp key="tr" className="w-4 h-4" />,
+  <BadgeCheck key="b" className="w-4 h-4" />,
+]
+
+const cardMotion = {
+  initial: { opacity: 0, y: 12 },
+  animate: { opacity: 1, y: 0 },
+  whileHover: { y: -3, transition: { duration: 0.2 } },
+}
+
 /**
- * "vs previous period" arrow, mirroring the hand-built Overview's KPI cards
- * (lib/kpi-builder.ts's calcDeltaPct + deltaDirection) — up/green for a
- * positive change, down/red for negative, nothing at all when there's no
- * real previous-period baseline (delta_pct is null/undefined), never a
- * fabricated "0%" implying "no change" when there's simply no comparison.
+ * KPI tile — pixel-for-pixel the same visual language as the hand-built
+ * SummaryCard (components/SummaryCard.tsx): gradient top stripe, icon badge,
+ * large bold value, and a colored delta pill with a Trending/Minus icon
+ * rather than plain arrow text. Absent delta_pct (no real previous-period
+ * baseline) renders the same neutral "no comparison" pill SummaryCard shows
+ * for a snapshot metric, never a fabricated 0%.
  */
-function DeltaBadge({ deltaPct }: { deltaPct?: number | null }) {
-  if (deltaPct === null || deltaPct === undefined) return null
-  if (deltaPct === 0) {
-    return <span className="text-xs font-medium text-muted-foreground">— 0%</span>
-  }
-  const up = deltaPct > 0
+function KpiTile({ title, value, deltaPct, index }: { title: string; value: unknown; deltaPct?: number | null; index: number }) {
+  const hasDelta = deltaPct !== null && deltaPct !== undefined
+  const isPositive = hasDelta && deltaPct! > 0
+  const isNegative = hasDelta && deltaPct! < 0
   return (
-    <span className={`text-xs font-medium ${up ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-      {up ? '↑' : '↓'} {Math.abs(deltaPct)}%
-    </span>
+    <motion.div
+      {...cardMotion}
+      transition={{ delay: index * 0.05, duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
+      className="relative w-full overflow-hidden rounded-[16px] border border-border/50 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.05),0_1px_2px_rgba(0,0,0,0.02)] hover:shadow-[0_12px_20px_-5px_rgba(0,0,0,0.08),0_4px_8px_-4px_rgba(0,0,0,0.05)] transition-all duration-300 ease-out"
+    >
+      <div className="h-[3px] w-full" style={{ background: 'linear-gradient(90deg, hsl(var(--primary)), hsl(var(--accent)))' }} />
+      <div className="p-5 sm:p-6">
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider leading-none">{title}</span>
+          <div
+            className="w-9 h-9 shrink-0 rounded-xl flex items-center justify-center text-primary"
+            style={{ background: 'linear-gradient(135deg, hsl(var(--primary)/0.12), hsl(var(--accent)/0.08))' }}
+          >
+            {KPI_ICONS[index % KPI_ICONS.length]}
+          </div>
+        </div>
+        <div className="flex items-baseline gap-2 mb-3">
+          <span className="kpi-value text-[32px] sm:text-[36px] leading-none font-bold text-foreground tracking-tight">{fmt(value)}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className={cn(
+            'inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold',
+            isPositive ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+              : isNegative ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                : 'bg-muted text-muted-foreground',
+          )}>
+            {isPositive && <TrendingUp className="w-3 h-3" />}
+            {isNegative && <TrendingDown className="w-3 h-3" />}
+            {!isPositive && !isNegative && <Minus className="w-3 h-3" />}
+            <span>{hasDelta ? `${isPositive ? '+' : ''}${deltaPct}%` : '—'}</span>
+          </div>
+          <span className="text-xs text-muted-foreground/70">{hasDelta ? 'vs prior period' : 'no comparison'}</span>
+        </div>
+      </div>
+    </motion.div>
   )
 }
 
 /**
- * Top-users-by-average-score leaderboard — mirrors the hand-built
- * Overview's prominent Trophy-icon "Best Performers" card
- * (components/DashboardContent.tsx), which every rolplay_app_sql tenant
- * with real data sees today. Distinct from MiniTable: ranked, with a
- * medal-style badge for the top 3, rather than a generic column dump.
+ * Chart/table card chrome — the same visual language as the hand-built
+ * ChartCard (components/ChartCard.tsx): gradient top stripe, title + subtitle
+ * header, padded content area. Every non-KPI widget renders inside this so
+ * the whole page reads as one consistent card system, not a mix of a
+ * polished KPI row and a plain bordered box for everything else.
+ */
+function WidgetCard({ title, subtitle, headerAction, index, children }: {
+  title: string; subtitle?: string | null; headerAction?: React.ReactNode; index: number; children: React.ReactNode
+}) {
+  return (
+    <motion.div
+      {...cardMotion}
+      transition={{ delay: index * 0.05, duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
+      className="relative overflow-hidden rounded-[16px] border border-border/50 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.05),0_1px_2px_rgba(0,0,0,0.02)] hover:shadow-[0_12px_20px_-5px_rgba(0,0,0,0.08),0_4px_8px_-4px_rgba(0,0,0,0.05)] transition-all duration-300 ease-out"
+    >
+      <div className="h-[3px] w-full" style={{ background: 'linear-gradient(90deg, hsl(var(--primary)), hsl(var(--accent)))' }} />
+      <div className="px-5 sm:px-6 pt-5 sm:pt-6 pb-0 flex items-start justify-between gap-4">
+        <div className="flex-1 min-w-0">
+          <h3 className="text-base sm:text-lg font-semibold text-foreground leading-tight tracking-tight">{title}</h3>
+          {subtitle && <p className="text-xs sm:text-sm text-muted-foreground mt-1 leading-relaxed italic">{subtitle}</p>}
+        </div>
+        {headerAction && <div className="shrink-0">{headerAction}</div>}
+      </div>
+      <div className="px-4 sm:px-6 pt-4 sm:pt-5 pb-4 sm:pb-6">
+        <div className="w-full max-w-full overflow-hidden"><div className="min-w-0">{children}</div></div>
+      </div>
+    </motion.div>
+  )
+}
+
+// Rank-badge palette (gold/silver/bronze, then a neutral primary tint) — must
+// match DashboardContent.tsx's own Best Performers card exactly, idx by idx.
+const RANK_BADGE_CLASSES = [
+  'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 shadow-sm',
+  'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300 shadow-sm',
+  'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400 shadow-sm',
+]
+
+/**
+ * Top-users-by-average-score leaderboard — the same row layout as the
+ * hand-built Overview's Best Performers card (components/DashboardContent.tsx):
+ * gold/silver/bronze rank badges, name + email, then right-aligned Sessions /
+ * Avg Score / Pass Rate columns with tiny uppercase labels. This widget is
+ * wrapped in a WidgetCard with a Trophy icon header action, matching that
+ * card's own header exactly.
  */
 function Leaderboard({ rows }: { rows: Record<string, unknown>[] }) {
   if (!rows.length) return <div className="text-sm text-muted-foreground">—</div>
-  const medal = ['🥇', '🥈', '🥉']
   return (
-    <div className="mt-1 space-y-1.5">
-      {rows.slice(0, 10).map((r, i) => (
-        <div key={i} className="flex items-center justify-between gap-3 rounded-lg border border-border/40 px-3 py-2">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <span className="text-sm w-5 text-center shrink-0">{medal[i] ?? i + 1}</span>
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-foreground truncate">{fmt(r.user_name) !== '—' ? fmt(r.user_name) : fmt(r.user_email)}</p>
-              <p className="text-[11px] text-muted-foreground">{fmt(r.sessions)} sessions · {fmt(r.pass_rate)}% pass rate</p>
+    <div className="space-y-2">
+      {rows.slice(0, 10).map((r, idx) => {
+        const displayName = fmt(r.user_name) !== '—' ? fmt(r.user_name) : fmt(r.user_email)
+        return (
+          <div key={idx} className="flex items-center justify-between p-3 sm:p-4 rounded-xl bg-muted/30 hover:bg-muted/50 transition-all duration-200 gap-3">
+            <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+              <div className={cn(
+                'flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-xl font-bold text-xs sm:text-sm shrink-0',
+                RANK_BADGE_CLASSES[idx] ?? 'bg-primary/10 text-primary',
+              )}>
+                {idx + 1}
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm sm:text-base font-semibold text-foreground truncate">{displayName}</p>
+                {displayName !== fmt(r.user_email) && <p className="text-xs text-muted-foreground truncate">{fmt(r.user_email)}</p>}
+              </div>
+            </div>
+            <div className="flex items-center gap-3 sm:gap-6 text-right shrink-0">
+              <div className="hidden sm:block">
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">Sessions</p>
+                <p className="text-sm font-bold text-foreground tabular-nums">{fmt(r.sessions)}</p>
+              </div>
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">Avg Score</p>
+                <p className="text-sm font-bold text-foreground tabular-nums">{fmt(r.avg_score)} <span className="text-xs font-normal text-muted-foreground">pts</span></p>
+              </div>
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">Pass Rate</p>
+                <p className="text-sm font-bold text-primary tabular-nums">{fmt(r.pass_rate)}%</p>
+              </div>
             </div>
           </div>
-          <div className="text-sm font-bold text-foreground shrink-0">{fmt(r.avg_score)}</div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
 
 function DashboardRows({ rows, pv }: { rows: DashRow[]; pv: Map<string, WidgetPreview> }) {
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 sm:space-y-6">
       {rows.map(row => (
         <div key={row.id}>
-          {row.title && <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">{row.title}</div>}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {row.widgets.map(w => {
+          {row.title && <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2.5">{row.title}</div>}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+            {row.widgets.map((w, i) => {
               const p = pv.get(w.id)
               const wide = w.type !== 'kpi_tile'
+              const isLeaderboard = w.type === 'table' && w.id.endsWith(BEST_PERFORMERS_ID)
+              const failed = !!p && !p.ok
               return (
-                <div key={w.id} className={`rounded-xl border border-border/60 bg-background p-4 ${wide ? 'col-span-2 md:col-span-4' : ''}`}>
-                  <div className="text-xs text-muted-foreground mb-1">{w.title}</div>
-                  {w.business_question && (
-                    <div className="text-[11px] text-muted-foreground/70 italic mb-1.5">{w.business_question}</div>
+                <div key={w.id} className={wide ? 'sm:col-span-2 lg:col-span-4' : ''}>
+                  {w.type === 'kpi_tile' ? (
+                    <KpiTile title={w.title} value={p?.value} deltaPct={p?.delta_pct} index={i} />
+                  ) : (
+                    <WidgetCard
+                      title={w.title}
+                      subtitle={w.business_question}
+                      index={i}
+                      headerAction={isLeaderboard ? (
+                        <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, hsl(var(--primary)/0.12), hsl(var(--accent)/0.08))' }}>
+                          <Trophy className="w-4 h-4 text-primary" />
+                        </div>
+                      ) : undefined}
+                    >
+                      {(w.type === 'line_chart' || w.type === 'bar_chart' || w.type === 'histogram') &&
+                        <MiniChart series={p?.series ?? p?.rows ?? []} bar={w.type !== 'line_chart'} />}
+                      {w.type === 'donut' && <MiniDonut rows={p?.rows ?? []} />}
+                      {w.type === 'journey' && <MiniJourney rows={p?.rows ?? []} />}
+                      {isLeaderboard && <Leaderboard rows={p?.rows ?? []} />}
+                      {w.type === 'table' && !isLeaderboard && (w.paginated
+                        ? <ReportsTable rows={p?.rows ?? []} searchable={!!w.searchable} exportable={!!w.exportable} filenamePrefix={w.id} />
+                        : <MiniTable rows={p?.rows ?? []} idField={w.id_field} />)}
+                      {failed && <div className="text-xs text-amber-600 dark:text-amber-400 mt-2">no data{p!.error ? `: ${p!.error}` : ''}</div>}
+                    </WidgetCard>
                   )}
-                  {w.type === 'kpi_tile' && (
-                    <div className="flex items-baseline gap-2">
-                      <div className="text-2xl font-bold text-foreground">{fmt(p?.value)}</div>
-                      <DeltaBadge deltaPct={p?.delta_pct} />
-                    </div>
+                  {w.type === 'kpi_tile' && failed && (
+                    <div className="text-xs text-amber-600 dark:text-amber-400 mt-1.5 px-1">no data{p!.error ? `: ${p!.error}` : ''}</div>
                   )}
-                  {(w.type === 'line_chart' || w.type === 'bar_chart' || w.type === 'histogram') &&
-                    <MiniChart series={p?.series ?? p?.rows ?? []} bar={w.type !== 'line_chart'} />}
-                  {w.type === 'donut' && <MiniDonut rows={p?.rows ?? []} />}
-                  {w.type === 'journey' && <MiniJourney rows={p?.rows ?? []} />}
-                  {w.type === 'table' && w.id.endsWith(BEST_PERFORMERS_ID) && <Leaderboard rows={p?.rows ?? []} />}
-                  {w.type === 'table' && !w.id.endsWith(BEST_PERFORMERS_ID) && (w.paginated
-                    ? <ReportsTable rows={p?.rows ?? []} searchable={!!w.searchable} exportable={!!w.exportable} filenamePrefix={w.id} />
-                    : <MiniTable rows={p?.rows ?? []} idField={w.id_field} />)}
-                  {p && !p.ok && <div className="text-xs text-amber-600 dark:text-amber-400 mt-1">no data{p.error ? `: ${p.error}` : ''}</div>}
                 </div>
               )
             })}
