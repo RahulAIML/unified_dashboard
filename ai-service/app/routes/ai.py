@@ -42,6 +42,32 @@ async def ai_health() -> dict:
     return {"ok": True}
 
 
+@router.get("/known-companies")
+async def known_companies() -> list[dict]:
+    """rolplay_app_sql ONLY: lets the builder UI offer a company picker instead
+    of pure free-text entry — real client names/session counts straight from
+    r_client, so a manager can select rather than guess spelling. Every other
+    connector still only has free-text entry; this connector is the one the
+    user asked to make fully self-service.
+    """
+    from ..connectors.rolplay_app import RolplayAppConnector
+
+    conn = RolplayAppConnector()
+    rows = await conn._sql(
+        "SELECT c.ID AS id, c.name AS name, COUNT(s.ID) AS sessions, COUNT(DISTINCT u.ID) AS users "
+        "FROM r_client c LEFT JOIN r_user u ON u.client_id = c.ID "
+        "LEFT JOIN r_user_session s ON s.user_id = u.ID "
+        "GROUP BY c.ID, c.name ORDER BY sessions DESC, c.name ASC"
+    )
+    if not rows:
+        return []
+    return [
+        {"id": int(r["id"]), "name": r["name"],
+         "sessions": int(r.get("sessions") or 0), "users": int(r.get("users") or 0)}
+        for r in rows
+    ]
+
+
 async def _noop_log(*_args) -> None:
     return None
 

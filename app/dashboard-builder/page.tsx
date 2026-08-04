@@ -51,8 +51,21 @@ const SERVICE_OPTIONS: { id: string; label: string }[] = [
   { id: 'second-brain',  label: 'Second Brain'    },
 ]
 
+interface KnownCompany { id: number; name: string; sessions: number; users: number }
+
 export default function DashboardBuilderPage() {
   const [company, setCompany] = useState('')
+  // Populates a <datalist> so a manager can pick an existing rolplay_app_sql
+  // client instead of retyping/misspelling its name — free-text entry still
+  // works for anything not in this list (a brand-new client, or any other
+  // connector). rolplay_app_sql only, per the user's own request.
+  const [knownCompanies, setKnownCompanies] = useState<KnownCompany[]>([])
+  useEffect(() => {
+    fetch('/api/ai/known-companies', { cache: 'no-store' })
+      .then(res => res.ok ? res.json() : [])
+      .then((rows: KnownCompany[]) => setKnownCompanies(Array.isArray(rows) ? rows : []))
+      .catch(() => { /* picker is a convenience — free text still works */ })
+  }, [])
   const [domainText, setDomainText] = useState('')
   // Step 1 — services the client has contracted. Defaults to all selected so a
   // rushed user can never create an empty dashboard; the platform still checks
@@ -250,14 +263,28 @@ export default function DashboardBuilderPage() {
         <label className="text-sm font-semibold text-foreground mb-2 block">Company name</label>
         <div className="flex flex-col sm:flex-row gap-3">
           <input value={company} onChange={e => setCompany(e.target.value)}
-            placeholder="e.g. Acme Pharma" disabled={running}
+            placeholder="e.g. Acme Pharma — or pick an existing client below" disabled={running}
+            list="known-companies-list"
             onKeyDown={e => { if (e.key === 'Enter' && company.trim() && !running) generate() }}
             className="flex-1 rounded-lg border border-border bg-background px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-primary" />
+          <datalist id="known-companies-list">
+            {knownCompanies.map(c => (
+              <option key={c.id} value={c.name}>
+                {c.sessions > 0 ? `${c.sessions} sessions, ${c.users} users` : 'no activity yet'}
+              </option>
+            ))}
+          </datalist>
           <button onClick={generate} disabled={running || starting || !company.trim()}
             className="px-6 py-3 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 disabled:opacity-50 whitespace-nowrap">
             {running ? 'Generating…' : '✨ Generate Dashboard'}
           </button>
         </div>
+        {knownCompanies.length > 0 && (
+          <p className="text-xs text-muted-foreground mt-1">
+            Start typing to pick from {knownCompanies.filter(c => c.sessions > 0).length} existing rolplay_app_sql
+            clients with real activity, or type a new company name.
+          </p>
+        )}
 
         {/* Company email domain — optional but strongly recommended. This is
             what decides which logins can see the finished dashboard, so a
