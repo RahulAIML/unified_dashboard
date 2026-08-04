@@ -150,7 +150,7 @@ async def _continue_from_schema_discovery(job: JobState, knowledge, primary: Ser
 
     await put_knowledge(knowledge)  # persist learned services/ids
 
-    if schema.modules:
+    if schema.modules and primary.kind != ServiceKind.rolplay_app_sql:
         job.phase = JobPhase.review_services
         job.available_modules = list(schema.modules)
         job.percent = 60
@@ -159,6 +159,15 @@ async def _continue_from_schema_discovery(job: JobState, knowledge, primary: Ser
                   "Review and confirm which to include.")
         await update(job)
         return  # paused — resumed via resume_with_services()
+
+    if schema.modules and primary.kind == ServiceKind.rolplay_app_sql:
+        # rolplay_app_sql clients must generate with zero manager intervention
+        # (every client, fully automatic) — auto-confirm all discovered
+        # modules rather than pausing. A manager can still narrow the set
+        # after the fact via PUT/republish; other connectors keep the
+        # review_services pause unchanged.
+        await log("schema_discovery", "success",
+                  f"Auto-confirmed {len(schema.modules)} module(s): {', '.join(schema.modules)}")
 
     await _continue_from_planning(job, knowledge, primary, schema, update, log)
 

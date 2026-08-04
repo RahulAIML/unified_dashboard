@@ -207,6 +207,31 @@ async def _rolplay_app_schema(svc, schema, log: LogFn) -> None:
         DiscoveredMetric(key="total_users", label="Active Users", type=MetricType.count,
                          source_kind=svc.kind, source_action="r_user",
                          business_question="How many reps are actively using the platform?"),
+        # Cesar KPI group 1 (dashboard_planning.py's _cesar_kpis_page) —
+        # computed from r_user/r_user_session/SCORE_SQL alone
+        # (preview_fetch.py's _rolplay_app_cesar_metrics), so real for ANY
+        # rolplay_app_sql tenant. Previously never registered here, so
+        # validation.py's missing_metric check failed every single
+        # generation that reached this page — the widgets were built and
+        # fetchable, just never passed validation.
+        DiscoveredMetric(key="activation_rate", label="Activation Rate", type=MetricType.rate,
+                         source_kind=svc.kind, source_action="r_user_session",
+                         business_question="What % of enrolled reps have started at least one session?"),
+        DiscoveredMetric(key="weekly_practice_frequency", label="Weekly Practice Frequency", type=MetricType.count,
+                         source_kind=svc.kind, source_action="r_user_session",
+                         business_question="How many sessions run per active week, on average?"),
+        DiscoveredMetric(key="mau_rate", label="Recurring Adoption (MAU)", type=MetricType.rate,
+                         source_kind=svc.kind, source_action="r_user_session",
+                         business_question="What % of reps used the platform in the last 30 days?"),
+        DiscoveredMetric(key="practices_to_mastery", label="Practices to Mastery", type=MetricType.count,
+                         source_kind=svc.kind, source_action="r_user_session",
+                         business_question="How many attempts does it take to reach mastery (>=95)?"),
+        DiscoveredMetric(key="delta_score", label="Competency Gain (Delta Score)", type=MetricType.score,
+                         source_kind=svc.kind, source_action="r_user_session",
+                         business_question="How much do reps improve from their first to their most recent session?"),
+        DiscoveredMetric(key="readiness_index", label="Field Readiness Index", type=MetricType.rate,
+                         source_kind=svc.kind, source_action="r_user_session",
+                         business_question="What % of the sales force has reached mastery-level certification?"),
     ]
 
     client_id = int((svc.handle or {}).get("client_id") or 0)
