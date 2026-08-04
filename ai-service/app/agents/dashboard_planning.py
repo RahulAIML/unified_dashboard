@@ -11,7 +11,15 @@ import json
 
 from .. import journey as journey_lib
 from ..llm import gemini_json, llm_available
-from ..preview_fetch import BEST_PERFORMERS_ID, DAILY_PASSFAIL_ID
+from ..preview_fetch import (
+    ADOPTION_MOVEMENT_ID,
+    BEST_PERFORMERS_ID,
+    COMMERCIAL_DOMAIN_ID,
+    DAILY_PASSFAIL_ID,
+    MASTERY_DISTRIBUTION_ID,
+    TOP_OPPORTUNITIES_ID,
+    TOP_STRENGTHS_ID,
+)
 from ..models import (
     DashboardFilter,
     DashboardPage,
@@ -105,6 +113,9 @@ def _assemble_pages(
     activities_page = _activities_page(schema)
     if activities_page:
         pages.append(activities_page)
+    cesar_kpis_page = _cesar_kpis_page(schema)
+    if cesar_kpis_page:
+        pages.append(cesar_kpis_page)
     reports_page = _reports_page(schema)
     if reports_page:
         pages.append(reports_page)
@@ -135,6 +146,104 @@ def _ranking_page(schema: NormalizedSchema) -> DashboardPage | None:
     )
     return DashboardPage(id="ranking", title="Ranking", rows=[
         DashboardRow(id="ranking_table", title="Leaderboard", widgets=[widget]),
+    ])
+
+
+def _cesar_kpis_page(schema: NormalizedSchema) -> DashboardPage | None:
+    """A dedicated KPIs page implementing "Sugerencia de KPI's Cesar.xlsx" —
+    19 KPIs the tech lead specified, across 5 perspectives (Adoption & Usage,
+    Efficiency & Acceleration, Technical Diagnostics, Commercial
+    Effectiveness, Impact & Prescription). Confirmed against real live data
+    before building anything:
+
+    GROUP 1 (this page's first row) is schema-only — activation rate, weekly
+    practice frequency, MAU, practices-to-mastery, competency gain (delta
+    score), field readiness index, and the Basic/Intermediate/Advanced
+    mastery distribution. Computed from r_user/r_user_session/SCORE_SQL
+    alone (preview_fetch.py's _rolplay_app_cesar_metrics), so these work for
+    ANY rolplay_app_sql tenant.
+
+    GROUP 2 (this page's second row) depends on raw_closing_data carrying a
+    rich per-session evaluation JSON — confirmed real and richly structured
+    for Siigo (5 scored commercial-domain blocks, 24 individually-scored
+    checklist items, an adoption-intent movement field) via direct live
+    querying, and confirmed ABSENT for Takeda (raw_closing_data is NULL for
+    every one of its sessions — scored via closing_analysis HTML only).
+    preview_fetch.py's widgets for this group discover whatever bloque_*/
+    rubrica_pN_* keys exist per session dynamically (regex, never a
+    hardcoded Siigo field list), so they work for any tenant/product whose
+    AI evaluator produces this shape and report "no data" (not a fabricated
+    zero) for one that doesn't — same rule as every other widget here.
+
+    NOT implemented, and why (documented rather than silently skipped):
+      - KPI-2.1 Time-to-Mastery (minutes to reach mastery): r_user_session
+        has no duration/time-spent column anywhere in the schema (confirmed
+        via a live full-row SELECT) — not computable without fabricating a
+        number the platform never recorded.
+      - KPI-3.1 Average Technical Mastery: ambiguous whether this should be
+        a distinct sub-score from the existing overall avg_score, or
+        identical to it — the raw_closing_data fields that read as
+        "technical" (product_knowledge_accuracy etc.) are free-text quality
+        labels, not scores, for every session sampled.
+      - KPI-3.3 Commercial Deviation Rate, KPI-5.2 Close Rate with Measurable
+        Commitment: would require classifying free-text fields
+        (areas_for_improvement / resultado_comercial) into fixed categories
+        by keyword-matching — risks a fabricated classification rule rather
+        than a real, evidenced measurement.
+      - KPI-4.4 Objection Conversion Index: the "Romper el No" domain in the
+        Score by Commercial Domain widget already surfaces objection-
+        handling performance; a separate metric would double-count the same
+        underlying data under a different label.
+
+    rolplay_app_sql ONLY, same reason as every other auto-page here.
+    """
+    if not any(m.source_kind == ServiceKind.rolplay_app_sql for m in schema.metrics):
+        return None
+    src = next(m for m in schema.metrics if m.source_kind == ServiceKind.rolplay_app_sql)
+
+    def tile(key: str, title: str, question: str) -> WidgetConfig:
+        return WidgetConfig(id=f"tile_cesar_{key}", type=WidgetType.kpi_tile, title=title,
+                            metric_key=key, source_kind=src.source_kind,
+                            source_action="r_user_session", business_question=question)
+
+    group1 = [
+        tile("activation_rate", "Activation Rate", "What % of enrolled reps have started at least one session?"),
+        tile("weekly_practice_frequency", "Weekly Practice Frequency", "How many sessions run per active week, on average?"),
+        tile("mau_rate", "Recurring Adoption (MAU)", "What % of reps used the platform in the last 30 days?"),
+        tile("practices_to_mastery", "Practices to Mastery", "How many attempts does it take to reach mastery (>=95)?"),
+        tile("delta_score", "Competency Gain (Delta Score)", "How much do reps improve from their first to their most recent session?"),
+        tile("readiness_index", "Field Readiness Index", "What % of the sales force has reached mastery-level certification?"),
+    ]
+    mastery_widget = WidgetConfig(
+        id=MASTERY_DISTRIBUTION_ID, type=WidgetType.donut, title="Distribution by Mastery Level",
+        source_kind=src.source_kind, source_action="r_user_session", span=2,
+        business_question="What share of the team is Basic / Intermediate / Advanced?",
+    )
+    adoption_widget = WidgetConfig(
+        id=ADOPTION_MOVEMENT_ID, type=WidgetType.kpi_tile, title="Adoption Movement Rate",
+        source_kind=src.source_kind, source_action="r_user_session", span=2,
+        business_question="What % of sessions moved the customer's adoption intent forward?",
+    )
+    domain_widget = WidgetConfig(
+        id=COMMERCIAL_DOMAIN_ID, type=WidgetType.table, title="Score by Commercial Domain",
+        source_kind=src.source_kind, source_action="r_user_session", span=4,
+        business_question="In which stage of the sales interaction does the team struggle most?",
+    )
+    strengths_widget = WidgetConfig(
+        id=TOP_STRENGTHS_ID, type=WidgetType.table, title="Top Commercial Strengths",
+        source_kind=src.source_kind, source_action="r_user_session", span=2,
+        business_question="Which skills does the team consistently execute well?",
+    )
+    opportunities_widget = WidgetConfig(
+        id=TOP_OPPORTUNITIES_ID, type=WidgetType.table, title="Top Areas of Opportunity",
+        source_kind=src.source_kind, source_action="r_user_session", span=2,
+        business_question="Which specific habits most often fail across real sessions?",
+    )
+
+    return DashboardPage(id="kpis", title="KPIs", rows=[
+        DashboardRow(id="kpis_group1", title="Adoption, Efficiency & Readiness", widgets=[*group1, mastery_widget]),
+        DashboardRow(id="kpis_group2", title="Commercial Effectiveness & Impact",
+                    widgets=[adoption_widget, domain_widget, strengths_widget, opportunities_widget]),
     ])
 
 

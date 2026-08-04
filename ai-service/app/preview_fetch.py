@@ -6,6 +6,8 @@ Mirrors how the Next.js dashboard queries each pipeline.
 """
 from __future__ import annotations
 
+import json
+import re
 from datetime import date, datetime
 from typing import Any
 
@@ -17,6 +19,10 @@ from .rolplay_score import SCORE_SQL
 from .models import DashboardConfig, ServiceKind, WidgetConfig, WidgetPreview, WidgetType
 
 PASS_THRESHOLD = 70
+# "Certified"/"mastery" bar per Cesar's KPI spec (Sugerencia de KPI's Cesar.xlsx)
+# -- deliberately separate from PASS_THRESHOLD: passing a single session (70)
+# is not the same bar as being field-ready/certified (95).
+MASTERY_THRESHOLD = 95
 
 # Must match dashboard_planning.py's _auto_donut_widgets id for the pass/fail
 # donut — routed by id, not metric_key, since metric_key is validation.py's
@@ -54,6 +60,39 @@ _BEST_PERFORMERS_LIMIT = 10
 # draws a second "Passed" bar whenever a row carries `passed`/`passed_sessions`
 # alongside a total) -- no new frontend component needed.
 DAILY_PASSFAIL_ID = "chart_daily_pass_fail"
+
+# ── Cesar's KPI suggestions (Sugerencia de KPI's Cesar.xlsx) ─────────────────
+# Two groups, by data dependency:
+#
+# GROUP 1 (universal -- computed from r_user/r_user_session/SCORE_SQL alone,
+# same as every existing metric here, works for ANY rolplay_app_sql tenant):
+# activation_rate, weekly_practice_frequency, mau_rate, practices_to_mastery,
+# delta_score, readiness_index, mastery distribution.
+#
+# GROUP 2 (depends on raw_closing_data carrying a rich per-session evaluation
+# JSON -- confirmed real and richly structured for Siigo: 5 scored "bloque_*"
+# commercial-domain blocks, 24 individually-scored "rubrica_pN_*" checklist
+# items, an "intencion_movement" adoption-intent field. Confirmed ABSENT for
+# Takeda -- its sessions have raw_closing_data = NULL entirely, scored via
+# closing_analysis HTML only). These widgets discover whatever bloque_*/
+# rubrica_pN_* keys exist per session dynamically -- never a hardcoded Siigo
+# field list -- so they work for any tenant/product whose AI evaluator
+# produces this shape, and report "no data" honestly for one that doesn't,
+# same anti-fabrication rule as every other widget in this file.
+COMMERCIAL_DOMAIN_ID = "table_commercial_domain"
+TOP_STRENGTHS_ID = "table_top_strengths"
+TOP_OPPORTUNITIES_ID = "table_top_opportunities"
+ADOPTION_MOVEMENT_ID = "tile_adoption_movement_rate"
+MASTERY_DISTRIBUTION_ID = "donut_mastery_distribution"
+_CLOSING_DATA_SAMPLE_LIMIT = 500  # bounded scan, matches REPORTS_TABLE's own cap
+
+# KPI-1.1/1.3/1.4/2.2/2.3/5.3 metric_keys (Group 1 above) — all computed by
+# _rolplay_app_cesar_metrics, distinct from the pre-existing
+# _rolplay_app_kpi_metrics (total_sessions/avg_score/pass_rate/etc.).
+_CESAR_METRIC_KEYS = {
+    "activation_rate", "weekly_practice_frequency", "mau_rate",
+    "practices_to_mastery", "delta_score", "readiness_index",
+}
 
 
 def _norm_score(row: dict) -> float | None:
@@ -405,6 +444,191 @@ async def _rolplay_app_kpi_metrics(cid: int, module: str | None, dc: str) -> dic
 _DELTA_METRIC_KEYS = {"total_sessions", "avg_score", "pass_rate"}
 
 
+async def _rolplay_app_cesar_metrics(cid: int, module: str | None, frm: str, to: str) -> dict[str, Any]:
+    """KPI-1.1/1.3/1.4/2.2/2.3/5.3 from Sugerencia de KPI's Cesar.xlsx --
+    every one of these is computed from r_user/r_user_session/SCORE_SQL
+    alone (no raw_closing_data JSON needed), so it works for any
+    rolplay_app_sql tenant, same as the pre-existing KPI tiles.
+
+    Per-user sequencing (delta_score, practices_to_mastery, readiness_index)
+    is done in PYTHON after fetching one bounded (user_id, date, score) row
+    set, rather than as nested correlated SQL -- simpler to get right and
+    to test than re-deriving SCORE_SQL's alias-dependent CASE expression
+    inside a subquery, for a one-time-per-render scalar computation.
+    """
+    dc = _sql_date_clause("s.date_created", frm, to)
+    cat = _category_clause(module)
+
+    enrolled_rows = await _rolplay_app_sql(f"SELECT COUNT(*) n FROM r_user u WHERE u.client_id={cid}")
+    enrolled = int((enrolled_rows[0] if enrolled_rows else {}).get("n") or 0)
+
+    active_rows = await _rolplay_app_sql(
+        f"SELECT COUNT(DISTINCT s.user_id) n, COUNT(*) sessions, "
+        f"COUNT(DISTINCT YEARWEEK(s.date_created)) weeks "
+        f"FROM r_user_session s JOIN r_user u ON u.ID=s.user_id "
+        f"WHERE u.client_id={cid}{cat}{dc}"
+    )
+    active_row = active_rows[0] if active_rows else {}
+    active_users = int(active_row.get("n") or 0)
+    period_sessions = int(active_row.get("sessions") or 0)
+    active_weeks = int(active_row.get("weeks") or 0)
+
+    # MAU: a real 30-day recency window, independent of whatever wider range
+    # the dashboard's own date filter currently shows -- "monthly active" is
+    # a fixed-length concept, not "active in the selected period".
+    mau_rows = await _rolplay_app_sql(
+        f"SELECT COUNT(DISTINCT s.user_id) n FROM r_user_session s JOIN r_user u ON u.ID=s.user_id "
+        f"WHERE u.client_id={cid}{cat} AND s.date_created >= DATE_SUB('{to}', INTERVAL 30 DAY) "
+        f"AND s.date_created <= '{to} 23:59:59'"
+    )
+    mau_users = int((mau_rows[0] if mau_rows else {}).get("n") or 0)
+
+    # Per-user chronological score sequence, for delta_score/practices_to_mastery/
+    # readiness_index -- bounded to a real bar (matches Reports' own cap) so a
+    # very large tenant doesn't pull its entire history into memory every render.
+    seq_rows = await _rolplay_app_sql(
+        f"SELECT s.user_id, s.date_created, ({SCORE_SQL}) sc "
+        f"FROM r_user_session s JOIN r_user u ON u.ID=s.user_id "
+        f"WHERE u.client_id={cid}{cat}{dc} AND ({SCORE_SQL}) IS NOT NULL "
+        f"ORDER BY s.user_id, s.date_created ASC LIMIT {_CLOSING_DATA_SAMPLE_LIMIT}"
+    )
+    by_user: dict[Any, list[float]] = {}
+    for r in seq_rows:
+        by_user.setdefault(r["user_id"], []).append(float(r["sc"]))
+
+    deltas = [scores[-1] - scores[0] for scores in by_user.values() if len(scores) >= 2]
+    delta_score = round(sum(deltas) / len(deltas), 1) if deltas else None
+
+    practices = []
+    for scores in by_user.values():
+        for i, sc in enumerate(scores, start=1):
+            if sc >= MASTERY_THRESHOLD:
+                practices.append(i)
+                break
+    practices_to_mastery = round(sum(practices) / len(practices), 1) if practices else None
+
+    mastered_users = sum(1 for scores in by_user.values() if any(sc >= MASTERY_THRESHOLD for sc in scores))
+
+    return {
+        "activation_rate": round(100 * active_users / enrolled, 1) if enrolled else None,
+        "weekly_practice_frequency": round(period_sessions / active_weeks, 1) if active_weeks else None,
+        "mau_rate": round(100 * mau_users / enrolled, 1) if enrolled else None,
+        "practices_to_mastery": practices_to_mastery,
+        "delta_score": delta_score,
+        "readiness_index": round(100 * mastered_users / enrolled, 1) if enrolled else None,
+    }
+
+
+def _mastery_distribution_rows(scores: list[float]) -> list[dict]:
+    """KPI-3.2: % Basic (<75) / Intermediate (75-94) / Advanced (>=95),
+    exactly the buckets Cesar's spec defines."""
+    if not scores:
+        return []
+    basic = sum(1 for s in scores if s < 75)
+    intermediate = sum(1 for s in scores if 75 <= s < MASTERY_THRESHOLD)
+    advanced = sum(1 for s in scores if s >= MASTERY_THRESHOLD)
+    total = len(scores)
+    return [
+        {"label": "Basic (<75)", "value": basic, "pct": round(100 * basic / total, 1)},
+        {"label": "Intermediate (75-94)", "value": intermediate, "pct": round(100 * intermediate / total, 1)},
+        {"label": "Advanced (>=95)", "value": advanced, "pct": round(100 * advanced / total, 1)},
+    ]
+
+
+async def _rolplay_app_closing_data_rows(cid: int, module: str | None, dc: str) -> list[dict]:
+    """Fetches and parses raw_closing_data JSON for every real session in
+    scope -- confirmed a genuinely rich per-session evaluation (5 scored
+    commercial-domain blocks, 24 individually-scored checklist items, an
+    adoption-intent movement field) for Siigo, and confirmed ENTIRELY ABSENT
+    for Takeda (its sessions score via closing_analysis HTML only, no JSON at
+    all). Rows with missing/invalid JSON are silently skipped, never treated
+    as zeros -- callers that get an empty list report "no data" honestly, the
+    same rule every other widget in this file already follows.
+    """
+    rows = await _rolplay_app_sql(
+        "SELECT s.raw_closing_data AS d FROM r_user_session s JOIN r_user u ON u.ID=s.user_id "
+        f"WHERE u.client_id={cid}{_category_clause(module)}{dc} AND s.raw_closing_data IS NOT NULL "
+        f"ORDER BY s.date_created DESC LIMIT {_CLOSING_DATA_SAMPLE_LIMIT}"
+    )
+    out: list[dict] = []
+    for r in rows:
+        raw = r.get("d")
+        if not raw:
+            continue
+        try:
+            parsed = json.loads(raw)
+        except (TypeError, ValueError):
+            continue
+        if isinstance(parsed, dict):
+            out.append(parsed)
+    return out
+
+
+_BLOQUE_SCORE_RE = re.compile(r"^bloque_(.+)_score$")
+_RUBRICA_ITEM_RE = re.compile(r"^rubrica_p(\d+)_nombre$")
+
+
+def _commercial_domain_rows(parsed: list[dict]) -> list[dict]:
+    """KPI-4.1: Score by Commercial Domain -- averages whichever
+    'bloque_<name>_score' keys each session's evaluator actually produced
+    (Siigo's real 5: crear_conexion/obtener_informacion/crear_emocion/
+    obtener_si/romper_no). Discovered per-session via regex, never a
+    hardcoded block list or count -- a different product's evaluator with
+    different domain names or a different number of stages still works."""
+    scores: dict[str, list[float]] = {}
+    for d in parsed:
+        for k, v in d.items():
+            m = _BLOQUE_SCORE_RE.match(k)
+            if not m:
+                continue
+            try:
+                scores.setdefault(m.group(1), []).append(float(v))
+            except (TypeError, ValueError):
+                continue
+    out = [
+        {"domain": name.replace("_", " ").title(), "avg_score": round(sum(vals) / len(vals), 1), "sessions": len(vals)}
+        for name, vals in scores.items()
+    ]
+    return sorted(out, key=lambda r: -r["avg_score"])
+
+
+def _rubrica_tag_counts(parsed: list[dict], want_pass: bool) -> list[dict]:
+    """KPI-4.2 (Top Strengths, want_pass=True) / KPI-4.3 (Top Areas of
+    Opportunity, want_pass=False) -- counts how often each individually-
+    scored checklist item ('rubrica_pN_nombre') passed or failed across every
+    real session, using whichever numbered items each session's evaluator
+    actually produced (Siigo's real rubric has 24). Discovered via regex, so
+    a different product's rubric with a different item count still works."""
+    counts: dict[str, int] = {}
+    for d in parsed:
+        for k, v in d.items():
+            m = _RUBRICA_ITEM_RE.match(k)
+            if not m or not v:
+                continue
+            cumplido = str(d.get(f"rubrica_p{m.group(1)}_cumplido", "")).strip().lower()
+            if cumplido not in ("true", "false"):
+                continue
+            if (cumplido == "true") == want_pass:
+                counts[str(v)] = counts.get(str(v), 0) + 1
+    ranked = sorted(counts.items(), key=lambda kv: -kv[1])[:10]
+    return [{"item": name, "count": n} for name, n in ranked]
+
+
+def _adoption_movement_rate(parsed: list[dict]) -> float | None:
+    """KPI-5.1: % of sessions where the evaluator's own 'intencion_movement'
+    field records a positive shift (Siigo's real values: 'Subió'/'Bajó' —
+    went up/down). Sessions from a tenant/product whose evaluator has no
+    such field are simply excluded from the denominator, not counted as a
+    fabricated 0% -- returns None (not 0) when nothing in scope has this
+    field at all, so the widget reports 'no data' rather than a false zero.
+    """
+    movements = [str(d.get("intencion_movement", "")).strip() for d in parsed if d.get("intencion_movement")]
+    if not movements:
+        return None
+    positive = sum(1 for m in movements if m.lower().startswith(("sub", "up", "increas", "avanz")))
+    return round(100 * positive / len(movements), 1)
+
+
 async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
     cid = int(cfg.connector_handle.get("client_id"))
     frm, to = _date_range(cfg, w)
@@ -473,6 +697,29 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
         } for r in rows]
         return WidgetPreview(widget_id=w.id, ok=bool(out), rows=out)
 
+    # ── Score by Commercial Domain (KPI-4.1) ──
+    if w.id.endswith(COMMERCIAL_DOMAIN_ID):
+        parsed = await _rolplay_app_closing_data_rows(cid, w.module, dc)
+        out = _commercial_domain_rows(parsed)
+        return WidgetPreview(widget_id=w.id, ok=bool(out), rows=out,
+                             error=None if out else "no raw_closing_data with bloque_* scores in scope")
+
+    # ── Top Strengths / Top Areas of Opportunity (KPI-4.2 / KPI-4.3) ──
+    if w.id.endswith(TOP_STRENGTHS_ID) or w.id.endswith(TOP_OPPORTUNITIES_ID):
+        parsed = await _rolplay_app_closing_data_rows(cid, w.module, dc)
+        out = _rubrica_tag_counts(parsed, want_pass=w.id.endswith(TOP_STRENGTHS_ID))
+        return WidgetPreview(widget_id=w.id, ok=bool(out), rows=out,
+                             error=None if out else "no raw_closing_data with rubrica_pN items in scope")
+
+    # ── Distribution by Mastery Level (KPI-3.2): Basic / Intermediate / Advanced ──
+    if w.id.endswith(MASTERY_DISTRIBUTION_ID):
+        score_rows = await _rolplay_app_sql(
+            f"SELECT {SCORE_SQL} sc {base}"
+        )
+        scores = [float(r["sc"]) for r in score_rows if r.get("sc") is not None]
+        out = _mastery_distribution_rows(scores)
+        return WidgetPreview(widget_id=w.id, ok=bool(out), rows=out)
+
     # ── Trend line: monthly avg score ──
     if w.type == WidgetType.line_chart:
         rows = await _rolplay_app_sql(
@@ -528,6 +775,21 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
             return _approval_donut((int(r.get("total_sessions") or 0) for r in rows),
                                     (int(r.get("passed_sessions") or 0) for r in rows), w.id)
         return WidgetPreview(widget_id=w.id, ok=bool(rows), rows=rows)
+
+    # ── Adoption Movement Rate (KPI-5.1) ──
+    if w.id.endswith(ADOPTION_MOVEMENT_ID) or w.metric_key == "adoption_movement_rate":
+        parsed = await _rolplay_app_closing_data_rows(cid, w.module, dc)
+        val = _adoption_movement_rate(parsed)
+        return WidgetPreview(widget_id=w.id, ok=val is not None, value=val,
+                             error=None if val is not None else "no raw_closing_data with intencion_movement in scope")
+
+    # ── Cesar's Group-1 KPIs (activation/weekly-frequency/MAU/practices-to-
+    # mastery/delta-score/readiness) -- schema-only, no raw_closing_data
+    # needed, so these work for any rolplay_app_sql tenant. ──
+    if w.metric_key in _CESAR_METRIC_KEYS:
+        cesar = await _rolplay_app_cesar_metrics(cid, w.module, frm, to)
+        val = cesar.get(w.metric_key)
+        return WidgetPreview(widget_id=w.id, ok=val is not None, value=val)
 
     # ── KPI tiles (scalar), with a period-over-period delta for the 3 metrics
     # the hand-built Overview compares (rolplayAppOverview's prevTotal
