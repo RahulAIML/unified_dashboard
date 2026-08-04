@@ -2,7 +2,7 @@
 
 import { useMemo, useEffect, useReducer, useRef, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Target, PlayCircle, TrendingUp, BadgeCheck, BarChart2, AlertTriangle, Trophy, MessageSquare, Users, Search, FileText, Lightbulb, CheckCircle2 } from "lucide-react"
+import { Target, PlayCircle, TrendingUp, TrendingDown, BadgeCheck, BarChart2, AlertTriangle, Trophy, MessageSquare, Users, Search, FileText, Lightbulb, CheckCircle2 } from "lucide-react"
 import { DashboardHeader }    from "@/components/DashboardHeader"
 import { SummaryCard }        from "@/components/SummaryCard"
 import { MetricCard } from "@/components/MetricCard"
@@ -956,7 +956,13 @@ export function DashboardContent() {
                             </div>
                             <div>
                               <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">{t.passRate}</p>
-                              <p className="text-sm font-bold text-primary tabular-nums">{passRateDisplay}%</p>
+                              <p className={cn(
+                                "text-sm font-bold tabular-nums inline-flex items-center gap-1",
+                                performer.pass_rate >= 50 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
+                              )}>
+                                {performer.pass_rate >= 50 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                                {passRateDisplay}%
+                              </p>
                             </div>
                           </div>
                         </div>

@@ -10,7 +10,7 @@ import { useAuthContext } from "@/components/AuthProvider"
 import { cn } from "@/lib/utils"
 import type { UsecaseBreakdownApiResponse } from "@/lib/types"
 
-interface AccessCaps { hasCoachData?: boolean; hasPharmaAccess?: boolean; hasBancoAccess?: boolean }
+interface AccessCaps { hasCoachData?: boolean; hasPharmaAccess?: boolean; hasBancoAccess?: boolean; hasRolplayAppAccess?: boolean }
 
 function scoreColor(pct: number): string {
   if (pct >= 70) return "text-emerald-600 dark:text-emerald-400"
@@ -24,7 +24,7 @@ export default function ActivitiesPage() {
   const { user } = useAuthContext()
 
   const { data: access } = useApi<AccessCaps>(user ? "/api/auth/access-status" : null)
-  const ready = !!(access?.hasCoachData || access?.hasPharmaAccess || access?.hasBancoAccess)
+  const ready = !!(access?.hasCoachData || access?.hasPharmaAccess || access?.hasBancoAccess || access?.hasRolplayAppAccess)
 
   const url = ready
     ? buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to, { solution: selectedSolution, rk: refreshKey })

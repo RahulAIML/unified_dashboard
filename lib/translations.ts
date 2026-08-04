@@ -96,6 +96,9 @@ export const translations = {
     navJourney:              'Journey',
     journeyTitle:            'Solution Journey',
     journeySub:              'Your Rolplay services in the order learners progress through them',
+    // --- Ranking / KPIs (rolplay-app only) ---
+    navRanking:              'Ranking',
+    navKpis:                 'KPIs',
     journeyPhaseCognitive:   'Cognitive Learning',
     journeyPhasePractice:    'Practical Learning',
     journeyPhaseValidation:  'Knowledge Validation',
@@ -840,6 +843,9 @@ export const translations = {
     // --- Journey de soluciones ---
     navJourney:              'Recorrido',
     journeyTitle:            'Recorrido de Soluciones',
+    // --- Ranking / KPIs (solo rolplay-app) ---
+    navRanking:              'Clasificación',
+    navKpis:                 'KPIs',
     journeySub:              'Tus servicios Rolplay en el orden en que los recorren los participantes',
     journeyPhaseCognitive:   'Aprendizaje Cognitivo',
     journeyPhasePractice:    'Aprendizaje Práctico',

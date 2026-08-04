@@ -573,3 +573,236 @@ export async function rolplayAppBestPerformers(
   })
   return { data }
 }
+
+// ── Cesar KPIs (Sugerencia de KPI's Cesar.xlsx) ──────────────────────────────
+//
+// TypeScript port of ai-service/app/preview_fetch.py's
+// _rolplay_app_cesar_metrics / _commercial_domain_rows / _rubrica_tag_counts /
+// _adoption_movement_rate / _mastery_distribution_rows -- same two groups,
+// same anti-fabrication rules, kept in sync so a rolplay-app tenant sees
+// identical numbers whether they're viewing the hand-built dashboard or an
+// AI-generated one.
+//
+// GROUP 1 (schema-only, works for any rolplay-app tenant): activation rate,
+// weekly practice frequency, MAU, practices-to-mastery, competency gain
+// (delta score), field readiness index, mastery distribution.
+//
+// GROUP 2 (depends on raw_closing_data carrying a rich per-session
+// evaluation JSON -- confirmed real for Siigo, confirmed ABSENT for Takeda):
+// commercial-domain breakdown, top strengths/opportunities, adoption
+// movement rate. Discovers bloque_*/rubrica_pN_* keys dynamically via regex,
+// never a hardcoded field list -- works for any product whose evaluator
+// produces this shape, reports empty/null (never a fabricated value) for
+// one that doesn't.
+//
+// NOT implemented, same reasons as the Python port: KPI-2.1 Time-to-Mastery
+// (no duration column exists anywhere in r_user_session), KPI-3.1/3.3/5.2
+// (would require classifying free-text fields into fixed categories --
+// fabrication risk), KPI-4.4 (would double-count the commercial-domain
+// widget's own "Romper el No" data under a different label).
+
+const MASTERY_THRESHOLD = 95 // "certified"/"mastery" bar -- distinct from PASS_THRESHOLD (70)
+const _CLOSING_DATA_SAMPLE_LIMIT = 500 // bounded scan, matches the Reports table's own cap
+
+export interface CesarGroup1Kpis {
+  activationRate: number | null
+  weeklyPracticeFrequency: number | null
+  mauRate: number | null
+  practicesToMastery: number | null
+  deltaScore: number | null
+  readinessIndex: number | null
+  masteryDistribution: { label: string; value: number; pct: number }[]
+}
+
+/** KPI-1.1/1.3/1.4/2.2/2.3/3.2/5.3. Per-user sequencing (delta score,
+ *  practices-to-mastery, readiness, mastery distribution) is done in JS
+ *  after fetching one bounded (user_id, score) row set, mirroring the
+ *  Python port's own approach -- simpler and more testable than nested
+ *  correlated SQL re-deriving SCORE_SQL inside a subquery. */
+export async function rolplayAppCesarGroup1(
+  clientId: number,
+  range?: { fromIso: string; toIso: string },
+  solution?: string | null,
+): Promise<CesarGroup1Kpis> {
+  const cid = Math.trunc(clientId)
+  const dc = dateClause(range?.fromIso, range?.toIso)
+  const cat = categoryClause(solution)
+  const round1 = (n: number) => Math.round(n * 10) / 10
+
+  const enrolledRows = await remoteSelect<{ n: number | string }>(
+    `SELECT COUNT(*) AS n FROM r_user u WHERE u.client_id = ${cid}`,
+  ).catch(() => [])
+  const enrolled = Number(enrolledRows[0]?.n ?? 0)
+
+  const activeRows = await remoteSelect<{ n: number | string; sessions: number | string; weeks: number | string }>(
+    `SELECT COUNT(DISTINCT s.user_id) AS n, COUNT(*) AS sessions,
+            COUNT(DISTINCT YEARWEEK(s.date_created)) AS weeks
+       FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
+      WHERE u.client_id = ${cid}${cat}${dc}`,
+  ).catch(() => [])
+  const activeUsers = Number(activeRows[0]?.n ?? 0)
+  const periodSessions = Number(activeRows[0]?.sessions ?? 0)
+  const activeWeeks = Number(activeRows[0]?.weeks ?? 0)
+
+  // MAU: a real 30-day recency window, independent of whatever wider range
+  // the dashboard's own date filter currently shows.
+  let mauUsers = 0
+  if (range?.toIso) {
+    const toDate = range.toIso.slice(0, 10)
+    const mauRows = await remoteSelect<{ n: number | string }>(
+      `SELECT COUNT(DISTINCT s.user_id) AS n FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
+        WHERE u.client_id = ${cid}${cat} AND s.date_created >= DATE_SUB('${toDate}', INTERVAL 30 DAY)
+          AND s.date_created <= '${toDate} 23:59:59'`,
+    ).catch(() => [])
+    mauUsers = Number(mauRows[0]?.n ?? 0)
+  }
+
+  const seqRows = await remoteSelect<{ user_id: number | string; sc: string | null }>(
+    `SELECT s.user_id, (${SCORE_SQL}) AS sc
+       FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
+      WHERE u.client_id = ${cid}${cat}${dc} AND (${SCORE_SQL}) IS NOT NULL
+      ORDER BY s.user_id, s.date_created ASC
+      LIMIT ${_CLOSING_DATA_SAMPLE_LIMIT}`,
+  ).catch(() => [])
+
+  const byUser = new Map<string, number[]>()
+  for (const r of seqRows) {
+    const sc = Number(r.sc)
+    if (!Number.isFinite(sc)) continue
+    const key = String(r.user_id)
+    const arr = byUser.get(key) ?? []
+    arr.push(sc)
+    byUser.set(key, arr)
+  }
+
+  const deltas: number[] = []
+  const practices: number[] = []
+  let mastered = 0
+  for (const scores of byUser.values()) {
+    if (scores.length >= 2) deltas.push(scores[scores.length - 1] - scores[0])
+    const idx = scores.findIndex(s => s >= MASTERY_THRESHOLD)
+    if (idx >= 0) practices.push(idx + 1)
+    if (scores.some(s => s >= MASTERY_THRESHOLD)) mastered++
+  }
+
+  const allScores = seqRows.map(r => Number(r.sc)).filter(n => Number.isFinite(n))
+  const basic = allScores.filter(s => s < 75).length
+  const intermediate = allScores.filter(s => s >= 75 && s < MASTERY_THRESHOLD).length
+  const advanced = allScores.filter(s => s >= MASTERY_THRESHOLD).length
+  const totalScored = allScores.length
+  const masteryDistribution = totalScored ? [
+    { label: 'Basic (<75)', value: basic, pct: round1(100 * basic / totalScored) },
+    { label: 'Intermediate (75-94)', value: intermediate, pct: round1(100 * intermediate / totalScored) },
+    { label: 'Advanced (>=95)', value: advanced, pct: round1(100 * advanced / totalScored) },
+  ] : []
+
+  return {
+    activationRate: enrolled ? round1(100 * activeUsers / enrolled) : null,
+    weeklyPracticeFrequency: activeWeeks ? round1(periodSessions / activeWeeks) : null,
+    mauRate: enrolled ? round1(100 * mauUsers / enrolled) : null,
+    practicesToMastery: practices.length ? round1(practices.reduce((a, b) => a + b, 0) / practices.length) : null,
+    deltaScore: deltas.length ? round1(deltas.reduce((a, b) => a + b, 0) / deltas.length) : null,
+    readinessIndex: enrolled ? round1(100 * mastered / enrolled) : null,
+    masteryDistribution,
+  }
+}
+
+async function rolplayAppClosingDataRows(
+  clientId: number,
+  range?: { fromIso: string; toIso: string },
+  solution?: string | null,
+): Promise<Record<string, unknown>[]> {
+  const cid = Math.trunc(clientId)
+  const dc = dateClause(range?.fromIso, range?.toIso)
+  const cat = categoryClause(solution)
+  const rows = await remoteSelect<{ d: string | null }>(
+    `SELECT s.raw_closing_data AS d FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
+      WHERE u.client_id = ${cid}${cat}${dc} AND s.raw_closing_data IS NOT NULL
+      ORDER BY s.date_created DESC LIMIT ${_CLOSING_DATA_SAMPLE_LIMIT}`,
+  ).catch(() => [])
+  const out: Record<string, unknown>[] = []
+  for (const r of rows) {
+    if (!r.d) continue
+    try {
+      const parsed: unknown = JSON.parse(r.d)
+      if (parsed && typeof parsed === 'object') out.push(parsed as Record<string, unknown>)
+    } catch {
+      // invalid JSON -- skip, never fabricate a row for it
+    }
+  }
+  return out
+}
+
+export interface CommercialDomainRow { domain: string; avgScore: number; sessions: number }
+
+/** KPI-4.1: averages whichever 'bloque_<name>_score' keys each session's
+ *  evaluator actually produced -- discovered via regex, never a hardcoded
+ *  block list or count. */
+export async function rolplayAppCommercialDomain(
+  clientId: number, range?: { fromIso: string; toIso: string }, solution?: string | null,
+): Promise<CommercialDomainRow[]> {
+  const parsed = await rolplayAppClosingDataRows(clientId, range, solution)
+  const scores = new Map<string, number[]>()
+  const re = /^bloque_(.+)_score$/
+  for (const d of parsed) {
+    for (const [k, v] of Object.entries(d)) {
+      const m = re.exec(k)
+      if (!m) continue
+      const num = Number(v)
+      if (!Number.isFinite(num)) continue
+      const arr = scores.get(m[1]) ?? []
+      arr.push(num)
+      scores.set(m[1], arr)
+    }
+  }
+  const out = Array.from(scores.entries()).map(([name, vals]) => ({
+    domain: name.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+    avgScore: Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10,
+    sessions: vals.length,
+  }))
+  return out.sort((a, b) => b.avgScore - a.avgScore)
+}
+
+export interface RubricaTagRow { item: string; count: number }
+
+/** KPI-4.2 (Top Strengths, wantPass=true) / KPI-4.3 (Top Areas of
+ *  Opportunity, wantPass=false): counts how often each individually-scored
+ *  checklist item ('rubrica_pN_nombre') passed or failed, using whichever
+ *  numbered items each session's evaluator actually produced. */
+export async function rolplayAppRubricaTags(
+  clientId: number, wantPass: boolean, range?: { fromIso: string; toIso: string }, solution?: string | null,
+): Promise<RubricaTagRow[]> {
+  const parsed = await rolplayAppClosingDataRows(clientId, range, solution)
+  const counts = new Map<string, number>()
+  const re = /^rubrica_p(\d+)_nombre$/
+  for (const d of parsed) {
+    for (const [k, v] of Object.entries(d)) {
+      const m = re.exec(k)
+      if (!m || !v) continue
+      const cumplido = String(d[`rubrica_p${m[1]}_cumplido`] ?? '').trim().toLowerCase()
+      if (cumplido !== 'true' && cumplido !== 'false') continue
+      if ((cumplido === 'true') === wantPass) {
+        const name = String(v)
+        counts.set(name, (counts.get(name) ?? 0) + 1)
+      }
+    }
+  }
+  return Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([item, count]) => ({ item, count }))
+}
+
+/** KPI-5.1: % of sessions where the evaluator's own 'intencion_movement'
+ *  field records a positive shift (Siigo's real values: 'Subió'/'Bajó').
+ *  Returns null (not 0) when nothing in scope has this field, so the
+ *  widget can report "no data" rather than a fabricated 0%. */
+export async function rolplayAppAdoptionMovementRate(
+  clientId: number, range?: { fromIso: string; toIso: string }, solution?: string | null,
+): Promise<number | null> {
+  const parsed = await rolplayAppClosingDataRows(clientId, range, solution)
+  const movements = parsed.map(d => String(d.intencion_movement ?? '').trim()).filter(Boolean)
+  if (!movements.length) return null
+  const positive = movements.filter(m => /^(sub|up|increas|avanz)/i.test(m)).length
+  return Math.round((100 * positive / movements.length) * 10) / 10
+}

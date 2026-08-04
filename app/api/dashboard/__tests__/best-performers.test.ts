@@ -57,11 +57,22 @@ describe('GET /api/dashboard/best-performers', () => {
     expect(bancoDashboardBestPerformers).not.toHaveBeenCalled()
   })
 
-  it('caps limit at 5 for analytics', async () => {
+  it('caps limit at 20 for analytics', async () => {
+    // Raised from 5 -> 20: Overview's own card already requested limit=10
+    // and was being silently truncated to 5; the new dedicated /ranking
+    // page needs more than 5 too.
     vi.mocked(resolveOrgType).mockResolvedValue('analytics')
     vi.mocked(bridgeBestPerformers).mockResolvedValue([])
     await GET(makeReq('&limit=100'))
     const call = vi.mocked(bridgeBestPerformers).mock.calls[0][0]
-    expect(call.limit).toBe(5)
+    expect(call.limit).toBe(20)
+  })
+
+  it('still honors a real limit under the cap', async () => {
+    vi.mocked(resolveOrgType).mockResolvedValue('analytics')
+    vi.mocked(bridgeBestPerformers).mockResolvedValue([])
+    await GET(makeReq('&limit=10'))
+    const call = vi.mocked(bridgeBestPerformers).mock.calls[0][0]
+    expect(call.limit).toBe(10)
   })
 })

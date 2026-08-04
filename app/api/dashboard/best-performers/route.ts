@@ -24,7 +24,12 @@ export async function GET(request: NextRequest) {
     if (!range) return buildApiError('Invalid date range', 400)
     const sol   = sp.get('solution')
     if (sol === 'second-brain') return buildSuccess({ data: [] }, { source: 'demo' })
-    const lim   = Math.min(5, Math.max(1, Number(sp.get('limit')) || 5))
+    // Cap raised 5 -> 20: Overview's own card already requested limit=10 and
+    // was silently truncated to 5 by this cap; the new dedicated /ranking
+    // page (a fuller leaderboard, not just an Overview summary card) needs
+    // more than 5 too. 20 still matches rolplayAppBestPerformers' own
+    // internal ceiling of 50, so this stays a real, bounded cap either way.
+    const lim   = Math.min(20, Math.max(1, Number(sp.get('limit')) || 5))
     return buildSuccess(demoBestPerformers(range.from, range.to, lim, sol), { source: 'demo' })
   }
 
@@ -39,7 +44,7 @@ export async function GET(request: NextRequest) {
     }
 
     const solution = sp.get('solution')
-    const limit    = Math.min(5, Math.max(1, Number(sp.get('limit')) || 5))
+    const limit    = Math.min(20, Math.max(1, Number(sp.get('limit')) || 5))
 
     if (solution === 'second-brain') {
       return buildSuccess({ data: [] }, { solution, source: 'second-brain-api-only' })

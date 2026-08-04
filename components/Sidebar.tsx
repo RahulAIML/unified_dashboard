@@ -7,7 +7,7 @@ import { motion } from "framer-motion"
 import {
   LayoutDashboard, BookOpen, BrainCircuit, Gamepad2,
   BadgeCheck, Database, Sun, Moon, Settings, LogOut, MessageSquare,
-  GitBranch, Building2, Activity, FileText, Route,
+  GitBranch, Building2, Activity, FileText, Route, Trophy, BarChart3,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useTheme } from "./ThemeProvider"
@@ -21,7 +21,7 @@ import { hasJourney } from "@/lib/journey"
 import type { Module } from "@/lib/types"
 
 // Minimal capability shape from /api/auth/access-status (only the flag we need).
-interface AccessCaps { hasPharmaAccess?: boolean; hasCoachData?: boolean; hasBancoAccess?: boolean }
+interface AccessCaps { hasPharmaAccess?: boolean; hasCoachData?: boolean; hasBancoAccess?: boolean; hasRolplayAppAccess?: boolean }
 
 function LogoImage() {
   const brand = useClientBrand()
@@ -124,9 +124,20 @@ export function Sidebar() {
     ...(hasModule('lms')           ? [{ href: "/lms",           label: t.navLms,        icon: BookOpen     }] : []),
     ...(hasModule('coach')         ? [{ href: "/coach",         label: t.navCoach,      icon: BrainCircuit }] : []),
     ...(hasModule('simulator')     ? [{ href: "/simulator",     label: t.navSimulator,  icon: Gamepad2     }] : []),
-    // Activities works for any tenant with per-activity analytics data.
-    ...((access?.hasCoachData || access?.hasPharmaAccess || access?.hasBancoAccess)
+    // Activities works for any tenant with per-activity analytics data —
+    // rolplay-app tenants included, matching the reference dashboards'
+    // "Actividades" nav item (docs/sanfer-dashboard-inventory.md).
+    // /api/dashboard/usecase-breakdown already had a real rolplay-app branch;
+    // this was purely a nav-gating omission, not a missing data path.
+    ...((access?.hasCoachData || access?.hasPharmaAccess || access?.hasBancoAccess || access?.hasRolplayAppAccess)
       ? [{ href: "/activities", label: t.navActivities, icon: Activity }] : []),
+    // Ranking: a dedicated leaderboard page, matching the reference
+    // dashboards' "Clasificación" nav item. /api/dashboard/best-performers
+    // already has a real branch for every org type (banco/pharma/rolplay-app/
+    // analytics) -- same gate as Activities/Reports, not rolplay-app-only,
+    // since the leaderboard itself is universal, not connector-specific.
+    ...((access?.hasCoachData || access?.hasPharmaAccess || access?.hasBancoAccess || access?.hasRolplayAppAccess)
+      ? [{ href: "/ranking", label: t.navRanking, icon: Trophy }] : []),
     // Conversational is pharma-only (objection-handling data). Capability-gated
     // so it appears exactly for the tenants that have it — no hardcoded list.
     ...(access?.hasPharmaAccess ? [
@@ -136,7 +147,10 @@ export function Sidebar() {
     ] : []),
     ...(hasModule('certification')  ? [{ href: "/certification", label: t.navCertification, icon: BadgeCheck }] : []),
     ...(hasModule('second-brain')   ? [{ href: "/second-brain",  label: t.navSecondBrain,   icon: Database   }] : []),
-    ...((access?.hasCoachData || access?.hasPharmaAccess || access?.hasBancoAccess)
+    // KPIs: Sugerencia de KPI's Cesar.xlsx, rolplay-app only (the one
+    // connector this spec was verified against real data for).
+    ...(access?.hasRolplayAppAccess ? [{ href: "/kpis", label: t.navKpis, icon: BarChart3 }] : []),
+    ...((access?.hasCoachData || access?.hasPharmaAccess || access?.hasBancoAccess || access?.hasRolplayAppAccess)
       ? [{ href: "/reports", label: t.navReports, icon: FileText }] : []),
     { href: "/settings",      label: t.navSettings,      icon: Settings        },
   ]
