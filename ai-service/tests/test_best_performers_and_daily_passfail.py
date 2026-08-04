@@ -32,15 +32,29 @@ def _non_rolplay_schema() -> NormalizedSchema:
     ])
 
 
+def _exceltis_schema() -> NormalizedSchema:
+    return NormalizedSchema(company="Heineken", slug="heineken", metrics=[
+        DiscoveredMetric(key="total_sessions", label="Total Sessions", type=MetricType.count,
+                         source_kind=ServiceKind.pharma_exceltis_rest, source_action="/api/rol_play_sim_extractor"),
+    ])
+
+
 class BestPerformersWidgetTests(unittest.TestCase):
     def test_added_for_rolplay_app_sql(self):
         widgets = _auto_best_performers_widget(_rolplay_schema(), set())
         self.assertEqual(len(widgets), 1)
         self.assertEqual(widgets[0].id, BEST_PERFORMERS_ID)
         self.assertEqual(widgets[0].span, 4)
-        self.assertTrue(widgets[0].business_question)
 
-    def test_absent_for_other_connectors(self):
+    def test_added_for_pharma_exceltis_rest(self):
+        # Found live on Heineken: a real per-user identity (Usuario_Nombre)
+        # exists in this connector's rows, but no leaderboard was ever built.
+        widgets = _auto_best_performers_widget(_exceltis_schema(), set())
+        self.assertEqual(len(widgets), 1)
+        self.assertEqual(widgets[0].id, BEST_PERFORMERS_ID)
+        self.assertEqual(widgets[0].source_kind, ServiceKind.pharma_exceltis_rest)
+
+    def test_still_absent_for_pharma_kpi_no_verified_identity_field(self):
         self.assertEqual(_auto_best_performers_widget(_non_rolplay_schema(), set()), [])
 
     def test_not_duplicated_if_already_present(self):

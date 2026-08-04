@@ -350,7 +350,46 @@ async def _exceltis(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
         if w.metric_key == "pass_rate":
             v = round(100 * sum(1 for s in scored if s >= PASS_THRESHOLD) / len(scored), 1) if scored else None
             return WidgetPreview(widget_id=w.id, ok=v is not None, value=v)
-    # breakdown by usecase
+
+    # ── Score trend (monthly avg score) ── Found live (Heineken): this
+    # connector's rows carry a real 'Fecha_y_Hora' timestamp, but nothing
+    # ever built a trend from it -- every line_chart widget silently fell
+    # through to the usecase-breakdown branch below and rendered the wrong
+    # data under a "Score Trend" title. Checked before that branch now.
+    if w.type == WidgetType.line_chart:
+        by_month: dict[str, list[float]] = {}
+        for r in rows:
+            sc = _norm_score(r)
+            ts = r.get("Fecha_y_Hora")
+            if sc is None or not ts:
+                continue
+            month = str(ts)[:7]  # 'YYYY-MM-DDTHH:MM:SS' -> 'YYYY-MM'
+            by_month.setdefault(month, []).append(sc)
+        series = [{"date": m, "value": round(sum(v) / len(v), 2), "sessions": len(v)}
+                  for m, v in sorted(by_month.items())]
+        return WidgetPreview(widget_id=w.id, ok=bool(series), series=series)
+
+    # ── Best Performers: top users by average score ── Found live
+    # (Heineken): rows carry a real 'Usuario_Nombre' identity, but no
+    # leaderboard was ever built for this connector. Must be checked before
+    # the generic usecase-breakdown branch below claims every table widget.
+    if w.id.endswith(BEST_PERFORMERS_ID):
+        by_user: dict[str, list[float]] = {}
+        for r in rows:
+            name = (r.get("Usuario_Nombre") or "").strip()
+            sc = _norm_score(r)
+            if not name or sc is None:
+                continue
+            by_user.setdefault(name, []).append(sc)
+        ranked = sorted(by_user.items(), key=lambda kv: -(sum(kv[1]) / len(kv[1])))[:_BEST_PERFORMERS_LIMIT]
+        out = [{
+            "user_email": name, "user_name": name, "sessions": len(scores),
+            "avg_score": round(sum(scores) / len(scores), 2),
+            "pass_rate": round(100 * sum(1 for s in scores if s >= PASS_THRESHOLD) / len(scores), 1),
+        } for name, scores in ranked]
+        return WidgetPreview(widget_id=w.id, ok=bool(out), rows=out)
+
+    # ── breakdown by usecase ──
     by: dict[Any, int] = {}
     for r in rows:
         by[r.get("Caso_de_Uso_Nombre") or r.get("ID_Caso_de_Uso")] = by.get(r.get("Caso_de_Uso_Nombre") or r.get("ID_Caso_de_Uso"), 0) + 1

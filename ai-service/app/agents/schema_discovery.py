@@ -119,6 +119,23 @@ async def _sale_exercises_schema(k, svc, schema, exercise_ids, log) -> None:
 
 # ── pharma exceltis_rest ─────────────────────────────────────────────────────────
 async def _exceltis_schema(k, svc, schema, exercise_ids, log) -> None:
+    """Found live (Heineken): this connector's rows are genuinely rich --
+    a real per-user identity (Usuario_Nombre), a real timestamp
+    (Fecha_y_Hora), a real usecase id (ID_Caso_de_Uso), even per-domain
+    scores (Dominio_1..6) -- but this function previously declared only
+    count/score/rate metrics, never a dimension or timeseries one. Since
+    dashboard_planning.py's heuristic only builds a breakdown chart/table/
+    donut when a MetricType.dimension metric exists, and a trend line only
+    when a MetricType.timeseries metric exists, every exceltis_rest tenant's
+    generated dashboard was silently capped at 3 KPI tiles and nothing else,
+    regardless of how much real data was actually available. Confirmed for
+    Heineken specifically: schema.dimensions was already set to
+    ["usecase", "user"] as a hint, but no corresponding DiscoveredMetric
+    ever existed for the heuristic to act on -- a declared-but-unused
+    dimension list is exactly the kind of "generic-language spec, empty
+    schema.metrics list" case that trips a future audit here, so both are
+    now added for real, backed by the exact response fields probed above.
+    """
     ids = exercise_ids or k.exercise_ids
     schema.dimensions = ["usecase", "user"]
     has_numeric_score = False
@@ -142,6 +159,20 @@ async def _exceltis_schema(k, svc, schema, exercise_ids, log) -> None:
         ]
     else:
         schema.note = "No numeric score in this client's data — counts-only."
+    # Real dimension (breakdown by usecase — preview_fetch.py's _exceltis
+    # already had this query, it just never got a widget because nothing
+    # declared this metric): counts sessions, so real regardless of whether
+    # this client has numeric scores.
+    schema.metrics.append(DiscoveredMetric(
+        key="sessions_by_usecase", label="Sessions by Usecase", type=MetricType.dimension,
+        source_kind=svc.kind, source_action="/api/rol_play_sim_extractor"))
+    # Real timeseries (trend over Fecha_y_Hora, newly added to
+    # preview_fetch.py alongside this) — only when there's a real score to
+    # trend; a counts-only client gets the breakdown above but no score line.
+    if has_numeric_score:
+        schema.metrics.append(DiscoveredMetric(
+            key="score_trend", label="Score Trend", type=MetricType.timeseries,
+            source_kind=svc.kind, source_action="/api/rol_play_sim_extractor"))
         await log("schema_discovery", "info", "This client records qualitative results — counts-only dashboard")
 
 

@@ -652,27 +652,38 @@ def _auto_drilldown_table(schema: NormalizedSchema, existing_ids: set[str]) -> l
     )]
 
 
+# Connectors with a VERIFIED per-user identity field preview_fetch.py can
+# actually group by -- rolplay_app_sql (r_user.email/name) confirmed from
+# the ERD; pharma_exceltis_rest (Usuario_Nombre) confirmed live against real
+# Heineken data (a full per-tenant parity audit found this connector's
+# dashboards capped at 3 KPI tiles with no leaderboard, despite the raw rows
+# already carrying a real name). Never guessed for a connector without a
+# verified identity field -- pharma_kpi/pharma_sale_exercises/coach_app_sql
+# stay out until their own row shapes are confirmed to carry one.
+_LEADERBOARD_CONNECTORS = {ServiceKind.rolplay_app_sql, ServiceKind.pharma_exceltis_rest}
+
+
 def _auto_best_performers_widget(schema: NormalizedSchema, existing_ids: set[str]) -> list[WidgetConfig]:
     """Top-users-by-average-score leaderboard, mirroring the hand-built
     Overview page's prominent "Best Performers" card (lib/bridge-rolplay-
     app.ts's rolplayAppBestPerformers, components/DashboardContent.tsx's
     Trophy-icon card) -- confirmed via a full parity audit against the real
     ERD/hand-built code to be entirely missing from every AI-generated
-    rolplay_app_sql dashboard until now.
+    rolplay_app_sql dashboard until now, and separately confirmed missing
+    for pharma_exceltis_rest (Heineken) despite real per-user data existing.
 
-    rolplay_app_sql ONLY: the one connector with a verified per-user query
-    shape for this (r_user/r_user_session, already used by every other
-    widget here); no other connector's schema carries a per-user identity
-    this pipeline has verified yet.
+    Scoped to _LEADERBOARD_CONNECTORS -- every connector with a VERIFIED
+    per-user identity field preview_fetch.py can actually group by, never a
+    guess for one that hasn't been confirmed.
     """
     if BEST_PERFORMERS_ID in existing_ids or not schema.metrics:
         return []
-    if not any(m.source_kind == ServiceKind.rolplay_app_sql for m in schema.metrics):
+    if not any(m.source_kind in _LEADERBOARD_CONNECTORS for m in schema.metrics):
         return []
-    src = next(m for m in schema.metrics if m.source_kind == ServiceKind.rolplay_app_sql)
+    src = next(m for m in schema.metrics if m.source_kind in _LEADERBOARD_CONNECTORS)
     return [WidgetConfig(
         id=BEST_PERFORMERS_ID, type=WidgetType.table, title="Best Performers",
-        source_kind=src.source_kind, source_action="r_user_session", span=4,
+        source_kind=src.source_kind, source_action=src.source_action, span=4,
         business_question="Which reps have the highest average score?",
     )]
 

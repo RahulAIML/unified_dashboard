@@ -66,5 +66,65 @@ class ExceltisPreviewTests(unittest.TestCase):
         self.assertEqual(preview.rows[0]["total_sessions"], 2)
 
 
+class ExceltisTrendAndLeaderboardTests(unittest.TestCase):
+    """Regression tests for the gap found live on Heineken: schema_discovery
+    never declared a dimension/timeseries metric for this connector, so
+    dashboard_planning.py's heuristic never built anything beyond 3 KPI
+    tiles -- no trend, no breakdown widget with a real chart, no leaderboard
+    -- despite the raw rows already carrying a real timestamp
+    (Fecha_y_Hora) and a real per-user name (Usuario_Nombre)."""
+
+    def test_line_chart_builds_a_real_monthly_score_trend(self):
+        rows = [
+            {"Calificacion": 90, "Fecha_y_Hora": "2026-01-15T10:00:00"},
+            {"Calificacion": 70, "Fecha_y_Hora": "2026-01-20T10:00:00"},
+            {"Calificacion": 60, "Fecha_y_Hora": "2026-02-05T10:00:00"},
+        ]
+        with patch("app.preview_fetch.get_json", new=AsyncMock(return_value=(200, rows))):
+            preview = _run(fetch_widget(_cfg(), _widget(WidgetType.line_chart)))
+        self.assertTrue(preview.ok)
+        self.assertEqual(preview.series, [
+            {"date": "2026-01", "value": 80.0, "sessions": 2},
+            {"date": "2026-02", "value": 60.0, "sessions": 1},
+        ])
+
+    def test_line_chart_reports_no_data_rather_than_crashing_on_empty_rows(self):
+        with patch("app.preview_fetch.get_json", new=AsyncMock(return_value=(200, []))):
+            preview = _run(fetch_widget(_cfg(), _widget(WidgetType.line_chart)))
+        self.assertFalse(preview.ok)
+        self.assertEqual(preview.series, [])
+
+    def test_best_performers_ranks_by_real_usuario_nombre(self):
+        from app.preview_fetch import BEST_PERFORMERS_ID
+        rows = [
+            {"Calificacion": 90, "Usuario_Nombre": "Diana"},
+            {"Calificacion": 70, "Usuario_Nombre": "Diana"},
+            {"Calificacion": 95, "Usuario_Nombre": "Carlos"},
+        ]
+        widget = WidgetConfig(id=BEST_PERFORMERS_ID, type=WidgetType.table, title="Best Performers",
+                              source_kind=ServiceKind.pharma_exceltis_rest, source_action="/api/rol_play_sim_extractor")
+        with patch("app.preview_fetch.get_json", new=AsyncMock(return_value=(200, rows))):
+            preview = _run(fetch_widget(_cfg(), widget))
+        self.assertTrue(preview.ok)
+        self.assertEqual(preview.rows[0]["user_name"], "Carlos")  # 95 > 80 avg
+        self.assertEqual(preview.rows[0]["avg_score"], 95.0)
+        self.assertEqual(preview.rows[1]["user_name"], "Diana")
+        self.assertEqual(preview.rows[1]["sessions"], 2)
+        self.assertEqual(preview.rows[1]["avg_score"], 80.0)
+
+    def test_best_performers_skips_rows_with_no_name_or_score(self):
+        from app.preview_fetch import BEST_PERFORMERS_ID
+        rows = [
+            {"Calificacion": 90, "Usuario_Nombre": ""},
+            {"Calificacion": None, "Usuario_Nombre": "Diana"},
+        ]
+        widget = WidgetConfig(id=BEST_PERFORMERS_ID, type=WidgetType.table, title="Best Performers",
+                              source_kind=ServiceKind.pharma_exceltis_rest, source_action="/api/rol_play_sim_extractor")
+        with patch("app.preview_fetch.get_json", new=AsyncMock(return_value=(200, rows))):
+            preview = _run(fetch_widget(_cfg(), widget))
+        self.assertFalse(preview.ok)
+        self.assertEqual(preview.rows, [])
+
+
 if __name__ == "__main__":
     unittest.main()
