@@ -172,9 +172,10 @@ class AssemblePagesTests(unittest.TestCase):
         schema = _rolplay_app_schema(["simulator", "certification"])
         metrics = {m.key: m for m in schema.metrics}
         pages = _assemble_pages(schema, metrics, [DashboardRow(id="row_kpis", widgets=[])])
-        # "reports" is appended last for every rolplay_app_sql schema -- see
-        # ReportsPageTests below.
-        self.assertEqual([p.id for p in pages], ["overview", "simulator", "certification", "reports"])
+        # "ranking"/"activities" are auto-added for every rolplay_app_sql
+        # schema (real leaderboard/per-simulator-breakdown pages -- see
+        # RankingAndActivitiesPageTests below), "reports" last of all.
+        self.assertEqual([p.id for p in pages], ["overview", "simulator", "certification", "ranking", "activities", "reports"])
 
     def test_besins_shaped_schema_gets_a_secondary_coach_app_sql_page(self):
         # rolplay_app_sql (primary, coach-only) + coach_app_sql (secondary,
@@ -183,14 +184,14 @@ class AssemblePagesTests(unittest.TestCase):
         secondary = _coach_app_sql_schema()
         metrics = {m.key: m for m in schema.metrics}
         pages = _assemble_pages(schema, metrics, [DashboardRow(id="row_kpis", widgets=[])], secondary)
-        self.assertEqual([p.id for p in pages], ["overview", "coach", "secondary_coach_app_sql", "reports"])
-        self.assertEqual(pages[-2].title, "Coach Analytics")
+        self.assertEqual([p.id for p in pages], ["overview", "coach", "secondary_coach_app_sql", "ranking", "activities", "reports"])
+        self.assertEqual(pages[2].title, "Coach Analytics")
 
     def test_no_secondary_page_when_none_was_found(self):
         schema = _rolplay_app_schema(["simulator"])
         metrics = {m.key: m for m in schema.metrics}
         pages = _assemble_pages(schema, metrics, [DashboardRow(id="row_kpis", widgets=[])], None)
-        self.assertEqual([p.id for p in pages], ["overview", "simulator", "reports"])
+        self.assertEqual([p.id for p in pages], ["overview", "simulator", "ranking", "activities", "reports"])
 
 
 def _coach_app_sql_schema() -> NormalizedSchema:
@@ -270,7 +271,7 @@ class LmsMetricsNeverLeakOntoOverviewTests(unittest.TestCase):
         schema = _rolplay_app_schema(["coach"])
         secondary = _coach_app_sql_schema()
         pages = _run(dashboard_planning.run(schema, _noop_log, secondary_schema=secondary))[0]
-        self.assertEqual([p.id for p in pages], ["overview", "coach", "secondary_coach_app_sql", "reports"])
+        self.assertEqual([p.id for p in pages], ["overview", "coach", "secondary_coach_app_sql", "ranking", "activities", "reports"])
         overview_widget_ids = {w.id for r in pages[0].rows for w in r.widgets}
         secondary_widget_ids = {w.id for r in pages[2].rows for w in r.widgets}
         # No collision between the primary's and secondary's widget ids.

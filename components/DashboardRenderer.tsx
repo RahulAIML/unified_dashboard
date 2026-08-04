@@ -10,7 +10,7 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { PlayCircle, Target, TrendingUp, TrendingDown, Minus, BadgeCheck, Trophy } from 'lucide-react'
+import { PlayCircle, Target, TrendingUp, TrendingDown, Minus, BadgeCheck, Trophy, AlertTriangle } from 'lucide-react'
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis,
   CartesianGrid, Tooltip, LabelList, PieChart, Pie, Cell, Legend,
@@ -208,6 +208,13 @@ function Leaderboard({ rows }: { rows: Record<string, unknown>[] }) {
     <div className="space-y-2">
       {rows.slice(0, 10).map((r, idx) => {
         const displayName = fmt(r.user_name) !== '—' ? fmt(r.user_name) : fmt(r.user_email)
+        // A performer's OWN pass rate is what the hand-built reference leaderboards
+        // (e.g. the standalone Siigo dashboard's "Mejores Desempeños") show as a
+        // colored up/down indicator per row -- there's no real "vs their own prior
+        // period" baseline for a single rep, so this reads as a performance
+        // indicator (majority of their sessions passed = good), not a period delta.
+        const passRateNum = Number(r.pass_rate)
+        const goodPassRate = Number.isFinite(passRateNum) && passRateNum >= 50
         return (
           <div key={idx} className="flex items-center justify-between p-3 sm:p-4 rounded-xl bg-muted/30 hover:bg-muted/50 transition-all duration-200 gap-3">
             <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
@@ -233,7 +240,13 @@ function Leaderboard({ rows }: { rows: Record<string, unknown>[] }) {
               </div>
               <div>
                 <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">Pass Rate</p>
-                <p className="text-sm font-bold text-primary tabular-nums">{fmt(r.pass_rate)}%</p>
+                <p className={cn(
+                  'text-sm font-bold tabular-nums inline-flex items-center gap-1',
+                  goodPassRate ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400',
+                )}>
+                  {goodPassRate ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                  {fmt(r.pass_rate)}%
+                </p>
               </div>
             </div>
           </div>
@@ -302,14 +315,23 @@ function DashboardRows({ rows, pv }: { rows: DashRow[]; pv: Map<string, WidgetPr
  * (a config built before multi-page generation existed, or one page's worth
  * of content) — so nothing regresses for an older cached config.
  */
+/**
+ * One alert-style card per insight -- matches the hand-built reference
+ * dashboards' "Insights IA" treatment (a warning-icon, red-tinted card per
+ * finding) rather than a single shared box with a bulleted list. Each
+ * sentence is still exactly what agents/insights.py generated (evidence-
+ * backed, grounded in real fetched data) -- only the presentation changed.
+ */
 function AIInsights({ insights }: { insights: string[] }) {
   if (!insights.length) return null
   return (
-    <div className="mb-5 rounded-xl border border-primary/20 bg-primary/5 p-4">
-      <div className="text-xs font-semibold uppercase tracking-wide text-primary mb-2">AI Insights</div>
-      <ul className="space-y-1.5 text-sm text-foreground">
-        {insights.map((s, i) => <li key={i} className="leading-relaxed">{s}</li>)}
-      </ul>
+    <div className="mb-5 space-y-2">
+      {insights.map((s, i) => (
+        <div key={i} className="flex items-start gap-3 rounded-xl border border-rose-500/20 bg-rose-500/5 p-4">
+          <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+          <p className="text-sm text-foreground leading-relaxed">{s}</p>
+        </div>
+      ))}
     </div>
   )
 }

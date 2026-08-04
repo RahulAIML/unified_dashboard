@@ -99,10 +99,74 @@ def _assemble_pages(
     secondary_page = _secondary_page(secondary_schema)
     if secondary_page:
         pages.append(secondary_page)
+    ranking_page = _ranking_page(schema)
+    if ranking_page:
+        pages.append(ranking_page)
+    activities_page = _activities_page(schema)
+    if activities_page:
+        pages.append(activities_page)
     reports_page = _reports_page(schema)
     if reports_page:
         pages.append(reports_page)
     return pages
+
+
+def _ranking_page(schema: NormalizedSchema) -> DashboardPage | None:
+    """A dedicated Ranking/Leaderboard page — matches the reference hand-built
+    per-tenant dashboards (docs/sanfer-dashboard-inventory.md's "Clasificación"
+    nav item, and the standalone Siigo dashboard's own "Mejores Desempeños ...
+    Ver todo" pattern), which give the leaderboard both a summary card on
+    Overview AND its own full page. The widget id is prefixed (not the bare
+    BEST_PERFORMERS_ID Overview's own leaderboard card already uses) purely to
+    avoid a duplicate-widget-id collision across the dashboard — it still ends
+    with BEST_PERFORMERS_ID, so preview_fetch.py's id-based routing picks it
+    up via the same query, same real data, no backend change needed.
+
+    rolplay_app_sql ONLY, same reason as every other auto-page here: it's the
+    one connector with a verified per-user query shape for this.
+    """
+    if not any(m.source_kind == ServiceKind.rolplay_app_sql for m in schema.metrics):
+        return None
+    src = next(m for m in schema.metrics if m.source_kind == ServiceKind.rolplay_app_sql)
+    widget = WidgetConfig(
+        id=f"ranking_{BEST_PERFORMERS_ID}", type=WidgetType.table, title="Best Performers",
+        source_kind=src.source_kind, source_action="r_user_session", span=4,
+        business_question="Which reps have the highest average score?",
+    )
+    return DashboardPage(id="ranking", title="Ranking", rows=[
+        DashboardRow(id="ranking_table", title="Leaderboard", widgets=[widget]),
+    ])
+
+
+def _activities_page(schema: NormalizedSchema) -> DashboardPage | None:
+    """A dedicated Activities page — matches the reference dashboards'
+    "Actividades" nav item (per-activity/per-simulator breakdown as its own
+    page). Reuses the SAME per-simulator breakdown query every bar_chart/
+    donut/table widget on Overview already runs (preview_fetch.py routes by
+    widget TYPE, not id, for this branch) -- these are new widget ids so they
+    don't collide with Overview's own breakdown widgets, but they fetch
+    identically real data, just laid out as their own page.
+
+    rolplay_app_sql ONLY, same reason as _ranking_page.
+    """
+    if not any(m.source_kind == ServiceKind.rolplay_app_sql for m in schema.metrics):
+        return None
+    src = next(m for m in schema.metrics if m.source_kind == ServiceKind.rolplay_app_sql)
+    widgets = [
+        WidgetConfig(id="activities_chart_breakdown", type=WidgetType.bar_chart,
+                     title="Sessions by Simulator", source_kind=src.source_kind,
+                     source_action="r_user_session", span=2),
+        WidgetConfig(id="activities_donut_breakdown", type=WidgetType.donut,
+                     title="Simulator — Share", source_kind=src.source_kind,
+                     source_action="r_user_session", span=2),
+        WidgetConfig(id="activities_table_breakdown", type=WidgetType.table,
+                     title="Simulator — detail", source_kind=src.source_kind,
+                     source_action="r_user_session", span=4,
+                     business_question="Which simulators are used most, and how do they perform?"),
+    ]
+    return DashboardPage(id="activities", title="Activities", rows=[
+        DashboardRow(id="activities_breakdown", title="Per-Simulator Breakdown", widgets=widgets),
+    ])
 
 
 def _reports_page(schema: NormalizedSchema) -> DashboardPage | None:

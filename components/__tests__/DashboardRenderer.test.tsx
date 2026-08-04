@@ -394,11 +394,32 @@ describe('DashboardRenderer — end to end with real widget shapes', () => {
       }],
     }
 
-    const { getByText } = render(<DashboardRenderer config={config} preview={preview} />)
+    const { getByText, container } = render(<DashboardRenderer config={config} preview={preview} />)
 
     expect(getByText('Alice')).toBeTruthy()
     expect(getByText('b@siigo.com')).toBeTruthy()
     expect(getByText('91.20')).toBeTruthy()
+    // Matches the hand-built reference dashboards' per-row colored trend
+    // indicator on the leaderboard (e.g. a green "↑ 100%" next to the score).
+    expect(container.querySelector('.lucide-trending-up')).toBeTruthy()
+  })
+
+  it('shows a down-trend indicator on the leaderboard for a below-50% pass rate', () => {
+    const config = {
+      company: 'Siigo', slug: 'siigo', title: 'Siigo Analytics', connector: 'rolplay_app_sql',
+      rows: [{ id: 'r1', widgets: [{ id: 'table_best_performers', type: 'table', title: 'Best Performers' }] }],
+      recommendations: [],
+    }
+    const preview = {
+      widgets: [{
+        widget_id: 'table_best_performers', ok: true,
+        rows: [{ user_email: 'a@siigo.com', user_name: 'Alice', sessions: 5, avg_score: 40, pass_rate: 20 }],
+      }],
+    }
+
+    const { container } = render(<DashboardRenderer config={config} preview={preview} />)
+
+    expect(container.querySelector('.lucide-trending-down')).toBeTruthy()
   })
 })
 
@@ -528,16 +549,18 @@ describe('DashboardRenderer — AI Insights', () => {
     rows: [], recommendations: [],
   }
 
-  it('shows insight sentences when present', () => {
+  it('shows insight sentences when present, each as its own alert-style card', () => {
     const config = { ...baseConfig, insights: ['Reps completed 772 sessions with an average score of 61.'] }
-    const { getByText } = render(<DashboardRenderer config={config} preview={{ widgets: [] }} />)
-    expect(getByText('AI Insights')).toBeTruthy()
+    const { getByText, container } = render(<DashboardRenderer config={config} preview={{ widgets: [] }} />)
     expect(getByText('Reps completed 772 sessions with an average score of 61.')).toBeTruthy()
+    // Matches the hand-built reference dashboards' "Insights IA" warning-icon
+    // card treatment, not a single shared box with a bulleted list.
+    expect(container.querySelector('.lucide-triangle-alert')).toBeTruthy()
   })
 
   it('renders nothing when insights is empty or absent', () => {
-    const { queryByText } = render(<DashboardRenderer config={baseConfig} preview={{ widgets: [] }} />)
-    expect(queryByText('AI Insights')).toBeNull()
+    const { container } = render(<DashboardRenderer config={baseConfig} preview={{ widgets: [] }} />)
+    expect(container.querySelector('.lucide-triangle-alert')).toBeNull()
   })
 
   it('still shows insights on a multi-page config, above the tab bar', () => {
