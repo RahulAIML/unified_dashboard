@@ -66,11 +66,11 @@ function addDays(d: Date, n: number): Date {
 export const DEMO_USECASE_IDS = [101, 102, 103, 104, 105] as const
 
 export const DEMO_USECASES: Record<number, string> = {
-  101: 'Discovery Call Mastery',
-  102: 'Objection Handling Pro',
-  103: 'Product Demo Excellence',
-  104: 'Negotiation Techniques',
-  105: 'Technical Deep Dive',
+  101: 'Dominio de Llamadas de Descubrimiento',
+  102: 'Profesional en Manejo de Objeciones',
+  103: 'Excelencia en Demostración de Producto',
+  104: 'Técnicas de Negociación',
+  105: 'Análisis Técnico Profundo',
 }
 
 // Demo drilldown report IDs — these map to entries in reports.ts
@@ -272,6 +272,7 @@ export function demoAccessStatus() {
     hasPharmaAccess:     true,
     hasRolplayAppAccess: true,
     hasAnyAccess:        true,
+    hasBusinessLines:    true,
   }
 }
 
