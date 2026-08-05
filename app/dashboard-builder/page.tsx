@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useAuthContext } from '@/components/AuthProvider'
 import { DashboardRenderer, humanizeConnector } from '@/components/DashboardRenderer'
 
 // ── Types mirroring the AI service JobState ─────────────────────────────────────
@@ -54,6 +55,41 @@ const SERVICE_OPTIONS: { id: string; label: string }[] = [
 interface KnownCompany { id: number; name: string; sessions: number; users: number }
 
 export default function DashboardBuilderPage() {
+  const { user, isLoading } = useAuthContext()
+
+  // Show loading state while auth is being checked
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Require admin role to access the dashboard builder
+  if (!user || user.role !== 'admin') {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center max-w-md">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Access Denied</h1>
+          <p className="text-gray-600 mb-6">
+            Only administrators can access the Dashboard Builder.
+            {!user && ' Please log in to continue.'}
+          </p>
+          <a
+            href="/login"
+            className="inline-block bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
+          >
+            {user ? 'Back to Dashboard' : 'Go to Login'}
+          </a>
+        </div>
+      </div>
+    )
+  }
+
   const [company, setCompany] = useState('')
   // Populates a <datalist> so a manager can pick an existing rolplay_app_sql
   // client instead of retyping/misspelling its name — free-text entry still
