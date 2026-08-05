@@ -89,9 +89,14 @@ _CLOSING_DATA_SAMPLE_LIMIT = 500  # bounded scan, matches REPORTS_TABLE's own ca
 # KPI-1.1/1.3/1.4/2.2/2.3/5.3 metric_keys (Group 1 above) — all computed by
 # _rolplay_app_cesar_metrics, distinct from the pre-existing
 # _rolplay_app_kpi_metrics (total_sessions/avg_score/pass_rate/etc.).
-_CESAR_METRIC_KEYS = {
+# Public (no leading underscore) so dashboard_planning.py can import it to
+# exclude these from the generic Overview tile builder — they already have a
+# dedicated home on the KPIs page; duplicating them onto Overview is exactly
+# the kind of "not in its proper place" clutter the user flagged.
+CESAR_METRIC_KEYS = {
     "activation_rate", "weekly_practice_frequency", "mau_rate",
     "practices_to_mastery", "delta_score", "readiness_index",
+    "trial_and_error_rate",
 }
 
 
@@ -548,6 +553,35 @@ async def _rolplay_app_cesar_metrics(cid: int, module: str | None, frm: str, to:
 
     mastered_users = sum(1 for scores in by_user.values() if any(sc >= MASTERY_THRESHOLD for sc in scores))
 
+    # KPI-2.4 Trial-and-Error Index: % of Certifier ("SEGMENT") attempts made
+    # by a user with no prior Coach ("COACH") session. Deliberately queried
+    # WITHOUT _category_clause(module) -- this needs to see a user's FULL
+    # cross-category session history to know what came "before", unlike
+    # every other metric here which is fine scoped to one module. Real only
+    # for a tenant whose r_simulator.category actually contains SEGMENT (few
+    # do -- confirmed live: Siigo/Rowe/Armstrong/Sanfer have none, M8 does);
+    # everyone else honestly gets None ("no data"), never a fabricated 0.
+    cat_seq_rows = await _rolplay_app_sql(
+        f"SELECT s.user_id, sim.category AS category, s.date_created "
+        f"FROM r_user_session s JOIN r_user u ON u.ID=s.user_id "
+        f"LEFT JOIN r_simulator sim ON sim.ID=s.simulator_id "
+        f"WHERE u.client_id={cid}{dc} "
+        f"ORDER BY s.user_id, s.date_created ASC LIMIT {_CLOSING_DATA_SAMPLE_LIMIT}"
+    )
+    certifier_attempts = 0
+    no_prior_coach = 0
+    seen_coach: set[Any] = set()
+    for r in cat_seq_rows:
+        category = str(r.get("category") or "").upper()
+        uid = r["user_id"]
+        if category == "COACH":
+            seen_coach.add(uid)
+        elif category == "SEGMENT":
+            certifier_attempts += 1
+            if uid not in seen_coach:
+                no_prior_coach += 1
+    trial_and_error_rate = round(100 * no_prior_coach / certifier_attempts, 1) if certifier_attempts else None
+
     return {
         "activation_rate": round(100 * active_users / enrolled, 1) if enrolled else None,
         "weekly_practice_frequency": round(period_sessions / active_weeks, 1) if active_weeks else None,
@@ -555,6 +589,7 @@ async def _rolplay_app_cesar_metrics(cid: int, module: str | None, frm: str, to:
         "practices_to_mastery": practices_to_mastery,
         "delta_score": delta_score,
         "readiness_index": round(100 * mastered_users / enrolled, 1) if enrolled else None,
+        "trial_and_error_rate": trial_and_error_rate,
     }
 
 
@@ -825,7 +860,7 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
     # ── Cesar's Group-1 KPIs (activation/weekly-frequency/MAU/practices-to-
     # mastery/delta-score/readiness) -- schema-only, no raw_closing_data
     # needed, so these work for any rolplay_app_sql tenant. ──
-    if w.metric_key in _CESAR_METRIC_KEYS:
+    if w.metric_key in CESAR_METRIC_KEYS:
         cesar = await _rolplay_app_cesar_metrics(cid, w.module, frm, to)
         val = cesar.get(w.metric_key)
         return WidgetPreview(widget_id=w.id, ok=val is not None, value=val)

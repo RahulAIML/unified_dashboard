@@ -232,6 +232,14 @@ async def _rolplay_app_schema(svc, schema, log: LogFn) -> None:
         DiscoveredMetric(key="readiness_index", label="Field Readiness Index", type=MetricType.rate,
                          source_kind=svc.kind, source_action="r_user_session",
                          business_question="What % of the sales force has reached mastery-level certification?"),
+        # KPI-2.4 Trial-and-Error Index. Registered unconditionally like every
+        # other Cesar metric here -- it's real only for a tenant whose
+        # r_simulator.category actually has a Certifier ("SEGMENT") module
+        # (confirmed live: most don't), but preview_fetch.py reports None
+        # ("no data") for the rest, never a fabricated rate.
+        DiscoveredMetric(key="trial_and_error_rate", label="Trial-and-Error Index", type=MetricType.rate,
+                         source_kind=svc.kind, source_action="r_user_session",
+                         business_question="What % of certification attempts happened with no prior coaching?"),
     ]
 
     client_id = int((svc.handle or {}).get("client_id") or 0)

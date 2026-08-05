@@ -611,6 +611,7 @@ export interface CesarGroup1Kpis {
   practicesToMastery: number | null
   deltaScore: number | null
   readinessIndex: number | null
+  trialAndErrorRate: number | null
   masteryDistribution: { label: string; value: number; pct: number }[]
 }
 
@@ -685,6 +686,34 @@ export async function rolplayAppCesarGroup1(
     if (scores.some(s => s >= MASTERY_THRESHOLD)) mastered++
   }
 
+  // KPI-2.4 Trial-and-Error Index: % of Certifier ("SEGMENT") attempts with
+  // no prior Coach ("COACH") session for that user. Queried WITHOUT `cat` --
+  // needs a user's full cross-category history, unlike every other metric
+  // here. Real only for a tenant whose r_simulator.category has a Certifier
+  // module (confirmed live: most don't); everyone else gets null, matching
+  // the Python port's own rule of "no data" over a fabricated rate.
+  const catSeqRows = await remoteSelect<{ user_id: number | string; category: string | null; date_created: string }>(
+    `SELECT s.user_id, sim.category AS category, s.date_created
+       FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
+       LEFT JOIN r_simulator sim ON sim.ID = s.simulator_id
+      WHERE u.client_id = ${cid}${dc}
+      ORDER BY s.user_id, s.date_created ASC
+      LIMIT ${_CLOSING_DATA_SAMPLE_LIMIT}`,
+  ).catch(() => [])
+  let certifierAttempts = 0
+  let noPriorCoach = 0
+  const seenCoach = new Set<string>()
+  for (const r of catSeqRows) {
+    const category = String(r.category ?? '').toUpperCase()
+    const uid = String(r.user_id)
+    if (category === 'COACH') seenCoach.add(uid)
+    else if (category === 'SEGMENT') {
+      certifierAttempts++
+      if (!seenCoach.has(uid)) noPriorCoach++
+    }
+  }
+  const trialAndErrorRate = certifierAttempts ? round1(100 * noPriorCoach / certifierAttempts) : null
+
   const allScores = seqRows.map(r => Number(r.sc)).filter(n => Number.isFinite(n))
   const basic = allScores.filter(s => s < 75).length
   const intermediate = allScores.filter(s => s >= 75 && s < MASTERY_THRESHOLD).length
@@ -703,6 +732,7 @@ export async function rolplayAppCesarGroup1(
     practicesToMastery: practices.length ? round1(practices.reduce((a, b) => a + b, 0) / practices.length) : null,
     deltaScore: deltas.length ? round1(deltas.reduce((a, b) => a + b, 0) / deltas.length) : null,
     readinessIndex: enrolled ? round1(100 * mastered / enrolled) : null,
+    trialAndErrorRate,
     masteryDistribution,
   }
 }

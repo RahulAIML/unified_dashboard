@@ -84,6 +84,41 @@ describe('rolplayAppCesarGroup1', () => {
     expect(result.readinessIndex).toBeNull()
     expect(result.weeklyPracticeFrequency).toBeNull()
   })
+
+  it('KPI-2.4: computes trial-and-error rate from real cross-category session sequencing', async () => {
+    const mod = await fresh()
+    fetchSpy
+      .mockResolvedValueOnce(respond([{ n: 10 }])) // enrolled
+      .mockResolvedValueOnce(respond([{ n: 5, sessions: 20, weeks: 2 }])) // active
+      .mockResolvedValueOnce(respond([{ n: 2 }])) // MAU
+      .mockResolvedValueOnce(respond([])) // seq rows (no scores needed for this KPI)
+      .mockResolvedValueOnce(respond([
+        // user 1: Coach before Certifier -- NOT trial-and-error
+        { user_id: 1, category: 'COACH', date_created: '2026-01-01' },
+        { user_id: 1, category: 'SEGMENT', date_created: '2026-01-02' },
+        // user 2: Certifier with no prior Coach -- IS trial-and-error
+        { user_id: 2, category: 'SEGMENT', date_created: '2026-01-01' },
+      ]))
+
+    const result = await mod.rolplayAppCesarGroup1(29, { fromIso: '2026-06-01T00:00:00.000Z', toIso: '2026-07-01T00:00:00.000Z' })
+    expect(result.trialAndErrorRate).toBe(50) // 1 of 2 certifier attempts had no prior coach
+  })
+
+  it('KPI-2.4: returns null (not a fabricated rate) for a tenant with no Certifier module', async () => {
+    const mod = await fresh()
+    fetchSpy
+      .mockResolvedValueOnce(respond([{ n: 10 }]))
+      .mockResolvedValueOnce(respond([{ n: 5, sessions: 20, weeks: 2 }]))
+      .mockResolvedValueOnce(respond([{ n: 2 }]))
+      .mockResolvedValueOnce(respond([]))
+      .mockResolvedValueOnce(respond([
+        { user_id: 1, category: 'SIM', date_created: '2026-01-01' },
+        { user_id: 1, category: 'COACH', date_created: '2026-01-02' },
+      ]))
+
+    const result = await mod.rolplayAppCesarGroup1(29, { fromIso: '2026-06-01T00:00:00.000Z', toIso: '2026-07-01T00:00:00.000Z' })
+    expect(result.trialAndErrorRate).toBeNull()
+  })
 })
 
 describe('rolplayAppCommercialDomain', () => {

@@ -4,14 +4,14 @@
  * KPIs page — Sugerencia de KPI's Cesar.xlsx, ported to the hand-built
  * dashboard. rolplay-app only (see /api/dashboard/cesar-kpis and
  * lib/bridge-rolplay-app.ts's Cesar KPI functions for the full per-KPI
- * feasibility notes — 14 of 19 KPIs implemented, 5 documented as not
+ * feasibility notes — 13 of 19 KPIs implemented, 6 documented as not
  * computable without fabricating data the platform never recorded).
  */
 
 import { useMemo } from "react"
 import {
   UserCheck, Repeat, CalendarClock, Target, TrendingUp as TrendUpIcon,
-  ShieldCheck, Compass, Award, ThumbsUp, ThumbsDown,
+  ShieldCheck, Compass, Award, ThumbsUp, ThumbsDown, AlertTriangle,
 } from "lucide-react"
 import { DashboardHeader } from "@/components/DashboardHeader"
 import { MetricCard } from "@/components/MetricCard"
@@ -30,6 +30,7 @@ interface CesarKpisResponse {
   practicesToMastery: number | null
   deltaScore: number | null
   readinessIndex: number | null
+  trialAndErrorRate: number | null
   masteryDistribution: { label: string; value: number; pct: number }[]
   adoptionMovementRate: number | null
   commercialDomain: { domain: string; avgScore: number; sessions: number }[]
@@ -76,6 +77,7 @@ export default function KpisPage() {
     { key: "practices", label: "Practices to Mastery", value: fmtNum(data?.practicesToMastery ?? null), icon: <Target className="w-4 h-4" /> },
     { key: "delta", label: "Competency Gain (Delta Score)", value: data?.deltaScore != null ? `${data.deltaScore > 0 ? "+" : ""}${data.deltaScore}` : "—", icon: <TrendUpIcon className="w-4 h-4" /> },
     { key: "readiness", label: "Field Readiness Index", value: fmtPct(data?.readinessIndex ?? null), icon: <ShieldCheck className="w-4 h-4" /> },
+    { key: "trialAndError", label: "Trial-and-Error Index", value: fmtPct(data?.trialAndErrorRate ?? null), icon: <AlertTriangle className="w-4 h-4" /> },
   ]), [data])
 
   if (!ready) {

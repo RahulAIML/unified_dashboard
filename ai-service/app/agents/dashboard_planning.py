@@ -14,6 +14,7 @@ from ..llm import gemini_json, llm_available
 from ..preview_fetch import (
     ADOPTION_MOVEMENT_ID,
     BEST_PERFORMERS_ID,
+    CESAR_METRIC_KEYS,
     COMMERCIAL_DOMAIN_ID,
     DAILY_PASSFAIL_ID,
     MASTERY_DISTRIBUTION_ID,
@@ -175,6 +176,14 @@ def _cesar_kpis_page(schema: NormalizedSchema) -> DashboardPage | None:
     AI evaluator produces this shape and report "no data" (not a fabricated
     zero) for one that doesn't — same rule as every other widget here.
 
+    KPI-2.4 Trial-and-Error Index (added 2026-08-05, re-audited against the
+    real spreadsheet): % of Certifier attempts with no prior Coach session
+    for that user. Computed from real cross-category session sequencing
+    (preview_fetch.py's _rolplay_app_cesar_metrics) — real only for a tenant
+    whose r_simulator.category actually has a Certifier ("SEGMENT") module;
+    confirmed live most tenants (Siigo/Rowe/Armstrong/Sanfer) don't, M8 does.
+    Reports "no data" rather than a fabricated rate for everyone else.
+
     NOT implemented, and why (documented rather than silently skipped):
       - KPI-2.1 Time-to-Mastery (minutes to reach mastery): r_user_session
         has no duration/time-spent column anywhere in the schema (confirmed
@@ -185,11 +194,15 @@ def _cesar_kpis_page(schema: NormalizedSchema) -> DashboardPage | None:
         identical to it — the raw_closing_data fields that read as
         "technical" (product_knowledge_accuracy etc.) are free-text quality
         labels, not scores, for every session sampled.
-      - KPI-3.3 Commercial Deviation Rate, KPI-5.2 Close Rate with Measurable
-        Commitment: would require classifying free-text fields
-        (areas_for_improvement / resultado_comercial) into fixed categories
-        by keyword-matching — risks a fabricated classification rule rather
-        than a real, evidenced measurement.
+      - KPI-3.3 Commercial Deviation Rate, KPI-3.4 Scientific Gap Frequency,
+        KPI-5.2 Close Rate with Measurable Commitment: would require
+        classifying free-text fields (areas_for_improvement /
+        resultado_comercial / rubrica item names) into fixed categories by
+        keyword-matching — risks a fabricated classification rule rather
+        than a real, evidenced measurement. Re-checked live for 3.4
+        specifically: Siigo's 24 rubrica items are all sales-process
+        checklist entries, none tag a distinct "technical/scientific
+        concept" — same problem as 3.3/5.2, not a separate case.
       - KPI-4.4 Objection Conversion Index: the "Romper el No" domain in the
         Score by Commercial Domain widget already surfaces objection-
         handling performance; a separate metric would double-count the same
@@ -213,6 +226,7 @@ def _cesar_kpis_page(schema: NormalizedSchema) -> DashboardPage | None:
         tile("practices_to_mastery", "Practices to Mastery", "How many attempts does it take to reach mastery (>=95)?"),
         tile("delta_score", "Competency Gain (Delta Score)", "How much do reps improve from their first to their most recent session?"),
         tile("readiness_index", "Field Readiness Index", "What % of the sales force has reached mastery-level certification?"),
+        tile("trial_and_error_rate", "Trial-and-Error Index", "What % of certification attempts happened with no prior coaching?"),
     ]
     mastery_widget = WidgetConfig(
         id=MASTERY_DISTRIBUTION_ID, type=WidgetType.donut, title="Distribution by Mastery Level",
@@ -439,8 +453,10 @@ async def _llm_plan(schema: NormalizedSchema) -> dict | None:
         # LMS metrics are deliberately excluded — they always get their own
         # dedicated page (_lms_page), built deterministically, never left to
         # the LLM to place alongside unrelated Overview metrics.
+        # Cesar metrics excluded too -- they always get their own dedicated
+        # KPIs page (_cesar_kpis_page), same reasoning as LMS.
         "metrics": [{"key": m.key, "label": m.label, "type": m.type.value}
-                    for m in schema.metrics if m.key not in _LMS_METRIC_KEYS],
+                    for m in schema.metrics if m.key not in _LMS_METRIC_KEYS and m.key not in CESAR_METRIC_KEYS],
         "dimensions": schema.dimensions,
         "modules": schema.modules,
         "date_range": schema.date_range,
@@ -463,8 +479,9 @@ def _build_from_plan(plan: dict, schema: NormalizedSchema, metrics: dict):
     tile_keys: set[str] = set()
     for key in plan.get("tiles", []):
         m = metrics.get(key)
-        if not m or m.type not in (MetricType.count, MetricType.score, MetricType.rate) or key in tile_keys or key in _LMS_METRIC_KEYS:
-            continue  # enforce: real metric only, and never an LMS metric here — those get their own page
+        if (not m or m.type not in (MetricType.count, MetricType.score, MetricType.rate)
+                or key in tile_keys or key in _LMS_METRIC_KEYS or key in CESAR_METRIC_KEYS):
+            continue  # enforce: real metric only, never an LMS or Cesar metric here — those get their own page
         tile_keys.add(key)
         tiles.append(WidgetConfig(id=f"tile_{key}", type=WidgetType.kpi_tile, title=m.label,
                                   metric_key=key, source_kind=m.source_kind, source_action=m.source_action,
@@ -474,7 +491,8 @@ def _build_from_plan(plan: dict, schema: NormalizedSchema, metrics: dict):
     # certification stats) must still show up — an LLM's own summarization
     # picking "3-5 typical KPIs" is not grounds to silently drop a real one.
     for m in schema.metrics:
-        if m.key in tile_keys or m.type not in (MetricType.count, MetricType.score, MetricType.rate) or m.key in _LMS_METRIC_KEYS:
+        if (m.key in tile_keys or m.type not in (MetricType.count, MetricType.score, MetricType.rate)
+                or m.key in _LMS_METRIC_KEYS or m.key in CESAR_METRIC_KEYS):
             continue
         tile_keys.add(m.key)
         tiles.append(WidgetConfig(id=f"tile_{m.key}", type=WidgetType.kpi_tile, title=m.label,
@@ -504,11 +522,11 @@ def _build_from_plan(plan: dict, schema: NormalizedSchema, metrics: dict):
             dim = schema.dimensions[0] if schema.dimensions else None
         # a chart must be backed by a real metric or a real dimension — never
         # an LMS metric here, those only ever appear on their own page.
-        if mkey in _LMS_METRIC_KEYS:
+        if mkey in _LMS_METRIC_KEYS or mkey in CESAR_METRIC_KEYS:
             mkey = None
         src_metric = (
             metrics.get(mkey) if mkey in metrics
-            else next((m for m in schema.metrics if m.key not in _LMS_METRIC_KEYS), None)
+            else next((m for m in schema.metrics if m.key not in _LMS_METRIC_KEYS and m.key not in CESAR_METRIC_KEYS), None)
         )
         if not src_metric:
             continue
@@ -613,7 +631,8 @@ def _auto_donut_widgets(schema: NormalizedSchema, existing_ids: set[str]) -> lis
             source_kind=dim.source_kind, source_action=dim.source_action, span=2,
         ))
     if "donut_approval" not in existing_ids and any(
-        m.type == MetricType.rate and m.key not in _LMS_METRIC_KEYS for m in schema.metrics
+        m.type == MetricType.rate and m.key not in _LMS_METRIC_KEYS and m.key not in CESAR_METRIC_KEYS
+        for m in schema.metrics
     ):
         extra.append(WidgetConfig(
             id="donut_approval", type=WidgetType.donut, title="Pass / Fail Breakdown",
@@ -727,7 +746,12 @@ def _heuristic(schema: NormalizedSchema, metrics: dict):
                           source_kind=m.source_kind, source_action=m.source_action, raw_field=m.raw_field,
                           business_question=m.business_question)
              for m in schema.metrics
-             if m.type in (MetricType.count, MetricType.score, MetricType.rate) and m.key not in _LMS_METRIC_KEYS]
+             # Cesar metrics excluded here -- found live on M8: they were
+             # rendering TWICE, once as a raw tile on Overview via this
+             # generic builder and once properly organized on the dedicated
+             # KPIs page (_cesar_kpis_page below). They belong only there.
+             if m.type in (MetricType.count, MetricType.score, MetricType.rate)
+             and m.key not in _LMS_METRIC_KEYS and m.key not in CESAR_METRIC_KEYS]
     charts: list[WidgetConfig] = []
     ts = next((m for m in schema.metrics if m.type == MetricType.timeseries and m.key not in _LMS_METRIC_KEYS), None)
     if ts:
