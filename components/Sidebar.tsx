@@ -21,7 +21,7 @@ import { hasJourney } from "@/lib/journey"
 import type { Module } from "@/lib/types"
 
 // Minimal capability shape from /api/auth/access-status (only the flag we need).
-interface AccessCaps { hasPharmaAccess?: boolean; hasCoachData?: boolean; hasBancoAccess?: boolean; hasRolplayAppAccess?: boolean }
+interface AccessCaps { hasPharmaAccess?: boolean; hasCoachData?: boolean; hasBancoAccess?: boolean; hasRolplayAppAccess?: boolean; hasBusinessLines?: boolean }
 
 function LogoImage() {
   const brand = useClientBrand()
@@ -142,8 +142,15 @@ export function Sidebar() {
     // so it appears exactly for the tenants that have it — no hardcoded list.
     ...(access?.hasPharmaAccess ? [
       { href: "/conversational", label: t.navConversational, icon: MessageSquare },
-      { href: "/business-lines", label: t.navBusinessLines,  icon: GitBranch     },
       { href: "/organization",   label: t.navOrganization,   icon: Building2     },
+    ] : []),
+    // Business Segments: previously shown for every pharma-sim tenant
+    // regardless of whether they actually have segment data, landing tenants
+    // without it (Apotex, M8, ...) on a structurally-empty page. hasBusinessLines
+    // is a real per-tenant flag (Sanfer's tag1 catalog, confirmed live) — gate
+    // on that specifically, not just generic pharma access.
+    ...(access?.hasBusinessLines ? [
+      { href: "/business-lines", label: t.navBusinessLines,  icon: GitBranch     },
     ] : []),
     ...(hasModule('certification')  ? [{ href: "/certification", label: t.navCertification, icon: BadgeCheck }] : []),
     ...(hasModule('second-brain')   ? [{ href: "/second-brain",  label: t.navSecondBrain,   icon: Database   }] : []),
