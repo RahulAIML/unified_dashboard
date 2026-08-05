@@ -16,7 +16,7 @@ import { getTenantIntegration } from "@/lib/db-tenant-integrations"
 import { secondBrainAdminCandidates } from "@/lib/banco-second-brain"
 import { isBancoOrg } from "@/lib/org-type"
 import { resolveRolplayAppAccess } from "@/lib/bridge-rolplay-app"
-import { resolvePharmaTenant } from "@/lib/pharma-tenant"
+import { resolvePharmaTenant, TENANT_CONFIG } from "@/lib/pharma-tenant"
 import { isDemoDataEnabled } from "@/lib/demo"
 import { demoAccessStatus } from "@/lib/demo/engine"
 
@@ -113,7 +113,15 @@ export async function GET(request: NextRequest) {
   const hasCoachData       = auth.customerId > 0
   const hasSecondBrainData = await probeSecondBrainAccess(auth.customerId, auth.email)
   const hasBancoAccess     = isBancoOrg(auth.email)
-  const hasPharmaAccess    = await resolvePharmaTenant(auth.email) !== null
+  const pharmaTenant       = await resolvePharmaTenant(auth.email)
+  const hasPharmaAccess    = pharmaTenant !== null
+  // Business Segments nav/page previously showed for EVERY pharma-sim tenant
+  // regardless of whether they actually have segment data (hasBusinessLines
+  // is a real per-tenant flag in pharma-tenant.ts/db-tenants.ts, confirmed
+  // true only for Sanfer's tag1 catalog) — landing a tenant like Apotex/M8 on
+  // a structurally-empty page. Now gated on the real flag, not just generic
+  // pharma access.
+  const hasBusinessLines   = pharmaTenant ? TENANT_CONFIG[pharmaTenant]?.hasBusinessLines ?? false : false
   // rolplay-app (query-endpoint): domain resolves the tenant, but access is
   // granted only to a REAL user of that client (isolation — a domain squatter
   // is denied). resolveRolplayAppAccess verifies against r_user.
@@ -122,7 +130,7 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     success: true,
-    data: { hasCoachData, hasSecondBrainData, hasBancoAccess, hasPharmaAccess, hasRolplayAppAccess, hasAnyAccess },
+    data: { hasCoachData, hasSecondBrainData, hasBancoAccess, hasPharmaAccess, hasRolplayAppAccess, hasAnyAccess, hasBusinessLines },
     meta: { timestamp: new Date().toISOString() },
   })
 }
