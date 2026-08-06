@@ -1,85 +1,134 @@
 "use server"
 
+/**
+ * The "Ask AI" dashboard assistant (components/ai-assistant.tsx -> /api/ai).
+ *
+ * Retrofitted onto docs/AI_ASSISTANT_HARNESS_STANDARD.md's two mandatory
+ * capabilities (analytical + navigational) -- this file previously ran a
+ * SYSTEM_INSTRUCTION for a "TCF French learning assistant" (a leftover from
+ * an unrelated prototype) against real Rolplay dashboard data, which is
+ * exactly the "shallow, fact-level answers... cannot help a user navigate
+ * the product" gap the standard was written to close. There was no French
+ * feature anywhere in this app for that prompt to have ever been correct.
+ *
+ * Root cause, not just symptom: the model was never told what product it
+ * was embedded in, so it had no way to ground a "where do I export this"
+ * question in a real click path, or an "is this good" question in a real
+ * benchmark -- it could only pattern-match on the raw numbers dashboard.tsx
+ * happened to paste into the prompt. Fixed by giving it what the harness
+ * calls AssistantContext: a real glossary, a real navigation map, and a
+ * hard split between "interpret" and "guide" prompting so one doesn't leak
+ * into the other.
+ */
+
 const GEMINI_API_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
 
-const SYSTEM_INSTRUCTION = `You are a TCF French learning assistant.
-
-CRITICAL RULES:
-
-1. ALWAYS answer the user’s question directly.
-
-2. NEVER ask for more context for simple questions.
-
-3. NEVER say:
-  - 'That’s a great question'
-  - 'Can you provide more context'
-  - 'Are you working on reading/writing'
-
-4. For translation:
-  → Return translation immediately
-
-5. For meaning:
-  → Give meaning + example
-
-6. For grammar:
-  → Give explanation + example
-
-7. Assume the most likely intent and respond.
-
----
-
-BEHAVIOR:
-
-Simple → direct answer
-Ambiguous → answer + optional clarification
-Complex → structured explanation
-
-You must be:
-
-Direct
-Helpful
-Fast
-Example-driven
-
-DO NOT LOOP.
-DO NOT DELAY.
-DO NOT ASK UNNECESSARY QUESTIONS.`
-
-/** Expand short/vague queries into richer analytical prompts */
-// No query expansion — rely on strict system prompt instead
-function expandQuery(question: string): string {
-  return question
+// ── Product knowledge (harness.py's AssistantContext.product_glossary) ──────
+//
+// Real Rolplay terms this session verified against actual code/data, not
+// guessed: COACH/SIM/SEGMENT are r_simulator.category values (lib/bridge-
+// rolplay-app.ts's SOLUTION_TO_CATEGORY); PASS_THRESHOLD/MASTERY_THRESHOLD
+// are the same constants the dashboards themselves compute pass rate and
+// the Cesar KPI framework's mastery bar from.
+const PRODUCT_GLOSSARY: Record<string, string> = {
+  "Master Coach / Coach Maestro": "AI role-play coaching sessions (category COACH). Practice-oriented, ungraded pass/fail is informational, not certifying.",
+  "Simulator / Simulador": "Structured practice scenarios (category SIM). The bulk of session volume for most clients.",
+  "Certifier Coach / Coach Certificador": "Formal certification attempts (category SEGMENT). This is the module a Trial-and-Error Index or certification pass rate refers to.",
+  "Second Brain": "A separate WhatsApp-based AI coaching follow-up product with its own API and data source -- never blended with Master Coach/Simulator/Certifier numbers, since it measures a different thing (ongoing field coaching, not a scored session).",
+  "Pass Rate": "% of sessions scoring 70 or above -- the one pass threshold used platform-wide.",
+  "MAU (Monthly Active Users)": "Users with at least one session in the real last 30 days, independent of whatever wider date range the dashboard filter currently shows.",
+  "Activation Rate": "% of enrolled users who have started at least one session (not necessarily completed or passed one).",
+  "Mastery / Mastery threshold": "A score of 95 or above -- the Cesar KPI framework's bar for 'certified/mastered', distinct from the everyday 70 pass threshold.",
+  "Trial-and-Error Index": "% of Certifier Coach attempts made by a user with NO prior Master Coach session -- a proxy for 'rushing to certify without practicing first'. Lower is better.",
+  "Practices to Mastery": "Average number of sessions a user needed before their first score reaching Mastery (95+). Only meaningful for users who actually reached it.",
+  "KPIs page": "The Cesar KPI framework (activation, weekly practice frequency, MAU, mastery distribution, commercial-domain breakdown) -- only populated for rolplay_app_sql clients; every other connector shows it empty by design, not by bug.",
+  "Journey": "The cross-module progression view (LMS -> Master Coach/Simulator -> Certifier Coach -> Second Brain). Only appears in navigation when a tenant has 2+ of those modules -- a single module has nothing to sequence.",
+  "Business Segments": "Pharma-tenant-only breakdown by business line/segment. Not available for rolplay_app_sql or banco tenants.",
+  "Confidential label": "An optional tag an admin can set when generating/publishing a dashboard, shown on the published /d/[slug] view for links shared before a client's own login is set up.",
 }
 
-/** Call Gemini once with the given payload */
-async function callGemini(
-  userContent: string,
-  apiKey: string
-): Promise<string> {
+// ── Navigation map (harness.py's AssistantContext.navigation_map) ──────────
+const NAVIGATION_MAP: Record<string, string> = {
+  "Overview / Resumen": "Left sidebar -> Overview (first item). The default landing page after login -- KPI tiles, score trend, activity trend, use-case breakdown, best performers.",
+  "Journey": "Left sidebar -> Journey (only visible if your organization has 2+ modules).",
+  "LMS": "Left sidebar -> LMS (only visible if your organization has a LearnWorlds integration configured).",
+  "Master Coach": "Left sidebar -> Coach Maestro.",
+  "Simulator": "Left sidebar -> Simulador.",
+  "Certifier Coach": "Left sidebar -> Coach Certificador.",
+  "Second Brain": "Left sidebar -> Second Brain (only visible if your organization has its own Second Brain integration).",
+  "Ranking / Leaderboard": "Left sidebar -> Ranking. Shows the top 20 performers; the Overview page's own leaderboard card shows the top 10 as a preview.",
+  "Activities": "Left sidebar -> Activities. Per-activity/use-case breakdown.",
+  "KPIs": "Left sidebar -> KPIs (rolplay_app_sql clients only).",
+  "Reports / exporting a CSV": "Left sidebar -> Reports for the full searchable/paginated table, OR click Export in the top-right corner of any table widget on another page -- both download a CSV of exactly what's currently filtered on screen.",
+  "Settings / branding": "Left sidebar -> Settings (bottom, above sign out). Platform name, logo, and color theme -- changes save on 'Guardar Cambios'/'Save Changes', not automatically.",
+  "Language toggle": "The EN/ES button in the top-right of every dashboard page's header.",
+  "Dark mode": "The sun/moon toggle near the bottom of the left sidebar. Light mode is the default on first visit; your choice is remembered after that.",
+  "Dashboard Builder": "Left sidebar, admin accounts only -- generates a new AI-driven dashboard for a company by name.",
+  "User Management": "Left sidebar, admin accounts only -- promote or demote another account's role.",
+}
+
+const ANALYTICAL_TRIGGERS = [
+  "why", "trend", "is that normal", "is this normal", "should we", "should i",
+  "what does this mean", "is that good", "is this good", "compared to",
+  "improve", "improving", "drop", "dropped", "increase", "decrease",
+  "how much", "what changed", "when did", "trending", "worse", "better",
+]
+
+const NAVIGATIONAL_TRIGGERS = [
+  "where is", "where can i", "how do i", "how do you", "how to",
+  "what is", "what's a", "what does", "what are", "find", "export", "download",
+]
+
+function detectIntent(question: string): "analytical" | "navigational" | "ambiguous" {
+  const q = question.toLowerCase()
+  const isAnalytical = ANALYTICAL_TRIGGERS.some(t => q.includes(t))
+  const isNavigational = NAVIGATIONAL_TRIGGERS.some(t => q.includes(t))
+  if (isAnalytical && !isNavigational) return "analytical"
+  if (isNavigational && !isAnalytical) return "navigational"
+  return "ambiguous"
+}
+
+const ANALYTICAL_SYSTEM = `You are an analytics coach for Rolplay's sales-enablement dashboards.
+Your role is to INTERPRET data, not restate it.
+
+HARD RULES:
+1. Never restate a number without adding interpretation ("pass rate is 65%" is not an answer by itself).
+2. Cite figures precisely, including the comparison: "improved from 55% to 65% (+18%)", not "went up".
+3. Reference the prior-period comparison or trend direction already given in the dashboard data below whenever it's relevant to the question.
+4. If the data doesn't support a clear read, say so plainly rather than speculating: "There isn't enough data yet to call this a trend."
+5. When something looks concerning, say what and suggest a concrete next step -- do not just describe the number.
+6. Use the glossary below to explain what a metric measures if the question implies the user isn't sure.
+
+Rolplay glossary:
+${JSON.stringify(PRODUCT_GLOSSARY, null, 2)}`
+
+const NAVIGATIONAL_SYSTEM = `You are a product guide for the Rolplay analytics dashboard.
+Your role is to help users find features and understand what things mean -- not to interpret their data.
+
+HARD RULES:
+1. Always give a click-by-click path using the navigation map below, never just "it's in the X page".
+2. Disambiguate Rolplay-specific terms using the glossary below rather than guessing.
+3. If a feature depends on a capability the user's organization may not have (e.g. LMS, Second Brain, an admin-only page), say so.
+4. If you're genuinely not sure of the exact path, say that plainly rather than inventing one.
+
+Navigation map:
+${JSON.stringify(NAVIGATION_MAP, null, 2)}
+
+Rolplay glossary:
+${JSON.stringify(PRODUCT_GLOSSARY, null, 2)}`
+
+/** Call Gemini once with the given system + user content. */
+async function callGemini(system: string, userContent: string, apiKey: string): Promise<string> {
   const payload = {
-    system_instruction: {
-      parts: [{ text: SYSTEM_INSTRUCTION }],
-    },
-    contents: [
-      {
-        role: "user",
-        parts: [{ text: userContent }],
-      },
-    ],
-    generationConfig: {
-      temperature: 0.3,
-      maxOutputTokens: 1024,   // was 256 — that was cutting responses
-      topP: 0.9,
-    },
+    system_instruction: { parts: [{ text: system }] },
+    contents: [{ role: "user", parts: [{ text: userContent }] }],
+    generationConfig: { temperature: 0.3, maxOutputTokens: 1024, topP: 0.9 },
   }
 
   const res = await fetch(GEMINI_API_URL, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-goog-api-key": apiKey,
-    },
+    headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
     body: JSON.stringify(payload),
   })
 
@@ -89,8 +138,6 @@ async function callGemini(
   }
 
   const data = await res.json()
-
-  // Collect ALL parts across ALL candidates (guards against split responses)
   const text: string = (data?.candidates ?? [])
     .flatMap((c: { content?: { parts?: { text?: string }[] } }) =>
       (c?.content?.parts ?? []).map((p: { text?: string }) => p?.text ?? "")
@@ -101,28 +148,28 @@ async function callGemini(
   return text
 }
 
-export async function forceDirectAnswer(input: string) {
-  return `Here is the answer:\n\n${input}`
+/**
+ * Confidence gate: an analytical question with no real dashboard numbers to
+ * ground it, or ANY question with no context at all, isn't answerable
+ * without guessing. Mirrors harness.py's ConfidenceAssessor -- decline
+ * rather than let the model pad the gap with plausible-sounding filler.
+ */
+function hasGroundedContext(context: string): boolean {
+  const c = context.trim().toLowerCase()
+  if (!c) return false
+  if (c.includes("temporarily unavailable")) return false
+  return true
 }
 
-export async function getAIResponse(
-  prompt: string,
-  context: string
-): Promise<string> {
-  const expandedQuestion = expandQuery(prompt)
+const INSUFFICIENT_CONTEXT_MESSAGE =
+  "I don't have enough dashboard data loaded right now to answer that accurately. Try refreshing the page, or ask a more specific question once the data has loaded."
 
-  // Quick deterministic fallbacks for simple validation inputs to guarantee
-  // immediate, correct responses and avoid unnecessary Gemini calls.
-  const p = prompt.toLowerCase().trim()
-  if (p === "good morning in french" || /\btranslate hello\b/.test(p) || p === "hola in french") {
-    return "Bonjour"
-  }
-  if (p === "what is passé composé" || p === "what is passe compose") {
-    return (
-      "Passé composé is a French past tense used to express completed actions.\n\n" +
-      "Example:\n• Il a mangé une pomme. → He ate an apple.\n\n" +
-      "Explanation:\n• Formed with the present tense of avoir/être + past participle.\n• Used for specific completed events or actions.\n\nSummary: The passé composé describes completed past actions, formed with an auxiliary (avoir/être) plus the past participle."
-    )
+export async function getAIResponse(prompt: string, context: string): Promise<string> {
+  const question = prompt.trim()
+  const intent = detectIntent(question)
+
+  if (intent !== "navigational" && !hasGroundedContext(context)) {
+    return INSUFFICIENT_CONTEXT_MESSAGE
   }
 
   const apiKey = process.env.GEMINI_API_KEY
@@ -130,31 +177,22 @@ export async function getAIResponse(
     throw new Error("GEMINI_API_KEY is not set")
   }
 
-  // Only pass context and the user question as the user content. The strict
-  // system instruction above is the single source of behavior rules.
-  const userContent = `DASHBOARD DATA:\n${context}\n\nUSER QUESTION:\n${expandedQuestion}`
+  const system = intent === "navigational" ? NAVIGATIONAL_SYSTEM : ANALYTICAL_SYSTEM
+  const userContent =
+    intent === "navigational"
+      ? `Question: ${question}\n\nAnswer with a specific click-by-click path and, if relevant, what the feature is for. If it depends on a capability the user's organization might not have, say so.`
+      : `Current dashboard data:\n${context}\n\nQuestion: ${question}\n\nAnalyze this data -- do not just restate it. Cite the real numbers, reference the trend/comparison already given if relevant, and suggest a next step if something looks off.`
 
-  let answer = await callGemini(userContent, apiKey)
+  let answer = await callGemini(system, userContent, apiKey)
 
-  // Retry once if response is suspiciously short (< 80 chars)
+  // Retry once if response is suspiciously short (< 80 chars) -- catches
+  // truncated/empty-ish responses regardless of which prompt was used.
   if (answer.length < 80) {
-    console.warn("[ai] Response too short, retrying once...")
-    answer = await callGemini(userContent, apiKey)
+    answer = await callGemini(system, userContent, apiKey)
   }
 
   if (!answer) {
     throw new Error("Empty response from Gemini after retry")
-  }
-
-  // Anti-loop / guard: if model replies with loop-y fallback phrases, force a
-  // direct answer to avoid UX regressions.
-  const lower = answer.toLowerCase()
-  if (
-    lower.includes("great question") ||
-    lower.includes("more context") ||
-    lower.includes("can you provide")
-  ) {
-    return forceDirectAnswer(prompt)
   }
 
   return answer
