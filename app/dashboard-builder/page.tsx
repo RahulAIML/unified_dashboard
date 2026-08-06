@@ -54,10 +54,19 @@ const SERVICE_OPTIONS: { id: string; label: string }[] = [
 
 interface KnownCompany { id: number; name: string; sessions: number; users: number }
 
+/**
+ * Client-side admin gate. Defence-in-depth only — layout.tsx is the real
+ * boundary and redirects non-admins server-side before this ever renders.
+ *
+ * The gate has to live in its own component: auth starts out `isLoading` and
+ * then resolves, so an early return here followed by the builder's own hooks
+ * would change the hook count between those two renders, which React rejects
+ * ("Rendered more hooks than during the previous render"). Keeping the hooks
+ * in a child that only mounts once access is granted sidesteps that entirely.
+ */
 export default function DashboardBuilderPage() {
   const { user, isLoading } = useAuthContext()
 
-  // Show loading state while auth is being checked
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -69,7 +78,6 @@ export default function DashboardBuilderPage() {
     )
   }
 
-  // Require admin role to access the dashboard builder
   if (!user || user.role !== 'admin') {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -80,7 +88,7 @@ export default function DashboardBuilderPage() {
             {!user && ' Please log in to continue.'}
           </p>
           <a
-            href="/login"
+            href={user ? '/' : '/auth/login'}
             className="inline-block bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
           >
             {user ? 'Back to Dashboard' : 'Go to Login'}
@@ -90,6 +98,10 @@ export default function DashboardBuilderPage() {
     )
   }
 
+  return <DashboardBuilder />
+}
+
+function DashboardBuilder() {
   const [company, setCompany] = useState('')
   // Populates a <datalist> so a manager can pick an existing rolplay_app_sql
   // client instead of retyping/misspelling its name — free-text entry still

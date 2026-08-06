@@ -71,14 +71,14 @@ export default function KpisPage() {
   const { data, loading } = useApi<CesarKpisResponse>(url)
 
   const cards = useMemo(() => ([
-    { key: "activation", label: "Activation Rate", value: fmtPct(data?.activationRate ?? null), icon: <UserCheck className="w-4 h-4" /> },
-    { key: "weekly", label: "Weekly Practice Frequency", value: fmtNum(data?.weeklyPracticeFrequency ?? null), icon: <Repeat className="w-4 h-4" /> },
-    { key: "mau", label: "Recurring Adoption (MAU)", value: fmtPct(data?.mauRate ?? null), icon: <CalendarClock className="w-4 h-4" /> },
-    { key: "practices", label: "Practices to Mastery", value: fmtNum(data?.practicesToMastery ?? null), icon: <Target className="w-4 h-4" /> },
-    { key: "delta", label: "Competency Gain (Delta Score)", value: data?.deltaScore != null ? `${data.deltaScore > 0 ? "+" : ""}${data.deltaScore}` : "—", icon: <TrendUpIcon className="w-4 h-4" /> },
-    { key: "readiness", label: "Field Readiness Index", value: fmtPct(data?.readinessIndex ?? null), icon: <ShieldCheck className="w-4 h-4" /> },
-    { key: "trialAndError", label: "Trial-and-Error Index", value: fmtPct(data?.trialAndErrorRate ?? null), icon: <AlertTriangle className="w-4 h-4" /> },
-  ]), [data])
+    { key: "activation", label: t.kpiActivationRate, value: fmtPct(data?.activationRate ?? null), icon: <UserCheck className="w-4 h-4" /> },
+    { key: "weekly", label: t.kpiWeeklyPractice, value: fmtNum(data?.weeklyPracticeFrequency ?? null), icon: <Repeat className="w-4 h-4" /> },
+    { key: "mau", label: t.kpiMau, value: fmtPct(data?.mauRate ?? null), icon: <CalendarClock className="w-4 h-4" /> },
+    { key: "practices", label: t.kpiPracticesToMastery, value: fmtNum(data?.practicesToMastery ?? null), icon: <Target className="w-4 h-4" /> },
+    { key: "delta", label: t.kpiDeltaScore, value: data?.deltaScore != null ? `${data.deltaScore > 0 ? "+" : ""}${data.deltaScore}` : "—", icon: <TrendUpIcon className="w-4 h-4" /> },
+    { key: "readiness", label: t.kpiReadinessIndex, value: fmtPct(data?.readinessIndex ?? null), icon: <ShieldCheck className="w-4 h-4" /> },
+    { key: "trialAndError", label: t.kpiTrialAndError, value: fmtPct(data?.trialAndErrorRate ?? null), icon: <AlertTriangle className="w-4 h-4" /> },
+  ]), [data, t])
 
   if (!ready) {
     return (
@@ -91,7 +91,7 @@ export default function KpisPage() {
 
   return (
     <div className="min-h-screen w-full">
-      <DashboardHeader title={t.navKpis} subtitle="Sugerencia de KPI's Cesar" showModuleFilter />
+      <DashboardHeader title={t.navKpis} subtitle={t.kpisSubtitle} showModuleFilter />
 
       <div className="w-full px-4 sm:px-6 lg:px-8 py-5 sm:py-8 max-w-[1400px] mx-auto space-y-5">
         {loading ? (
@@ -104,7 +104,7 @@ export default function KpisPage() {
               {cards.map(c => <MetricCard key={c.key} label={c.label} value={c.value} icon={c.icon} />)}
             </div>
 
-            <SectionCard title="Distribution by Mastery Level" subtitle="% Basic / Intermediate / Advanced">
+            <SectionCard title={t.kpiMasteryDistTitle} subtitle={t.kpiMasteryDistSub}>
               {(data?.masteryDistribution?.length ?? 0) === 0 ? (
                 <p className="text-sm text-muted-foreground">{t.noDataAvailable}</p>
               ) : (
@@ -123,10 +123,10 @@ export default function KpisPage() {
             </SectionCard>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <MetricCard label="Adoption Movement Rate" value={fmtPct(data?.adoptionMovementRate ?? null)} icon={<Compass className="w-4 h-4" />}
-                hint="% of sessions that moved customer adoption intent forward" />
+              <MetricCard label={t.kpiAdoptionMovement} value={fmtPct(data?.adoptionMovementRate ?? null)} icon={<Compass className="w-4 h-4" />}
+                hint={t.kpiAdoptionMovementHint} />
 
-              <SectionCard title="Score by Commercial Domain" subtitle="Where does the team struggle most in the sales interaction?">
+              <SectionCard title={t.kpiCommercialDomainTitle} subtitle={t.kpiCommercialDomainSub}>
                 {(data?.commercialDomain?.length ?? 0) === 0 ? (
                   <p className="text-sm text-muted-foreground">{t.noDataAvailable}</p>
                 ) : (
@@ -146,7 +146,7 @@ export default function KpisPage() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <SectionCard title="Top Commercial Strengths" subtitle="Skills the team consistently executes well">
+              <SectionCard title={t.kpiTopStrengthsTitle} subtitle={t.kpiTopStrengthsSub}>
                 {(data?.topStrengths?.length ?? 0) === 0 ? (
                   <p className="text-sm text-muted-foreground">{t.noDataAvailable}</p>
                 ) : (
@@ -162,7 +162,7 @@ export default function KpisPage() {
                 )}
               </SectionCard>
 
-              <SectionCard title="Top Areas of Opportunity" subtitle="Specific habits that most often fail">
+              <SectionCard title={t.kpiTopOpportunitiesTitle} subtitle={t.kpiTopOpportunitiesSub}>
                 {(data?.topOpportunities?.length ?? 0) === 0 ? (
                   <p className="text-sm text-muted-foreground">{t.noDataAvailable}</p>
                 ) : (
