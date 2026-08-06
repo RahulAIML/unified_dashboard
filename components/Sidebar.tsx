@@ -180,7 +180,7 @@ export function Sidebar() {
   const sidebarContent = (
     <>
       {/* Brand header */}
-      <div className="relative h-20 flex items-center gap-3 px-5 border-b border-sidebar-border overflow-hidden">
+      <div className="relative h-20 shrink-0 flex items-center gap-3 px-5 border-b border-sidebar-border overflow-hidden">
         {/* Brand top gradient stripe — matches drilldown/header stripe */}
         <div
           className="absolute top-0 left-0 right-0 h-[3px]"
@@ -231,7 +231,7 @@ export function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="px-4 py-4 border-t border-sidebar-border space-y-1">
+      <div className="px-4 py-4 border-t border-sidebar-border space-y-1 shrink-0">
         <button
           onClick={toggle}
           className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
@@ -254,8 +254,11 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Desktop sidebar - hidden on mobile, shown on md+ */}
-      <aside className="hidden md:flex w-64 shrink-0 bg-sidebar border-r border-sidebar-border flex-col z-30">
+      {/* Desktop sidebar - hidden on mobile, shown on md+. h-screen + overflow-y-auto
+          so a tenant with every module enabled (e.g. the demo tenant) scrolls its
+          own nav instead of overflowing past the viewport with no way to reach the
+          rest -- matches the mobile drawer's own overflow-y-auto below. */}
+      <aside className="hidden md:flex w-64 h-screen shrink-0 bg-sidebar border-r border-sidebar-border flex-col overflow-y-auto z-30">
         {sidebarContent}
       </aside>
 

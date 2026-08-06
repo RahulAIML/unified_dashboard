@@ -9,6 +9,7 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useT } from '@/lib/lang-store'
 import { motion } from 'framer-motion'
 import { PlayCircle, Target, TrendingUp, TrendingDown, Minus, BadgeCheck, Trophy, AlertTriangle } from 'lucide-react'
 import {
@@ -208,6 +209,7 @@ const RANK_BADGE_CLASSES = [
  * card's own header exactly.
  */
 function Leaderboard({ rows }: { rows: Record<string, unknown>[] }) {
+  const t = useT()
   if (!rows.length) return <div className="text-sm text-muted-foreground">—</div>
   return (
     <div className="space-y-2">
@@ -236,15 +238,15 @@ function Leaderboard({ rows }: { rows: Record<string, unknown>[] }) {
             </div>
             <div className="flex items-center gap-3 sm:gap-6 text-right shrink-0">
               <div className="hidden sm:block">
-                <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">Sessions</p>
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">{t.sessionsLabel}</p>
                 <p className="text-sm font-bold text-foreground tabular-nums">{fmt(r.sessions)}</p>
               </div>
               <div>
-                <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">Avg Score</p>
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">{t.colAvgScoreShort}</p>
                 <p className="text-sm font-bold text-foreground tabular-nums">{fmt(r.avg_score)} <span className="text-xs font-normal text-muted-foreground">pts</span></p>
               </div>
               <div>
-                <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">Pass Rate</p>
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">{t.passRate}</p>
                 <p className={cn(
                   'text-sm font-bold tabular-nums inline-flex items-center gap-1',
                   goodPassRate ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400',
@@ -436,6 +438,7 @@ function ChartTooltip({
  * the true count printed above each one regardless of its height.
  */
 export function MiniChart({ series, bar }: { series: Record<string, unknown>[]; bar?: boolean }) {
+  const t = useT()
   const data = series.slice(0, 14).map(normalizeChartRow)
   if (!data.length) {
     return <div className="h-40 flex items-center justify-center text-sm text-muted-foreground">—</div>
@@ -458,14 +461,14 @@ export function MiniChart({ series, bar }: { series: Record<string, unknown>[]; 
             <YAxis tick={tickProps} axisLine={false} tickLine={false} allowDecimals={false} />
             <Tooltip content={<ChartTooltip />} cursor={{ fill: 'currentColor', opacity: 0.05 }} />
             {hasPassed && <Legend verticalAlign="bottom" height={24} wrapperStyle={{ fontSize: 11 }} />}
-            <Bar dataKey="value" name="Total" fill="var(--chart-1, hsl(var(--primary)))" radius={[4, 4, 0, 0]} maxBarSize={56}>
+            <Bar dataKey="value" name={t.colTotal} fill="var(--chart-1, hsl(var(--primary)))" radius={[4, 4, 0, 0]} maxBarSize={56}>
               {/* Always-visible label so a tiny bar (e.g. 3 sessions next to
                   129) still shows its real number instead of reading as an
                   unlabeled sliver indistinguishable from zero. */}
               <LabelList dataKey="value" position="top" style={{ fontSize: 11, fill: 'currentColor', opacity: 0.7 }} />
             </Bar>
             {hasPassed && (
-              <Bar dataKey="passedValue" name="Passed" fill="var(--chart-2, hsl(var(--accent)))" radius={[4, 4, 0, 0]} maxBarSize={56}>
+              <Bar dataKey="passedValue" name={t.colPassed} fill="var(--chart-2, hsl(var(--accent)))" radius={[4, 4, 0, 0]} maxBarSize={56}>
                 <LabelList dataKey="passedValue" position="top" style={{ fontSize: 11, fill: 'currentColor', opacity: 0.7 }} />
               </Bar>
             )}
@@ -581,6 +584,7 @@ function DonutTooltip({ active, payload }: { active?: boolean; payload?: { name?
  * at all, so a donut widget the planner produced would show as a blank box.
  */
 export function MiniDonut({ rows }: { rows: Record<string, unknown>[] }) {
+  const t = useT()
   const points = rows.slice(0, 30).map(normalizeChartRow)
   if (!points.length) {
     return <div className="h-40 flex items-center justify-center text-sm text-muted-foreground">—</div>
@@ -593,7 +597,7 @@ export function MiniDonut({ rows }: { rows: Record<string, unknown>[] }) {
   const sorted = [...points].sort((a, b) => b.value - a.value)
   const top = sorted.slice(0, MAX_SLICES)
   const restTotal = sorted.slice(MAX_SLICES).reduce((s, r) => s + r.value, 0)
-  const data = restTotal > 0 ? [...top, { label: 'Other', value: restTotal, passedValue: null }] : top
+  const data = restTotal > 0 ? [...top, { label: t.otherLabel, value: restTotal, passedValue: null }] : top
   const total = data.reduce((s, d) => s + d.value, 0)
 
   return (
@@ -609,7 +613,7 @@ export function MiniDonut({ rows }: { rows: Record<string, unknown>[] }) {
         </ResponsiveContainer>
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="text-center">
-            <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Total</p>
+            <p className="text-[9px] text-muted-foreground uppercase tracking-wide">{t.colTotal}</p>
             <p className="text-lg font-bold text-foreground">{total.toLocaleString()}</p>
           </div>
         </div>
@@ -681,6 +685,7 @@ export function ReportsTable({
   exportable: boolean
   filenamePrefix: string
 }) {
+  const t = useT()
   const [query, setQuery] = useState('')
   const [page, setPage] = useState(0)
 
@@ -707,7 +712,7 @@ export function ReportsTable({
             type="search"
             value={query}
             onChange={e => { setQuery(e.target.value); setPage(0) }}
-            placeholder="Search…"
+            placeholder={t.searchPlaceholder}
             className="px-2.5 py-1.5 text-xs rounded-lg border border-border bg-muted/60 placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary w-48"
           />
         ) : <span />}
@@ -738,25 +743,25 @@ export function ReportsTable({
             ))}
           </tbody>
         </table>
-        {visible.length === 0 && <div className="py-6 text-center text-xs text-muted-foreground">No matching rows</div>}
+        {visible.length === 0 && <div className="py-6 text-center text-xs text-muted-foreground">{t.noMatchingRows}</div>}
       </div>
       {totalPages > 1 && (
         <div className="flex items-center justify-between pt-1">
-          <p className="text-[11px] text-muted-foreground">Page {pageSafe + 1} of {totalPages}</p>
+          <p className="text-[11px] text-muted-foreground">{t.pageOfLabel.replace("{current}", String(pageSafe + 1)).replace("{total}", String(totalPages))}</p>
           <div className="flex gap-2">
             <button
               onClick={() => setPage(p => Math.max(0, p - 1))}
               disabled={pageSafe === 0}
               className="px-2.5 py-1 text-xs rounded-lg border border-border bg-muted hover:bg-muted/70 disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              Previous
+              {t.drilldownPrevious}
             </button>
             <button
               onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
               disabled={pageSafe >= totalPages - 1}
               className="px-2.5 py-1 text-xs rounded-lg border border-border bg-muted hover:bg-muted/70 disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              Next
+              {t.drilldownNext}
             </button>
           </div>
         </div>

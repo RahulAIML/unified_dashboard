@@ -177,7 +177,7 @@ describe('MiniDonut', () => {
     const pieData = JSON.parse(container.querySelector('[data-testid="pie"]')?.getAttribute('data-points') ?? '[]')
     // 7 real slices + 1 "Other" bucket, not all 10.
     expect(pieData.length).toBe(8)
-    const other = pieData.find((d: { label: string }) => d.label === 'Other')
+    const other = pieData.find((d: { label: string }) => d.label === 'Otro')
     expect(other).toBeTruthy()
   })
 
@@ -516,25 +516,25 @@ describe('ReportsTable', () => {
   it('paginates real rows (25 per page)', () => {
     render(<ReportsTable rows={rows} searchable exportable filenamePrefix="reports" />)
     expect(screen.getAllByRole('row')).toHaveLength(1 + 25) // header + 25 body rows
-    expect(screen.getByText('Page 1 of 2')).toBeTruthy()
+    expect(screen.getByText('Página 1 de 2')).toBeTruthy()
   })
 
   it('advances to the next page', () => {
     render(<ReportsTable rows={rows} searchable exportable filenamePrefix="reports" />)
-    fireEvent.click(screen.getByText('Next'))
-    expect(screen.getByText('Page 2 of 2')).toBeTruthy()
+    fireEvent.click(screen.getByText('Siguiente'))
+    expect(screen.getByText('Página 2 de 2')).toBeTruthy()
     expect(screen.getAllByRole('row')).toHaveLength(1 + 5) // remaining 5 rows
   })
 
   it('filters rows via the search box, across every column', () => {
     render(<ReportsTable rows={rows} searchable exportable filenamePrefix="reports" />)
-    fireEvent.change(screen.getByPlaceholderText('Search…'), { target: { value: 'alice' } })
+    fireEvent.change(screen.getByPlaceholderText('Buscar…'), { target: { value: 'alice' } })
     expect(screen.getByText('10 rows')).toBeTruthy() // 30/3 rows are alice's
   })
 
   it('omits the search box when searchable is false', () => {
     render(<ReportsTable rows={rows} searchable={false} exportable filenamePrefix="reports" />)
-    expect(screen.queryByPlaceholderText('Search…')).toBeNull()
+    expect(screen.queryByPlaceholderText('Buscar…')).toBeNull()
   })
 
   it('omits the export button when exportable is false', () => {

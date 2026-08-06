@@ -5,6 +5,7 @@ import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis,
   CartesianGrid, Tooltip, Legend
 } from "recharts"
+import { useT } from "@/lib/lang-store"
 import type { TimeSeriesPoint } from "@/lib/types"
 
 interface Props {
@@ -46,6 +47,7 @@ export function StackedBarChart({
   passColor = "var(--chart-1)",
   failColor = "var(--destructive)",
 }: Props) {
+  const t = useT()
   const formatted = data.map(d => ({ ...d, date: d.date.slice(5) }))
   const xInterval = data.length <= 10 ? 0 : data.length <= 30 ? 2 : 6
   return (
@@ -62,8 +64,8 @@ export function StackedBarChart({
           <YAxis tick={{ fontSize: 11, fill: "currentColor", opacity: 0.5 }} axisLine={false} tickLine={false} />
           <Tooltip content={<CustomTooltip />} />
           <Legend wrapperStyle={{ fontSize: 11 }} />
-          <Bar dataKey="value"  name="Passed" stackId="a" fill={passColor} radius={[0, 0, 0, 0]} />
-          <Bar dataKey="value2" name="Failed" stackId="a" fill={failColor} radius={[4, 4, 0, 0]} />
+          <Bar dataKey="value"  name={t.colPassed} stackId="a" fill={passColor} radius={[0, 0, 0, 0]} />
+          <Bar dataKey="value2" name={t.colFailed} stackId="a" fill={failColor} radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </motion.div>

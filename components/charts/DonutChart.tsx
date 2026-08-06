@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { motion } from "framer-motion"
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts"
+import { useT } from "@/lib/lang-store"
 
 interface Segment { name: string; value: number; color?: string }
 
@@ -65,6 +66,7 @@ function CustomLegend({ payload }: { payload?: Array<{ value?: string; color?: s
 }
 
 export function DonutChart({ data }: { data: Segment[] }) {
+  const t = useT()
   const total = data.reduce((sum, item) => sum + item.value, 0)
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
 
@@ -136,7 +138,7 @@ export function DonutChart({ data }: { data: Segment[] }) {
             {/* Center KPI — absolutely positioned in the donut hole */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="text-center">
-                <p className="text-[10px] sm:text-xs text-muted-foreground font-medium uppercase tracking-wide">Total</p>
+                <p className="text-[10px] sm:text-xs text-muted-foreground font-medium uppercase tracking-wide">{t.colTotal}</p>
                 <p className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground">{total.toLocaleString()}</p>
               </div>
             </div>

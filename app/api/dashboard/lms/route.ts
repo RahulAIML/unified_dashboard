@@ -32,7 +32,8 @@ export async function GET(request: NextRequest) {
   const { from, to } = range
 
   if (isDemoDataEnabled(ctx.email)) {
-    return buildSuccess(demoLms(from, to), { source: 'demo' })
+    const lang = request.nextUrl.searchParams.get('lang') === 'en' ? 'en' : 'es'
+    return buildSuccess(demoLms(from, to, lang), { source: 'demo' })
   }
 
   try {

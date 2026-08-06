@@ -23,8 +23,9 @@ export async function GET(request: NextRequest) {
     const range = parseDateRange(sp)
     if (!range) return buildApiError('Invalid date range', 400)
     const sol   = sp.get('solution')
+    const lang  = sp.get('lang') === 'en' ? 'en' : 'es'
     if (sol === 'second-brain') return buildSuccess({ data: [] }, { source: 'demo' })
-    return buildSuccess(demoUsecaseBreakdown(range.from, range.to, sol), { source: 'demo' })
+    return buildSuccess(demoUsecaseBreakdown(range.from, range.to, sol, lang), { source: 'demo' })
   }
 
   const orgType = await resolveOrgType(ctx.email, ctx.customerId)

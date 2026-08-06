@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useReducer } from "react"
+import { useLangStore } from "@/lib/lang-store"
 
 interface ApiState<T> {
   data:    T | null
@@ -153,6 +154,7 @@ export function buildApiUrl(
   const p = new URLSearchParams({
     from: from.toISOString(),
     to:   to.toISOString(),
+    lang: useLangStore.getState().lang,
   })
 
   if (extra) {

@@ -129,7 +129,7 @@ export function DataTable<T extends object>({
               {paged.length === 0 && (
                 <tr>
                   <td colSpan={columns.length} className="px-4 py-12 text-center">
-                    <p className="text-sm text-muted-foreground">{emptyMessage ?? "No results found."}</p>
+                    <p className="text-sm text-muted-foreground">{emptyMessage ?? t.noResultsFound}</p>
                   </td>
                 </tr>
               )}
@@ -141,7 +141,7 @@ export function DataTable<T extends object>({
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between text-xs text-muted-foreground pt-2">
-          <span className="font-medium">{t.showing} {filtered.length} results</span>
+          <span className="font-medium">{t.showing} {filtered.length} {t.resultsWord}</span>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setPage(p => Math.max(1, p - 1))}

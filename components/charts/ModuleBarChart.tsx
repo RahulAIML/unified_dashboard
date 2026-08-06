@@ -5,6 +5,7 @@ import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis,
   CartesianGrid, Tooltip, Legend
 } from "recharts"
+import { useT } from "@/lib/lang-store"
 
 interface DataPoint {
   module: string
@@ -56,6 +57,7 @@ export function ModuleBarChart({
   sessionsColor = "var(--chart-1)",
   passedColor   = "var(--chart-2)",
 }: Props) {
+  const t = useT()
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -93,16 +95,16 @@ export function ModuleBarChart({
             iconType="square"
             iconSize={10}
           />
-          <Bar 
-            dataKey="sessions" 
-            name="Total Sessions" 
-            fill={sessionsColor} 
+          <Bar
+            dataKey="sessions"
+            name={t.totalSessions}
+            fill={sessionsColor}
             radius={[6, 6, 0, 0]}
             maxBarSize={48}
           />
-          <Bar 
-            dataKey="passed"   
-            name="Passed"         
+          <Bar
+            dataKey="passed"
+            name={t.colPassed}
             fill={passedColor}
             radius={[6, 6, 0, 0]}
             maxBarSize={48}

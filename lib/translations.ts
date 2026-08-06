@@ -289,6 +289,8 @@ export const translations = {
     showing:           'Showing',
     of:                'of',
     usersLabel:        'users',
+    resultsWord:       'results',
+    noResultsFound:    'No results found.',
     pageLabel:         'Page',
     prev:              'Prev',
     next:              'Next',
@@ -346,6 +348,12 @@ export const translations = {
     colEvaluations:   'Evaluations',
     colAvgScoreShort: 'Avg Score',
     colPassed:        'Passed',
+    colFailed:        'Failed',
+    colTotal:         'Total',
+    sessionsLabel:    'Sessions',
+    otherLabel:       'Other',
+    pageOfLabel:      'Page {current} of {total}',
+    noMatchingRows:   'No matching rows',
 
     // ── Evaluation results ────────────────────────────────────
     passLabel:        'PASS',
@@ -1058,6 +1066,8 @@ export const translations = {
     showing:           'Mostrando',
     of:                'de',
     usersLabel:        'usuarios',
+    resultsWord:       'resultados',
+    noResultsFound:    'No se encontraron resultados.',
     pageLabel:         'Página',
     prev:              'Ant.',
     next:              'Sig.',
@@ -1115,6 +1125,12 @@ export const translations = {
     colEvaluations:   'Evaluaciones',
     colAvgScoreShort: 'Punt. Media',
     colPassed:        'Aprobados',
+    colFailed:        'Reprobados',
+    colTotal:         'Total',
+    sessionsLabel:    'Sesiones',
+    otherLabel:       'Otro',
+    pageOfLabel:      'Página {current} de {total}',
+    noMatchingRows:   'No hay filas coincidentes',
 
     // ── Evaluation results ────────────────────────────────────
     passLabel:        'APROBADO',

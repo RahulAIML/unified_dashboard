@@ -73,6 +73,18 @@ export const DEMO_USECASES: Record<number, string> = {
   105: 'Análisis Técnico Profundo',
 }
 
+const DEMO_USECASES_EN: Record<number, string> = {
+  101: 'Discovery Call Mastery',
+  102: 'Objection Handling Pro',
+  103: 'Product Demo Excellence',
+  104: 'Negotiation Techniques',
+  105: 'Deep Technical Analysis',
+}
+
+function usecaseLabel(id: number, lang: 'en' | 'es'): string {
+  return (lang === 'en' ? DEMO_USECASES_EN[id] : DEMO_USECASES[id]) ?? `Scenario ${id}`
+}
+
 // Demo drilldown report IDs — these map to entries in reports.ts
 export const DEMO_REPORT_IDS = Array.from({ length: 20 }, (_, i) => 5001 + i)
 
@@ -100,12 +112,17 @@ export function demoOverview(from: Date, to: Date, solution: string | null = nul
   const salt = solutionSalt(solution)
   const rng  = seededRng(dateToSeed(from, to, salt))
 
-  // Solution-specific base rates
+  // Solution-specific base rates. Deliberately modest: this is a straight
+  // per-day multiplier with no growth curve, so the "All" filter (10 years,
+  // see ALL_TIME_DAYS in DashboardHeader.tsx) multiplies it by 3650 days --
+  // the previous rates (up to 102/day) produced 400K+ session totals that
+  // read as absurd rather than impressive, and made every trend chart plot
+  // an unreadable, densely-packed value range.
   const rateMap: Record<string, number> = {
-    'lms': 75, 'coach': 102, 'simulator': 88, 'certification': 65, 'second-brain': 0,
+    'lms': 42, 'coach': 58, 'simulator': 50, 'certification': 36, 'second-brain': 0,
   }
-  const baseRate = rateMap[solution || ''] || 94
-  const dailyRate   = baseRate + rng() * 15
+  const baseRate = rateMap[solution || ''] || 52
+  const dailyRate   = baseRate + rng() * 9
   const totalEvals  = Math.round(dailyRate * days)
 
   // Solution-specific score ranges
@@ -140,33 +157,51 @@ export function demoOverview(from: Date, to: Date, solution: string | null = nul
 }
 
 // ── Trends ────────────────────────────────────────────────────────────────────
+/**
+ * Bucket size (in days) so a trend chart never has to plot more than ~130
+ * points no matter how wide the requested range is. The "All" filter is 10
+ * years (ALL_TIME_DAYS in DashboardHeader.tsx) -- one point per day there
+ * would be 3650 points squeezed into a normal chart width, rendering as a
+ * solid, unreadable block rather than a legible trend.
+ */
+function bucketSizeDays(totalDays: number): number {
+  if (totalDays <= 120) return 1       // daily
+  if (totalDays <= 730) return 7       // weekly (up to ~2 years)
+  return 30                            // monthly beyond that
+}
+
 export function demoTrends(from: Date, to: Date, solution: string | null = null) {
-  const days = daysBetween(from, to)
-  const salt = solutionSalt(solution)
-  const rng  = seededRng(dateToSeed(from, to, salt) + 7)
+  const days   = daysBetween(from, to)
+  const salt   = solutionSalt(solution)
+  const rng    = seededRng(dateToSeed(from, to, salt) + 7)
+  const bucket = bucketSizeDays(days)
 
   const scoreTrend:     { date: string; value: number }[]                   = []
   const passFailTrend:  { date: string; value: number; value2: number }[]   = []
   const evalCountTrend: { date: string; value: number }[]                   = []
 
-  for (let i = 0; i < days; i++) {
-    const d   = addDays(from, i)
-    const ymd = toYMD(d)
+  for (let start = 0; start < days; start += bucket) {
+    const span = Math.min(bucket, days - start)
+    const d    = addDays(from, start)
+    const ymd  = toYMD(d)
 
-    // Smooth upward score trend: starts ~81, ends ~87
-    const progress = days > 1 ? i / (days - 1) : 1
+    // Smooth upward score trend across the whole range: starts ~81, ends ~87.
+    // Averaged across the bucket rather than summed -- score isn't additive.
+    const progress  = days > 1 ? start / (days - 1) : 1
     const baseScore = 81 + progress * 6
     const jitter    = (rng() - 0.5) * 4
     scoreTrend.push({ date: ymd, value: Math.round((baseScore + jitter) * 10) / 10 })
 
-    // Eval count: weekday peaks (Mon-Fri higher)
-    const dow    = d.getDay()
-    const isWeek = dow > 0 && dow < 6
-    const base   = isWeek ? 80 + rng() * 40 : 20 + rng() * 20
-    const evals  = Math.round(base)
+    // Eval count and pass/fail are per-day volumes summed across the bucket's
+    // real day span, so the totals still scale correctly with bucket size.
+    let evals = 0
+    for (let i = 0; i < span; i++) {
+      const dow    = addDays(d, i).getDay()
+      const isWeek = dow > 0 && dow < 6
+      evals += Math.round(isWeek ? 46 + rng() * 24 : 12 + rng() * 12)
+    }
     evalCountTrend.push({ date: ymd, value: evals })
 
-    // Pass/fail derived from evals and a ~78% pass rate
     const passRate = 0.73 + progress * 0.08 + (rng() - 0.5) * 0.06
     const passed   = Math.round(evals * Math.min(0.95, Math.max(0.55, passRate)))
     const failed   = evals - passed
@@ -177,11 +212,11 @@ export function demoTrends(from: Date, to: Date, solution: string | null = null)
 }
 
 // ── Usecase Breakdown ─────────────────────────────────────────────────────────
-export function demoUsecaseBreakdown(from: Date, to: Date, solution: string | null) {
+export function demoUsecaseBreakdown(from: Date, to: Date, solution: string | null, lang: 'en' | 'es' = 'es') {
   const days      = daysBetween(from, to)
   const salt      = solutionSalt(solution)
   const rng       = seededRng(dateToSeed(from, to, salt) + 13)
-  const totalBase = Math.round(90 * days)
+  const totalBase = Math.round(50 * days) // see demoOverview's rateMap comment -- same reasoning
 
   // Distribution weights (must sum to ~1)
   const weights = [0.28, 0.24, 0.22, 0.15, 0.11]
@@ -201,7 +236,7 @@ export function demoUsecaseBreakdown(from: Date, to: Date, solution: string | nu
 
     return {
       usecaseId:        ucId,
-      usecase_name:     DEMO_USECASES[ucId] ?? `Scenario ${ucId}`,
+      usecase_name:     usecaseLabel(ucId, lang),
       totalEvaluations: total,
       avgScore:         score,
       passRate:         pr,
@@ -252,7 +287,11 @@ export function demoBestPerformers(from: Date, to: Date, limit = 5, solution: st
     data: DEMO_USERS.slice(0, limit).map(u => ({
       user_email: u.email,
       user_name:  u.name,
-      sessions:   Math.round(days * (0.8 + rng() * 1.2)),
+      // Capped rather than scaled straight off `days`: a real person's
+      // cumulative session count can't keep climbing linearly over a 10-year
+      // "All time" range (that's several sessions every single day for a
+      // decade) -- realistic even for a top performer over any range.
+      sessions:   Math.round(Math.min(days, 400) * (0.8 + rng() * 1.2)),
       avg_score:  Math.round((85 + rng() * 12) * 10) / 10,
       pass_rate:  Math.round((79 + rng() * 17) * 10) / 10,
     })),
@@ -427,17 +466,25 @@ export function demoObjections(from: Date, to: Date) {
  * Reusing the evaluation numbers here is exactly the Simulator-relabelled-as-LMS
  * problem this module exists to avoid.
  */
-export function demoLms(from: Date, to: Date) {
+export function demoLms(from: Date, to: Date, lang: 'en' | 'es' = 'es') {
   const days = daysBetween(from, to)
   const rng  = seededRng(dateToSeed(from, to, solutionSalt('lms')) + 23)
 
-  const COURSES = [
-    'Inducción Comercial',
-    'Producto: Portafolio Cardiovascular',
-    'Técnicas de Visita Médica',
-    'Normativa y Compliance Farmacéutico',
-    'Manejo de Objeciones Avanzado',
-  ]
+  const COURSES = lang === 'en'
+    ? [
+        'Sales Induction',
+        'Product: Cardiovascular Portfolio',
+        'Medical Visit Techniques',
+        'Pharma Compliance & Regulations',
+        'Advanced Objection Handling',
+      ]
+    : [
+        'Inducción Comercial',
+        'Producto: Portafolio Cardiovascular',
+        'Técnicas de Visita Médica',
+        'Normativa y Compliance Farmacéutico',
+        'Manejo de Objeciones Avanzado',
+      ]
 
   const learners = 60 + Math.floor(rng() * 40)
 
