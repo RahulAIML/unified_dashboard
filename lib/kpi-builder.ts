@@ -163,7 +163,11 @@ export type DeltaDirection = "up" | "down" | "flat"
 
 /**
  * Computes % change between current and prior period.
- * Returns 0 when prev is null/0 or current is null.
+ * Returns 0 when prev is null/0 or current is null. Also returns 0 (treated
+ * as "no comparison" by callers) when the swing exceeds 999% -- a baseline
+ * that small isn't a real trend to compare against, just a near-empty prior
+ * period producing a technically-correct but meaningless four-digit number
+ * (e.g. 514 sessions vs. a 5-session prior window reads as "+10180%").
  */
 export function calcDeltaPct(
   current: number | null | undefined,
@@ -174,6 +178,7 @@ export function calcDeltaPct(
   const p = safeNumber(prev)
   if (c === null || p === null || p === 0) return 0
   const raw = ((c - p) / Math.abs(p)) * 100
+  if (Math.abs(raw) > 999) return 0
   const factor = Math.pow(10, Math.max(0, decimals))
   return Math.round(raw * factor) / factor
 }

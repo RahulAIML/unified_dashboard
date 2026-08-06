@@ -160,6 +160,20 @@ class KpiDeltaTests(unittest.TestCase):
         self.assertEqual(pv.prev_value, 0)
         self.assertIsNone(pv.delta_pct)
 
+    def test_negligible_previous_value_yields_no_fabricated_delta(self):
+        """A prior period with 5 sessions vs. a current 514 is a technically
+        correct but meaningless "+10180%" -- observed live on a real
+        published dashboard (M8 Cliente) during Dashboard Builder
+        validation. Any swing over 999% must be suppressed, same as the
+        prev==0 case, rather than shown as an actionable trend."""
+        pv, _ = self._run_kpi(
+            "total_sessions",
+            {"sessions": 514, "users": 49, "avg_score": 80, "passed": 400},
+            {"sessions": 5, "users": 2, "avg_score": 80, "passed": 4},
+        )
+        self.assertEqual(pv.prev_value, 5)
+        self.assertIsNone(pv.delta_pct)
+
 
 class BestPerformersTests(unittest.TestCase):
     """Leaderboard mirroring rolplayAppBestPerformers exactly -- confirmed

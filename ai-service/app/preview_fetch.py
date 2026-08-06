@@ -174,10 +174,18 @@ def _prev_period(frm: str, to: str) -> tuple[str, str] | None:
 def _calc_delta_pct(current: float | None, prev: float | None) -> float | None:
     """Mirrors lib/kpi-builder.ts's calcDeltaPct() exactly (0 decimals):
     (current-prev)/abs(prev)*100, rounded, or None when there's no real
-    baseline to compare against (never a fabricated 0% to imply parity)."""
+    baseline to compare against (never a fabricated 0% to imply parity).
+    Also None when the swing exceeds 999% -- a prior-period baseline that
+    small isn't a real trend to compare against, just a near-empty prior
+    window producing a technically-correct but meaningless four-digit
+    number (e.g. 514 sessions vs. a 5-session prior window reads as
+    "+10180%")."""
     if current is None or prev is None or prev == 0:
         return None
-    return round((current - prev) / abs(prev) * 100)
+    raw = (current - prev) / abs(prev) * 100
+    if abs(raw) > 999:
+        return None
+    return round(raw)
 
 
 async def fetch_widget(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:

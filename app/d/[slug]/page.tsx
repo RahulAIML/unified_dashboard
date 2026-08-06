@@ -29,8 +29,14 @@ export default function PublishedDashboardPage() {
   useEffect(() => {
     if (!slug) return
     let cancelled = false
+    let hasLoadedOnce = false
     const load = async () => {
-      setLoading(true); setError(null)
+      // Only show the full-page spinner (which unmounts DashboardRenderer)
+      // on the very first load. Background refreshes on the 15s interval
+      // must update data in place, or every refresh wipes the user's active
+      // tab, search text, and table pagination back to defaults.
+      if (!hasLoadedOnce) setLoading(true)
+      setError(null)
       try {
         const res = await fetch(`/api/dashboard-view/${slug}`, { cache: 'no-store' })
         if (res.status === 401) {
@@ -50,6 +56,7 @@ export default function PublishedDashboardPage() {
         if (!cancelled) setError((e as Error).message)
       } finally {
         if (!cancelled) setLoading(false)
+        hasLoadedOnce = true
       }
     }
 
