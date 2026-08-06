@@ -83,7 +83,7 @@ function bridgeRequest(bodyObj) {
       res.on('end', () => {
         try {
           resolve(JSON.parse(data))
-        } catch (e) {
+        } catch {
           reject(new Error(`Failed to parse JSON response (${res.statusCode}): ${data}`))
         }
       })

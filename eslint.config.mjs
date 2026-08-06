@@ -13,6 +13,27 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  {
+    // scripts/ are standalone CommonJS ops/debug scripts run directly via
+    // `node scripts/foo.js` (see their #!/usr/bin/env node shebangs) -- not
+    // part of the Next.js app bundle, so the TS-project-oriented
+    // no-require-imports rule doesn't apply to them.
+    files: ["scripts/**/*.js"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
+  {
+    // The codebase already signals "intentionally unused" with a leading
+    // underscore (e.g. a mock parameter kept only to match a real function's
+    // signature). Recognize that convention instead of flagging it.
+    rules: {
+      "@typescript-eslint/no-unused-vars": ["warn", {
+        argsIgnorePattern: "^_",
+        varsIgnorePattern: "^_",
+      }],
+    },
+  },
 ]);
 
 export default eslintConfig;

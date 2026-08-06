@@ -14,7 +14,6 @@ import { useDashboardStore } from "@/lib/store"
 import { useT } from "@/lib/lang-store"
 import { useApi, buildApiUrl } from "@/lib/hooks/useApi"
 import { useClientBrand } from "@/lib/hooks/useClientBrand"
-import { calcDeltaPct, estimatePassedSessions } from "@/lib/kpi-builder"
 import { csvFilename } from "@/lib/csv-export"
 import { cn } from "@/lib/utils"
 import type {

@@ -63,8 +63,8 @@ export default function PrivacyPage() {
             <h2 className="text-xl font-semibold text-slate-900 mb-3">2. How We Use Your Information</h2>
             <p className="text-sm leading-relaxed">We use the information we collect to:</p>
             <ul className="mt-3 space-y-2 text-sm list-disc list-inside">
-              <li>Authenticate you and provide access to your organization's analytics dashboard.</li>
-              <li>Display metrics and reports scoped exclusively to your company's data.</li>
+              <li>Authenticate you and provide access to your organization&apos;s analytics dashboard.</li>
+              <li>Display metrics and reports scoped exclusively to your company&apos;s data.</li>
               <li>Send transactional emails (e.g., password reset) when requested.</li>
               <li>Improve platform performance and fix bugs.</li>
             </ul>
@@ -77,7 +77,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-xl font-semibold text-slate-900 mb-3">3. Data Isolation & Security</h2>
             <p className="text-sm leading-relaxed">
-              All analytics data is strictly isolated by organization. Your account only has access to data associated with your company's <code className="bg-slate-100 px-1 rounded text-xs">customer_id</code>. Cross-organization data access is technically prevented at the database query level.
+              All analytics data is strictly isolated by organization. Your account only has access to data associated with your company&apos;s <code className="bg-slate-100 px-1 rounded text-xs">customer_id</code>. Cross-organization data access is technically prevented at the database query level.
             </p>
             <p className="mt-3 text-sm leading-relaxed">
               We protect your data with industry-standard security measures including:
@@ -122,7 +122,7 @@ export default function PrivacyPage() {
               <li><strong>Access</strong> the personal data we hold about you.</li>
               <li><strong>Correct</strong> inaccurate personal information.</li>
               <li><strong>Delete</strong> your account and associated personal data.</li>
-              <li><strong>Export</strong> your organization's analytics data via the CSV export feature.</li>
+              <li><strong>Export</strong> your organization&apos;s analytics data via the CSV export feature.</li>
               <li><strong>Object</strong> to any processing of your data for purposes beyond the ones described here.</li>
             </ul>
             <p className="mt-3 text-sm leading-relaxed">

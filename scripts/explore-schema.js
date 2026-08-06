@@ -136,7 +136,7 @@ async function main() {
          AND TABLE_NAME = 'report_payload_current'`
       );
       console.log('   Columns:', payloadColumns.map(c => c.COLUMN_NAME).join(', '));
-    } catch (e) {
+    } catch {
       console.log('   NOT FOUND');
     }
 

@@ -13,12 +13,6 @@ export function fmt(value: number | string, unit?: string): string {
   return unit ? `${formatted}${unit}` : formatted
 }
 
-export function deltaColor(delta: number): string {
-  if (delta > 0)  return 'text-primary'
-  if (delta < 0)  return 'text-destructive'
-  return 'text-muted-foreground'
-}
-
 export function deltaSymbol(delta: number): string {
   if (delta > 0) return '↑'
   if (delta < 0) return '↓'

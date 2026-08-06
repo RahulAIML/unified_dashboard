@@ -11,7 +11,7 @@
 import { useMemo } from "react"
 import {
   UserCheck, Repeat, CalendarClock, Target, TrendingUp as TrendUpIcon,
-  ShieldCheck, Compass, Award, ThumbsUp, ThumbsDown, AlertTriangle,
+  ShieldCheck, Compass, ThumbsUp, ThumbsDown, AlertTriangle,
 } from "lucide-react"
 import { DashboardHeader } from "@/components/DashboardHeader"
 import { MetricCard } from "@/components/MetricCard"

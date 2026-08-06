@@ -82,15 +82,6 @@ const PRESETS: Array<{
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function useDebounced<T>(value: T, delay: number): T {
-  const [debounced, setDebounced] = useState(value)
-  useEffect(() => {
-    const id = setTimeout(() => setDebounced(value), delay)
-    return () => clearTimeout(id)
-  }, [value, delay])
-  return debounced
-}
-
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { motion } from "framer-motion"
 import { Calendar, Filter, RefreshCw } from "lucide-react"
 import { useDashboardStore } from "@/lib/store"
@@ -56,6 +56,21 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
   const [refreshing, setRefreshing] = useState(false)
   const syncingFromUrl = useRef(false)
 
+  // Stable identity (via useCallback) so the URL-sync effect below can safely
+  // list this as a dependency without re-firing on every render.
+  const applyPreset = useCallback((days: number) => {
+    setActiveDays(days)
+    const to = new Date()
+    const from = new Date()
+    from.setDate(from.getDate() - days)
+    setDateRange({ from, to })
+  }, [setDateRange])
+
+  const applyCustomRange = useCallback((from: Date, to: Date) => {
+    setActiveDays("custom")
+    setDateRange({ from, to })
+  }, [setDateRange])
+
   useEffect(() => {
     if (typeof window === "undefined") return
 
@@ -90,7 +105,7 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
     applyFromUrl()
     window.addEventListener("popstate", applyFromUrl)
     return () => window.removeEventListener("popstate", applyFromUrl)
-  }, [setDateRange, setSolutionDirect])
+  }, [setDateRange, setSolutionDirect, applyPreset])
 
   const fromIso = dateRange.from.toISOString()
   const toIso = dateRange.to.toISOString()
@@ -116,19 +131,6 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
     }, 300)
     return () => clearTimeout(timeoutId)
   }, [brand.name])
-
-  function applyPreset(days: number) {
-    setActiveDays(days)
-    const to = new Date()
-    const from = new Date()
-    from.setDate(from.getDate() - days)
-    setDateRange({ from, to })
-  }
-
-  function applyCustomRange(from: Date, to: Date) {
-    setActiveDays("custom")
-    setDateRange({ from, to })
-  }
 
   function handleRefresh() {
     if (refreshing) return

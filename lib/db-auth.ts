@@ -40,7 +40,6 @@ export class AuthDbError extends Error {
 
 // Declare on global to survive Next.js hot reloads in development
 declare global {
-  // eslint-disable-next-line no-var
   var __authPool: Pool | undefined
 }
 

@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion"
 import { TrendingUp, TrendingDown, Minus } from "lucide-react"
-import { cn, deltaColor } from "@/lib/utils"
+import { cn } from "@/lib/utils"
 import type { KpiCard } from "@/lib/types"
 import { useT } from "@/lib/lang-store"
 

@@ -17,7 +17,6 @@
  */
 
 import * as fs from 'fs'
-import * as path from 'path'
 
 const checks: { name: string; passed: boolean; details: string }[] = []
 

@@ -647,6 +647,15 @@ export default function AdminTenantsPage() {
 
 // ── Review step ───────────────────────────────────────────────────────────────
 
+function Row({ label, value, fallback }: { label: string; value: string; fallback: string }) {
+  return (
+    <div className="flex items-start justify-between gap-4 py-2 border-b border-border/40 last:border-0">
+      <span className="text-xs text-muted-foreground shrink-0">{label}</span>
+      <span className="text-sm text-foreground text-right break-all">{value || fallback}</span>
+    </div>
+  )
+}
+
 function ReviewStep({ t, form }: { t: ReturnType<typeof useT>; form: FormState }) {
   const domains = parseDomainList(form.domainsText)
   const ids = parseIdList(form.ucidsText)
@@ -660,22 +669,15 @@ function ReviewStep({ t, form }: { t: ReturnType<typeof useT>; form: FormState }
     form.hasTopStats && t.adminFieldTopStats,
   ].filter(Boolean) as string[]
 
-  const Row = ({ label, value }: { label: string; value: string }) => (
-    <div className="flex items-start justify-between gap-4 py-2 border-b border-border/40 last:border-0">
-      <span className="text-xs text-muted-foreground shrink-0">{label}</span>
-      <span className="text-sm text-foreground text-right break-all">{value || t.adminReviewFieldValue}</span>
-    </div>
-  )
-
   return (
     <div className="space-y-3">
       <div className="rounded-lg border border-border/60 bg-muted/30 px-4 py-1">
-        <Row label={t.adminFieldDisplayName} value={`${form.displayName} (${form.tenantKey})`} />
-        <Row label={t.adminFieldEndpointUrl} value={form.url} />
-        <Row label={t.adminFieldKind} value={kindLabel} />
-        <Row label={t.adminFieldExerciseIds} value={ids.join(', ')} />
-        <Row label={t.adminFieldDomains} value={domains.join(', ')} />
-        <Row label={t.adminFieldModules} value={modules.length ? modules.join(', ') : t.adminReviewModulesNone} />
+        <Row label={t.adminFieldDisplayName} value={`${form.displayName} (${form.tenantKey})`} fallback={t.adminReviewFieldValue} />
+        <Row label={t.adminFieldEndpointUrl} value={form.url} fallback={t.adminReviewFieldValue} />
+        <Row label={t.adminFieldKind} value={kindLabel} fallback={t.adminReviewFieldValue} />
+        <Row label={t.adminFieldExerciseIds} value={ids.join(', ')} fallback={t.adminReviewFieldValue} />
+        <Row label={t.adminFieldDomains} value={domains.join(', ')} fallback={t.adminReviewFieldValue} />
+        <Row label={t.adminFieldModules} value={modules.length ? modules.join(', ') : t.adminReviewModulesNone} fallback={t.adminReviewFieldValue} />
       </div>
       {domains.length === 0 && (
         <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 px-4 py-3 flex items-start gap-2">
