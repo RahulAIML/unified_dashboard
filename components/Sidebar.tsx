@@ -7,7 +7,7 @@ import { motion } from "framer-motion"
 import {
   LayoutDashboard, BookOpen, BrainCircuit, Gamepad2,
   BadgeCheck, Database, Sun, Moon, Settings, LogOut, MessageSquare,
-  GitBranch, Building2, Activity, FileText, Route, Trophy, BarChart3, Sparkles,
+  GitBranch, Building2, Activity, FileText, Route, Trophy, BarChart3, Sparkles, Users,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useTheme } from "./ThemeProvider"
@@ -165,7 +165,10 @@ export function Sidebar() {
     // URL). Role comes from the authenticated user record, never a client
     // toggle -- see layout.tsx for the actual boundary.
     ...(user?.role === 'admin'
-      ? [{ href: "/dashboard-builder", label: t.navDashboardBuilder, icon: Sparkles }] : []),
+      ? [
+          { href: "/dashboard-builder", label: t.navDashboardBuilder, icon: Sparkles },
+          { href: "/admin/users",       label: t.navAdminUsers,       icon: Users    },
+        ] : []),
     { href: "/settings",      label: t.navSettings,      icon: Settings        },
   ]
 

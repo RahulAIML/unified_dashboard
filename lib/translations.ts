@@ -17,6 +17,7 @@ export const translations = {
     navSecondBrain:  'Second Brain',
     navSettings:     'Settings',
     navDashboardBuilder: 'Dashboard Builder',
+    navAdminUsers:   'User Management',
     navAdminTenants: 'Client Onboarding',
     lightMode:       'Light mode',
     darkMode:        'Dark mode',
@@ -785,6 +786,7 @@ export const translations = {
     navSecondBrain:  'Second Brain',   // brand name — never translate
     navSettings:     'Ajustes',
     navDashboardBuilder: 'Generador de Dashboards',
+    navAdminUsers:   'Gestión de Usuarios',
     navAdminTenants: 'Alta de Clientes',
     lightMode:       'Modo claro',
     darkMode:        'Modo oscuro',
