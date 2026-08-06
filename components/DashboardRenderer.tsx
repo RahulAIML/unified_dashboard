@@ -53,6 +53,11 @@ export interface DashboardConfig {
   // which are derived from the schema alone before any real value exists.
   // Absent/empty for every connector this hasn't been built for yet.
   insights?: string[]
+  // Closing criterion: set by an admin before sharing a published link
+  // outside the normal authenticated tenant flow (ai-service's
+  // DashboardConfig.confidential). Absent/false for every config built
+  // before this field existed.
+  confidential?: boolean
 }
 
 // Must match ai-service's preview_fetch.py BEST_PERFORMERS_ID — routed by

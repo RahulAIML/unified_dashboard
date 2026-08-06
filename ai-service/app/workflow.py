@@ -217,6 +217,7 @@ async def _continue_from_planning(job: JobState, knowledge, primary: ServiceDesc
         secondary = pick_secondary(knowledge, primary) if job.secondary_schema else None
         cfg = await dashboard_config.run(knowledge, schema, primary, pages, filters, recs, log, secondary=secondary)
         cfg.connector_handle["base_url"] = primary.base_url
+        cfg.confidential = req.confidential
         job.dashboard = cfg; job.percent = 76; await update(job)
 
         job.phase = JobPhase.validation; await update(job)

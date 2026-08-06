@@ -262,6 +262,10 @@ class DashboardConfig(BaseModel):
     branding: dict[str, Any] = Field(default_factory=dict)
     version: int = 1
     created_at: datetime = Field(default_factory=_now)
+    # Closing criterion: set by an admin before sharing a published link
+    # outside the normal authenticated tenant flow. Defaults False so every
+    # config built before this field existed deserializes unchanged.
+    confidential: bool = False
 
 
 # ── Validation ──────────────────────────────────────────────────────────────────
@@ -365,6 +369,10 @@ class GenerateRequest(BaseModel):
     services: list[str] = Field(default_factory=list)
     manager_request: str = ""
     auto_publish: bool = False
+    # Closing criterion: shown as a "CONFIDENTIAL" label on the published
+    # /d/[slug] view -- for a link shared before the client's own login is
+    # set up, or shared outside the platform entirely.
+    confidential: bool = False
 
 
 class JobState(BaseModel):

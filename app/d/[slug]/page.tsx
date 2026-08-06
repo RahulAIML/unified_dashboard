@@ -86,7 +86,14 @@ export default function PublishedDashboardPage() {
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
       <header className="mb-6">
-        <h1 className="text-2xl font-bold text-foreground">{data.config.title}</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold text-foreground">{data.config.title}</h1>
+          {data.config.confidential && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold tracking-wide bg-destructive/10 text-destructive border border-destructive/30">
+              CONFIDENTIAL
+            </span>
+          )}
+        </div>
         <p className="text-sm text-muted-foreground">
           Live data · {humanizeConnector(data.config.connector)}{lastUpdated ? ` · refreshed ${lastUpdated}` : ''}
         </p>

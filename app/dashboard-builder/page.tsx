@@ -129,6 +129,7 @@ function DashboardBuilder() {
     })
   const [idsText, setIdsText] = useState('')
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const [confidential, setConfidential] = useState(false)
   const [job, setJob] = useState<JobState | null>(null)
   const [starting, setStarting] = useState(false)
   const [publishing, setPublishing] = useState(false)
@@ -217,7 +218,7 @@ function DashboardBuilder() {
     try {
       const res = await fetch('/api/ai/generate-dashboard', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ company: company.trim(), exercise_ids, domains, services: Array.from(services) }),
+        body: JSON.stringify({ company: company.trim(), exercise_ids, domains, services: Array.from(services), confidential }),
       })
       const j: JobState = await res.json()
       setJob(j); poll(j.job_id)
@@ -354,12 +355,23 @@ function DashboardBuilder() {
           {showAdvanced ? '▾' : '▸'} Advanced (optional)
         </button>
         {showAdvanced && (
-          <div className="mt-2">
-            <label className="text-xs font-medium text-foreground mb-1 block">Exercise IDs</label>
-            <input value={idsText} onChange={e => setIdsText(e.target.value)}
-              placeholder="Leave blank — the AI finds these automatically" disabled={running}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
-            <p className="text-xs text-muted-foreground mt-1">Only fill this in if you already know the specific exercise IDs. Otherwise leave it empty.</p>
+          <div className="mt-2 space-y-3">
+            <div>
+              <label className="text-xs font-medium text-foreground mb-1 block">Exercise IDs</label>
+              <input value={idsText} onChange={e => setIdsText(e.target.value)}
+                placeholder="Leave blank — the AI finds these automatically" disabled={running}
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+              <p className="text-xs text-muted-foreground mt-1">Only fill this in if you already know the specific exercise IDs. Otherwise leave it empty.</p>
+            </div>
+            <label className="flex items-center gap-2 text-xs text-foreground">
+              <input type="checkbox" checked={confidential} onChange={e => setConfidential(e.target.checked)} disabled={running}
+                className="rounded border-border" />
+              Mark this dashboard&apos;s published link as CONFIDENTIAL
+            </label>
+            <p className="text-xs text-muted-foreground -mt-2">
+              Shows a confidential label on the published view — use this before sharing a link outside the
+              client&apos;s normal login.
+            </p>
           </div>
         )}
       </div>

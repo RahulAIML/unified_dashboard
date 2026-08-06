@@ -28,6 +28,18 @@ import type {
   TrendsApiResponse, ApiTrendPoint, UsecaseBreakdownApiResponse, UsecaseApiRow,
   BestPerformersApiResponse, BestPerformerRow,
 } from './types'
+import { getOrSetCache } from './cache'
+
+// Rolplay-app is this platform's primary, fully-automated connector -- every
+// query here goes over the SQL-over-HTTP bridge (remoteSelect, ~seconds per
+// call), and every dashboard page load re-issues the same handful of queries
+// per client. Shared TTL cache so repeat views within the window are free;
+// matches lib/lms-learnworlds.ts's existing CACHE_TTL_MS.
+const CACHE_TTL_SECONDS = 60
+
+function cacheKey(fn: string, clientId: number, range?: { fromIso: string; toIso: string }, solution?: string | null, extra?: string | number): string {
+  return `rolplay-app:${fn}:${Math.trunc(clientId)}:${solution ?? '-'}:${range?.fromIso ?? '-'}:${range?.toIso ?? '-'}${extra != null ? ':' + extra : ''}`
+}
 
 const DEFAULT_SQL_URL = 'https://rolplay.app/ajax/remote-access.php'
 
@@ -334,6 +346,10 @@ function categoryClause(solution?: string | null): string {
  * module appears automatically.
  */
 export async function rolplayAppAvailableModules(clientId: number): Promise<string[]> {
+  return getOrSetCache(cacheKey('modules', clientId), CACHE_TTL_SECONDS, () => _rolplayAppAvailableModulesImpl(clientId))
+}
+
+async function _rolplayAppAvailableModulesImpl(clientId: number): Promise<string[]> {
   const cid = Math.trunc(clientId)
   const rows = await remoteSelect<{ category: string | null; n: number | string }>(
     `SELECT sim.category AS category, COUNT(*) AS n
@@ -386,6 +402,14 @@ export async function rolplayAppOverview(
   range?: { fromIso: string; toIso: string },
   solution?: string | null,
 ): Promise<OverviewApiResponse> {
+  return getOrSetCache(cacheKey('overview', clientId, range, solution), CACHE_TTL_SECONDS, () => _rolplayAppOverviewImpl(clientId, range, solution))
+}
+
+async function _rolplayAppOverviewImpl(
+  clientId: number,
+  range?: { fromIso: string; toIso: string },
+  solution?: string | null,
+): Promise<OverviewApiResponse> {
   const cid = Math.trunc(clientId)
 
   // Previous period = the equal-length window immediately before `from`.
@@ -419,6 +443,12 @@ export async function rolplayAppOverview(
 export async function rolplayAppDataBounds(
   clientId: number,
 ): Promise<{ min: string; max: string } | null> {
+  return getOrSetCache(cacheKey('data-bounds', clientId), CACHE_TTL_SECONDS, () => _rolplayAppDataBoundsImpl(clientId))
+}
+
+async function _rolplayAppDataBoundsImpl(
+  clientId: number,
+): Promise<{ min: string; max: string } | null> {
   const cid = Math.trunc(clientId)
   const rows = await remoteSelect<{ min_date: string | null; max_date: string | null }>(
     `SELECT MIN(s.date_created) AS min_date, MAX(s.date_created) AS max_date
@@ -432,6 +462,15 @@ export async function rolplayAppDataBounds(
 
 /** Recent sessions as rows, with real extracted score + pass/fail result. */
 export async function rolplayAppResults(
+  clientId: number,
+  limit: number,
+  range?: { fromIso: string; toIso: string },
+  solution?: string | null,
+): Promise<ResultsApiResponse> {
+  return getOrSetCache(cacheKey('results', clientId, range, solution, limit), CACHE_TTL_SECONDS, () => _rolplayAppResultsImpl(clientId, limit, range, solution))
+}
+
+async function _rolplayAppResultsImpl(
   clientId: number,
   limit: number,
   range?: { fromIso: string; toIso: string },
@@ -474,6 +513,14 @@ export async function rolplayAppTrends(
   range?: { fromIso: string; toIso: string },
   solution?: string | null,
 ): Promise<TrendsApiResponse> {
+  return getOrSetCache(cacheKey('trends', clientId, range, solution), CACHE_TTL_SECONDS, () => _rolplayAppTrendsImpl(clientId, range, solution))
+}
+
+async function _rolplayAppTrendsImpl(
+  clientId: number,
+  range?: { fromIso: string; toIso: string },
+  solution?: string | null,
+): Promise<TrendsApiResponse> {
   const cid = Math.trunc(clientId)
   const dc = dateClause(range?.fromIso, range?.toIso)
 
@@ -511,6 +558,14 @@ export async function rolplayAppUsecaseBreakdown(
   range?: { fromIso: string; toIso: string },
   solution?: string | null,
 ): Promise<UsecaseBreakdownApiResponse> {
+  return getOrSetCache(cacheKey('usecase-breakdown', clientId, range, solution), CACHE_TTL_SECONDS, () => _rolplayAppUsecaseBreakdownImpl(clientId, range, solution))
+}
+
+async function _rolplayAppUsecaseBreakdownImpl(
+  clientId: number,
+  range?: { fromIso: string; toIso: string },
+  solution?: string | null,
+): Promise<UsecaseBreakdownApiResponse> {
   const cid = Math.trunc(clientId)
   const dc = dateClause(range?.fromIso, range?.toIso)
   const rows = await remoteSelect<{ simulator_id: number | string; name: string | null; total: number | string; avg: string | null; passed: number | string }>(
@@ -540,6 +595,15 @@ export async function rolplayAppUsecaseBreakdown(
 
 /** Top users by average score. */
 export async function rolplayAppBestPerformers(
+  clientId: number,
+  limit: number,
+  range?: { fromIso: string; toIso: string },
+  solution?: string | null,
+): Promise<BestPerformersApiResponse> {
+  return getOrSetCache(cacheKey('best-performers', clientId, range, solution, limit), CACHE_TTL_SECONDS, () => _rolplayAppBestPerformersImpl(clientId, limit, range, solution))
+}
+
+async function _rolplayAppBestPerformersImpl(
   clientId: number,
   limit: number,
   range?: { fromIso: string; toIso: string },
@@ -621,6 +685,14 @@ export interface CesarGroup1Kpis {
  *  Python port's own approach -- simpler and more testable than nested
  *  correlated SQL re-deriving SCORE_SQL inside a subquery. */
 export async function rolplayAppCesarGroup1(
+  clientId: number,
+  range?: { fromIso: string; toIso: string },
+  solution?: string | null,
+): Promise<CesarGroup1Kpis> {
+  return getOrSetCache(cacheKey('cesar-group1', clientId, range, solution), CACHE_TTL_SECONDS, () => _rolplayAppCesarGroup1Impl(clientId, range, solution))
+}
+
+async function _rolplayAppCesarGroup1Impl(
   clientId: number,
   range?: { fromIso: string; toIso: string },
   solution?: string | null,
@@ -738,6 +810,18 @@ export async function rolplayAppCesarGroup1(
 }
 
 async function rolplayAppClosingDataRows(
+  clientId: number,
+  range?: { fromIso: string; toIso: string },
+  solution?: string | null,
+): Promise<Record<string, unknown>[]> {
+  // Shared by rolplayAppCommercialDomain/RubricaTags(x2 -- pass+fail)/AdoptionMovementRate,
+  // which the cesar-kpis route calls together via Promise.all -- caching here
+  // (instead of in each of those four callers) collapses what would be four
+  // identical remote-SQL round trips per KPI-page load into one.
+  return getOrSetCache(cacheKey('closing-data', clientId, range, solution), CACHE_TTL_SECONDS, () => _rolplayAppClosingDataRowsImpl(clientId, range, solution))
+}
+
+async function _rolplayAppClosingDataRowsImpl(
   clientId: number,
   range?: { fromIso: string; toIso: string },
   solution?: string | null,
