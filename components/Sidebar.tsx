@@ -7,7 +7,7 @@ import { motion } from "framer-motion"
 import {
   LayoutDashboard, BookOpen, BrainCircuit, Gamepad2,
   BadgeCheck, Database, Sun, Moon, Settings, LogOut, MessageSquare,
-  GitBranch, Building2, Activity, FileText, Route, Trophy, BarChart3,
+  GitBranch, Building2, Activity, FileText, Route, Trophy, BarChart3, Sparkles,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useTheme } from "./ThemeProvider"
@@ -159,6 +159,13 @@ export function Sidebar() {
     ...(access?.hasRolplayAppAccess ? [{ href: "/kpis", label: t.navKpis, icon: BarChart3 }] : []),
     ...((access?.hasCoachData || access?.hasPharmaAccess || access?.hasBancoAccess || access?.hasRolplayAppAccess)
       ? [{ href: "/reports", label: t.navReports, icon: FileText }] : []),
+    // Admin-only: the AI Dashboard Builder has no other discoverable entry
+    // point today (layout.tsx already enforces the real admin gate
+    // server-side; this is purely so an admin doesn't have to know/type the
+    // URL). Role comes from the authenticated user record, never a client
+    // toggle -- see layout.tsx for the actual boundary.
+    ...(user?.role === 'admin'
+      ? [{ href: "/dashboard-builder", label: t.navDashboardBuilder, icon: Sparkles }] : []),
     { href: "/settings",      label: t.navSettings,      icon: Settings        },
   ]
 

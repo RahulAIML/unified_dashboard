@@ -16,6 +16,7 @@ export const translations = {
     navCertification:'Certifier Coach',
     navSecondBrain:  'Second Brain',
     navSettings:     'Settings',
+    navDashboardBuilder: 'Dashboard Builder',
     navAdminTenants: 'Client Onboarding',
     lightMode:       'Light mode',
     darkMode:        'Dark mode',
@@ -783,6 +784,7 @@ export const translations = {
     navCertification:'Coach Certificador',
     navSecondBrain:  'Second Brain',   // brand name — never translate
     navSettings:     'Ajustes',
+    navDashboardBuilder: 'Generador de Dashboards',
     navAdminTenants: 'Alta de Clientes',
     lightMode:       'Modo claro',
     darkMode:        'Modo oscuro',
