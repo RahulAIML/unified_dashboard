@@ -171,6 +171,33 @@ describe('language toggle (respond in the UI language, not whatever language the
   })
 })
 
+describe('user context (contextualize navigation to where the person actually is and who they are)', () => {
+  it('passes the current page into the navigational prompt', async () => {
+    const { getAIResponse } = await fresh()
+    await getAIResponse('Where can I export this table?', '', 'en', { currentPage: '/reports' })
+
+    const system = lastRequestBody().system_instruction.parts[0].text
+    expect(system).toContain('/reports')
+  })
+
+  it('tells the model the asking user\'s actual role, and instructs it to deny admin-only paths to a non-admin', async () => {
+    const { getAIResponse } = await fresh()
+    await getAIResponse('How do I open the Dashboard Builder?', '', 'en', { currentPage: '/', userRole: 'user' })
+
+    const system = lastRequestBody().system_instruction.parts[0].text
+    expect(system).toMatch(/role is: user/i)
+    expect(system).toMatch(/don't have access/i)
+  })
+
+  it('tells the model when the asking user is an admin', async () => {
+    const { getAIResponse } = await fresh()
+    await getAIResponse('How do I open the Dashboard Builder?', '', 'en', { currentPage: '/', userRole: 'admin' })
+
+    const system = lastRequestBody().system_instruction.parts[0].text
+    expect(system).toMatch(/role is: admin/i)
+  })
+})
+
 describe('resilience (unchanged behavior worth keeping)', () => {
   it('retries once on a suspiciously short response', async () => {
     fetchSpy

@@ -119,16 +119,23 @@ Rolplay glossary:
 ${JSON.stringify(PRODUCT_GLOSSARY, null, 2)}`
 }
 
-function navigationalSystem(lang: AssistantLang): string {
+interface UserContext {
+  currentPage?: string
+  userRole?: "admin" | "user"
+}
+
+function navigationalSystem(lang: AssistantLang, user: UserContext): string {
   return `You are Robin, the product guide for the Rolplay analytics dashboard.
 Your role is to help users find features and understand what things mean -- not to interpret their data.
 
 ${languageDirective(lang)}
 
+The person asking is currently on: ${user.currentPage ?? "an unknown page"}. Their account role is: ${user.userRole ?? "user"}.
+
 HARD RULES:
-1. Always give a click-by-click path using the navigation map below, never just "it's in the X page".
+1. Always give a click-by-click path using the navigation map below, never just "it's in the X page". Where it's natural, phrase the path relative to where they are right now (e.g. "From here, click...") rather than always starting from scratch.
 2. Disambiguate Rolplay-specific terms using the glossary below rather than guessing.
-3. If a feature depends on a capability the user's organization may not have (e.g. LMS, Second Brain, an admin-only page), say so.
+3. If a feature depends on a capability the user's organization may not have (e.g. LMS, Second Brain), say so. If a feature is admin-only (per the navigation map) and this person's role is "user", tell them plainly they don't have access to it rather than describing the click path as if they could reach it.
 4. If you're genuinely not sure of the exact path, say that plainly rather than inventing one.
 5. ${SPECIFICITY_RULE}
 
@@ -198,7 +205,12 @@ const INSUFFICIENT_CONTEXT_MESSAGE: Record<AssistantLang, string> = {
   es: "No tengo suficientes datos del panel cargados en este momento para responder con precisión. Intenta actualizar la página o hacer una pregunta más específica una vez que los datos se hayan cargado.",
 }
 
-export async function getAIResponse(prompt: string, context: string, lang: AssistantLang = "es"): Promise<string> {
+export async function getAIResponse(
+  prompt: string,
+  context: string,
+  lang: AssistantLang = "es",
+  user: UserContext = {}
+): Promise<string> {
   const question = prompt.trim()
   const intent = detectIntent(question)
 
@@ -211,7 +223,7 @@ export async function getAIResponse(prompt: string, context: string, lang: Assis
     throw new Error("GEMINI_API_KEY is not set")
   }
 
-  const system = intent === "navigational" ? navigationalSystem(lang) : analyticalSystem(lang)
+  const system = intent === "navigational" ? navigationalSystem(lang, user) : analyticalSystem(lang)
   const userContent =
     intent === "navigational"
       ? `Question: ${question}\n\nAnswer with a specific click-by-click path and, if relevant, what the feature is for. If it depends on a capability the user's organization might not have, say so.`

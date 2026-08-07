@@ -1,11 +1,13 @@
 "use client"
 
 import { useMemo, useRef, useState } from "react"
+import { usePathname } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import { Bot, Send, X, Loader2 } from "lucide-react"
 import { useDashboardStore } from "@/lib/store"
 import { buildApiUrl } from "@/lib/hooks/useApi"
 import { useT, useLangStore } from "@/lib/lang-store"
+import { useAuthContext } from "@/components/AuthProvider"
 import type { OverviewApiResponse, TrendsApiResponse } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -116,6 +118,8 @@ export function AIAssistant() {
   const { dateRange } = useDashboardStore()
   const t = useT()
   const lang = useLangStore(s => s.lang)
+  const pathname = usePathname()
+  const { user } = useAuthContext()
 
   const QUICK_PROMPTS = [
     t.aiQuickSummary,
@@ -207,7 +211,7 @@ export function AIAssistant() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ prompt: question, context, lang }),
+        body: JSON.stringify({ prompt: question, context, lang, currentPage: pathname, userRole: user?.role }),
       })
 
       const json = await res.json()

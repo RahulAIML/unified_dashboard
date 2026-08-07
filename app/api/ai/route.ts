@@ -9,10 +9,12 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { prompt, context, lang } = body as {
+    const { prompt, context, lang, currentPage, userRole } = body as {
       prompt?: string
       context?: string
       lang?: string
+      currentPage?: string
+      userRole?: string
     }
 
     if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
@@ -22,7 +24,8 @@ export async function POST(req: NextRequest) {
     const answer = await getAIResponse(
       prompt.trim(),
       context ?? "No dashboard context provided.",
-      lang === "en" ? "en" : "es"
+      lang === "en" ? "en" : "es",
+      { currentPage, userRole: userRole === "admin" ? "admin" : "user" }
     )
 
     return buildSuccess(
