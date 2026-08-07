@@ -43,7 +43,7 @@ function lastRequestBody(): { system_instruction: { parts: { text: string }[] } 
 describe('confidence gating (analytical questions)', () => {
   it('declines a trend/analytical question with no context, without calling the model', async () => {
     const { getAIResponse } = await fresh()
-    const answer = await getAIResponse('Why did the pass rate drop?', '')
+    const answer = await getAIResponse('Why did the pass rate drop?', '', 'en')
 
     expect(fetchSpy).not.toHaveBeenCalled()
     expect(answer.toLowerCase()).toContain("don't have enough")
@@ -54,6 +54,7 @@ describe('confidence gating (analytical questions)', () => {
     const answer = await getAIResponse(
       'Is this trend normal?',
       'Time period: last 30 days\nDashboard data temporarily unavailable.',
+      'en',
     )
 
     expect(fetchSpy).not.toHaveBeenCalled()
@@ -133,6 +134,40 @@ describe('the standard\'s validation checklist, encoded', () => {
     const answer = await getAIResponse(question, 'Pass rate: 65%\nPrior period pass rate: 78%')
 
     expect(answer).not.toBe(`Here is the answer:\n\n${question}`)
+  })
+})
+
+describe('language toggle (respond in the UI language, not whatever language the question used)', () => {
+  it('defaults to Spanish when no lang is passed', async () => {
+    const { getAIResponse } = await fresh()
+    await getAIResponse('Why did the pass rate drop?', 'Pass rate: 65%\nPrior period pass rate: 78%')
+
+    const system = lastRequestBody().system_instruction.parts[0].text
+    expect(system).toMatch(/respond entirely in spanish/i)
+  })
+
+  it('forces English when lang="en", regardless of question language', async () => {
+    const { getAIResponse } = await fresh()
+    await getAIResponse('Por qué bajó la tasa de aprobación?', 'Pass rate: 65%\nPrior period pass rate: 78%', 'en')
+
+    const system = lastRequestBody().system_instruction.parts[0].text
+    expect(system).toMatch(/respond entirely in english/i)
+  })
+
+  it('forces Spanish for a navigational question when lang="es"', async () => {
+    const { getAIResponse } = await fresh()
+    await getAIResponse('Where can I export this table?', '', 'es')
+
+    const system = lastRequestBody().system_instruction.parts[0].text
+    expect(system).toMatch(/respond entirely in spanish/i)
+  })
+
+  it('the insufficient-context decline message itself is in the requested language', async () => {
+    const { getAIResponse } = await fresh()
+    const answer = await getAIResponse('Why did the pass rate drop?', '', 'en')
+
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(answer.toLowerCase()).toContain("don't have enough")
   })
 })
 

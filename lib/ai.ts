@@ -89,8 +89,22 @@ function detectIntent(question: string): "analytical" | "navigational" | "ambigu
   return "ambiguous"
 }
 
-const ANALYTICAL_SYSTEM = `You are Robin, the analytics coach for Rolplay's sales-enablement dashboards.
+type AssistantLang = "en" | "es"
+
+const LANG_NAME: Record<AssistantLang, string> = { en: "English", es: "Spanish" }
+
+function languageDirective(lang: AssistantLang): string {
+  return `LANGUAGE: Respond entirely in ${LANG_NAME[lang]}, regardless of what language the question itself is written in. Never mix languages in one reply.`
+}
+
+const SPECIFICITY_RULE =
+  "Never give a generic, one-size-fits-all answer. Every reply must be grounded in the specific numbers, dates, and comparisons given below (or, for a navigational question, the specific click path from the map below) -- if you can't point to a specific figure or step, say plainly that you don't have it rather than filling the gap with a vague generality."
+
+function analyticalSystem(lang: AssistantLang): string {
+  return `You are Robin, the analytics coach for Rolplay's sales-enablement dashboards.
 Your role is to INTERPRET data, not restate it.
+
+${languageDirective(lang)}
 
 HARD RULES:
 1. Never restate a number without adding interpretation ("pass rate is 65%" is not an answer by itself).
@@ -99,24 +113,31 @@ HARD RULES:
 4. If the data doesn't support a clear read, say so plainly rather than speculating: "There isn't enough data yet to call this a trend."
 5. When something looks concerning, say what and suggest a concrete next step -- do not just describe the number.
 6. Use the glossary below to explain what a metric measures if the question implies the user isn't sure.
+7. ${SPECIFICITY_RULE}
 
 Rolplay glossary:
 ${JSON.stringify(PRODUCT_GLOSSARY, null, 2)}`
+}
 
-const NAVIGATIONAL_SYSTEM = `You are Robin, the product guide for the Rolplay analytics dashboard.
+function navigationalSystem(lang: AssistantLang): string {
+  return `You are Robin, the product guide for the Rolplay analytics dashboard.
 Your role is to help users find features and understand what things mean -- not to interpret their data.
+
+${languageDirective(lang)}
 
 HARD RULES:
 1. Always give a click-by-click path using the navigation map below, never just "it's in the X page".
 2. Disambiguate Rolplay-specific terms using the glossary below rather than guessing.
 3. If a feature depends on a capability the user's organization may not have (e.g. LMS, Second Brain, an admin-only page), say so.
 4. If you're genuinely not sure of the exact path, say that plainly rather than inventing one.
+5. ${SPECIFICITY_RULE}
 
 Navigation map:
 ${JSON.stringify(NAVIGATION_MAP, null, 2)}
 
 Rolplay glossary:
 ${JSON.stringify(PRODUCT_GLOSSARY, null, 2)}`
+}
 
 /** Call Gemini once with the given system + user content. */
 async function callGemini(system: string, userContent: string, apiKey: string): Promise<string> {
@@ -172,15 +193,17 @@ function hasGroundedContext(context: string): boolean {
   return true
 }
 
-const INSUFFICIENT_CONTEXT_MESSAGE =
-  "I don't have enough dashboard data loaded right now to answer that accurately. Try refreshing the page, or ask a more specific question once the data has loaded."
+const INSUFFICIENT_CONTEXT_MESSAGE: Record<AssistantLang, string> = {
+  en: "I don't have enough dashboard data loaded right now to answer that accurately. Try refreshing the page, or ask a more specific question once the data has loaded.",
+  es: "No tengo suficientes datos del panel cargados en este momento para responder con precisión. Intenta actualizar la página o hacer una pregunta más específica una vez que los datos se hayan cargado.",
+}
 
-export async function getAIResponse(prompt: string, context: string): Promise<string> {
+export async function getAIResponse(prompt: string, context: string, lang: AssistantLang = "es"): Promise<string> {
   const question = prompt.trim()
   const intent = detectIntent(question)
 
   if (intent !== "navigational" && !hasGroundedContext(context)) {
-    return INSUFFICIENT_CONTEXT_MESSAGE
+    return INSUFFICIENT_CONTEXT_MESSAGE[lang]
   }
 
   const apiKey = process.env.GEMINI_API_KEY
@@ -188,7 +211,7 @@ export async function getAIResponse(prompt: string, context: string): Promise<st
     throw new Error("GEMINI_API_KEY is not set")
   }
 
-  const system = intent === "navigational" ? NAVIGATIONAL_SYSTEM : ANALYTICAL_SYSTEM
+  const system = intent === "navigational" ? navigationalSystem(lang) : analyticalSystem(lang)
   const userContent =
     intent === "navigational"
       ? `Question: ${question}\n\nAnswer with a specific click-by-click path and, if relevant, what the feature is for. If it depends on a capability the user's organization might not have, say so.`

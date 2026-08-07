@@ -374,12 +374,12 @@ Test each assistant against this benchmark:
 - Template code in `ai-service/agents/harness.py`
 - Reference implementation for dashboard Q&A
 
-### Phase 2: First Adoption (Buddhadeb/Hariom)
-- Pick **ONE** existing assistant (e.g., insights in dashboards)
-- Retrofit with AssistantContext + confidence gating
-- A/B test with 20% of users
-- Document what changed, improvements observed
-- **Validation**: Run all checks above; report results
+### Phase 2: First Adoption (Buddhadeb/Hariom) — DONE (2026-08-06)
+- Assistant retrofitted: "Robin AI" (`components/ai-assistant.tsx` → `/api/ai` → `lib/ai.ts`), formerly "Ask AI" — the main dashboard's embedded Q&A widget
+- Retrofit: added `AssistantContext`-equivalent (`PRODUCT_GLOSSARY` + `NAVIGATION_MAP` in `lib/ai.ts`), intent detection routing to a separate analytical/navigational system prompt each, and `hasGroundedContext()` confidence gating that declines rather than guesses when dashboard data hasn't loaded
+- **Validation**: `lib/__tests__/ai-harness.test.ts` — 12/12 passing. Covers: confidence gating declines without calling the model; navigational questions proceed on empty context; intent routes to the correct system prompt; analytical prompt forbids restatement and requires citation; navigational prompt requires a click-by-click path; response never echoes the question back; retry-on-short-response preserved
+- A/B test with 20% of users — not yet run (needs product/analytics team)
+- Two follow-up fixes found via live production testing, both shipped: the API route was masking every real error behind one generic message (now surfaces the actual cause), and Gemini's default "thinking" was silently consuming the whole output-token budget, cutting answers off mid-sentence (`thinkingBudget: 0` fixed it)
 
 ### Phase 3: Scale Across Prototypes
 - Apply to second-most-used assistant
@@ -414,4 +414,5 @@ Test each assistant against this benchmark:
 ---
 
 **Drafted by**: Claude Code (2026-08-05)  
-**Next step**: Hariom validates against existing insights agent; document results here
+**Phase 2 validated**: Claude Code (2026-08-06) — see Phase 2 above  
+**Next step**: Hariom reviews the Robin AI retrofit as the reference implementation, then picks the second assistant (e.g. the Dashboard Builder's AI Insights step) for Phase 3

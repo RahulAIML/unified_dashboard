@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { Bot, Send, X, Loader2 } from "lucide-react"
 import { useDashboardStore } from "@/lib/store"
 import { buildApiUrl } from "@/lib/hooks/useApi"
-import { useT } from "@/lib/lang-store"
+import { useT, useLangStore } from "@/lib/lang-store"
 import type { OverviewApiResponse, TrendsApiResponse } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -115,6 +115,7 @@ function trendDirection(
 export function AIAssistant() {
   const { dateRange } = useDashboardStore()
   const t = useT()
+  const lang = useLangStore(s => s.lang)
 
   const QUICK_PROMPTS = [
     t.aiQuickSummary,
@@ -206,7 +207,7 @@ export function AIAssistant() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ prompt: question, context }),
+        body: JSON.stringify({ prompt: question, context, lang }),
       })
 
       const json = await res.json()
