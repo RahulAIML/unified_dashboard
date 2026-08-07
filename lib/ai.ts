@@ -123,7 +123,18 @@ async function callGemini(system: string, userContent: string, apiKey: string): 
   const payload = {
     system_instruction: { parts: [{ text: system }] },
     contents: [{ role: "user", parts: [{ text: userContent }] }],
-    generationConfig: { temperature: 0.3, maxOutputTokens: 1024, topP: 0.9 },
+    generationConfig: {
+      temperature: 0.3,
+      // gemini-2.5-flash "thinks" before answering by default, and that
+      // reasoning silently eats into maxOutputTokens -- a 1024 budget was
+      // getting consumed almost entirely by thinking, cutting the visible
+      // answer off after a couple of sentences. thinkingBudget: 0 turns
+      // that off (this assistant doesn't need multi-step reasoning), and
+      // the higher cap gives the actual answer room to finish.
+      maxOutputTokens: 2048,
+      topP: 0.9,
+      thinkingConfig: { thinkingBudget: 0 },
+    },
   }
 
   const res = await fetch(GEMINI_API_URL, {
