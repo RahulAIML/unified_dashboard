@@ -1,7 +1,7 @@
 "use server"
 
 /**
- * The "Ask AI" dashboard assistant (components/ai-assistant.tsx -> /api/ai).
+ * The "Robin AI" dashboard assistant (components/ai-assistant.tsx -> /api/ai).
  *
  * Retrofitted onto docs/AI_ASSISTANT_HARNESS_STANDARD.md's two mandatory
  * capabilities (analytical + navigational) -- this file previously ran a
@@ -89,7 +89,7 @@ function detectIntent(question: string): "analytical" | "navigational" | "ambigu
   return "ambiguous"
 }
 
-const ANALYTICAL_SYSTEM = `You are an analytics coach for Rolplay's sales-enablement dashboards.
+const ANALYTICAL_SYSTEM = `You are Robin, the analytics coach for Rolplay's sales-enablement dashboards.
 Your role is to INTERPRET data, not restate it.
 
 HARD RULES:
@@ -103,7 +103,7 @@ HARD RULES:
 Rolplay glossary:
 ${JSON.stringify(PRODUCT_GLOSSARY, null, 2)}`
 
-const NAVIGATIONAL_SYSTEM = `You are a product guide for the Rolplay analytics dashboard.
+const NAVIGATIONAL_SYSTEM = `You are Robin, the product guide for the Rolplay analytics dashboard.
 Your role is to help users find features and understand what things mean -- not to interpret their data.
 
 HARD RULES:

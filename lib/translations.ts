@@ -373,7 +373,7 @@ export const translations = {
     exportCsv:        'Export CSV',
     exporting:        'Exporting…',
     liveLabel:        'Live',
-    askAi:            'Ask AI',
+    askAi:            'Robin AI',
     noDataAvailable:  'No data available',
 
     // ── Not linked to org ─────────────────────────────────────
@@ -450,8 +450,8 @@ export const translations = {
     settingsPrimaryBtn:       'Primary Button',
 
     // ── AI Assistant ──────────────────────────────────────────
-    aiAssistant:        'AI Assistant',
-    aiWelcome:          'Hello! I can help you analyze your dashboard data. Ask me about evaluations, scores, pass rates, or trends.',
+    aiAssistant:        'Robin AI',
+    aiWelcome:          "Hello! I'm Robin, your AI assistant. I can help you analyze your dashboard data — ask me about evaluations, scores, pass rates, or trends.",
     aiQuickQuestions:   'Quick questions',
     aiAnalyzing:        'Analyzing dashboard data...',
     aiPlaceholder:      'Ask about KPIs, pass rate, trends…',
@@ -1150,7 +1150,7 @@ export const translations = {
     exportCsv:        'Exportar CSV',
     exporting:        'Exportando…',
     liveLabel:        'En vivo',
-    askAi:            'Preguntar a la IA',
+    askAi:            'Robin AI',
     noDataAvailable:  'Sin datos disponibles',
 
     // ── Not linked to org ─────────────────────────────────────
@@ -1227,8 +1227,8 @@ export const translations = {
     settingsPrimaryBtn:       'Botón Primario',
 
     // ── AI Assistant ──────────────────────────────────────────
-    aiAssistant:        'Asistente IA',
-    aiWelcome:          '¡Hola! Puedo ayudarte a analizar los datos de tu panel. Pregúntame sobre evaluaciones, puntuaciones, tasas de aprobación o tendencias.',
+    aiAssistant:        'Robin AI',
+    aiWelcome:          '¡Hola! Soy Robin, tu asistente de IA. Puedo ayudarte a analizar los datos de tu panel — pregúntame sobre evaluaciones, puntuaciones, tasas de aprobación o tendencias.',
     aiQuickQuestions:   'Preguntas rápidas',
     aiAnalyzing:        'Analizando datos del panel...',
     aiPlaceholder:      'Pregunta sobre KPIs, tasas de aprobación, tendencias…',

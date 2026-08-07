@@ -243,7 +243,7 @@ export function AIAssistant() {
       <button
         onClick={() => setOpen(true)}
         className="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-50 flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-lg hover:shadow-xl transition-all hover:scale-105"
-        aria-label="Open AI assistant"
+        aria-label="Open Robin AI assistant"
       >
         <Bot className="h-4 w-4" />
         {t.askAi}

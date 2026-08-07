@@ -32,6 +32,12 @@ export async function POST(req: NextRequest) {
     )
   } catch (err) {
     console.error("[/api/ai]", err)
-    return buildApiError("Failed to get AI response")
+    // Surface the real cause (never a secret -- it's either our own
+    // "GEMINI_API_KEY is not set" message or Gemini's own error body
+    // describing why the call failed) instead of a generic message that
+    // makes "not configured" indistinguishable from "upstream is down"
+    // without server log access.
+    const message = err instanceof Error ? err.message : "Failed to get AI response"
+    return buildApiError(message)
   }
 }
