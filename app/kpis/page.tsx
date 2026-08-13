@@ -10,11 +10,12 @@
 
 import { useMemo } from "react"
 import {
-  UserCheck, Repeat, CalendarClock, Target, TrendingUp as TrendUpIcon,
-  ShieldCheck, Compass, ThumbsUp, ThumbsDown, AlertTriangle,
+  UserCheck, Repeat, CalendarClock, TrendingUp as TrendUpIcon,
+  ShieldCheck, Compass, ThumbsUp, ThumbsDown,
 } from "lucide-react"
 import { DashboardHeader } from "@/components/DashboardHeader"
 import { MetricCard } from "@/components/MetricCard"
+import { DonutChart } from "@/components/charts/DonutChart"
 import { useApi, buildApiUrl } from "@/lib/hooks/useApi"
 import { useDashboardStore } from "@/lib/store"
 import { useT } from "@/lib/lang-store"
@@ -27,10 +28,8 @@ interface CesarKpisResponse {
   activationRate: number | null
   weeklyPracticeFrequency: number | null
   mauRate: number | null
-  practicesToMastery: number | null
   deltaScore: number | null
   readinessIndex: number | null
-  trialAndErrorRate: number | null
   masteryDistribution: { label: string; value: number; pct: number }[]
   adoptionMovementRate: number | null
   commercialDomain: { domain: string; avgScore: number; sessions: number }[]
@@ -71,13 +70,11 @@ export default function KpisPage() {
   const { data, loading } = useApi<CesarKpisResponse>(url)
 
   const cards = useMemo(() => ([
-    { key: "activation", label: t.kpiActivationRate, value: fmtPct(data?.activationRate ?? null), icon: <UserCheck className="w-4 h-4" /> },
-    { key: "weekly", label: t.kpiWeeklyPractice, value: fmtNum(data?.weeklyPracticeFrequency ?? null), icon: <Repeat className="w-4 h-4" /> },
-    { key: "mau", label: t.kpiMau, value: fmtPct(data?.mauRate ?? null), icon: <CalendarClock className="w-4 h-4" /> },
-    { key: "practices", label: t.kpiPracticesToMastery, value: fmtNum(data?.practicesToMastery ?? null), icon: <Target className="w-4 h-4" /> },
-    { key: "delta", label: t.kpiDeltaScore, value: data?.deltaScore != null ? `${data.deltaScore > 0 ? "+" : ""}${data.deltaScore}` : "—", icon: <TrendUpIcon className="w-4 h-4" /> },
-    { key: "readiness", label: t.kpiReadinessIndex, value: fmtPct(data?.readinessIndex ?? null), icon: <ShieldCheck className="w-4 h-4" /> },
-    { key: "trialAndError", label: t.kpiTrialAndError, value: fmtPct(data?.trialAndErrorRate ?? null), icon: <AlertTriangle className="w-4 h-4" /> },
+    { key: "activation", label: t.kpiActivationRate, value: fmtPct(data?.activationRate ?? null), icon: <UserCheck className="w-4 h-4" />, info: t.kpiActivationRateInfo },
+    { key: "weekly", label: t.kpiWeeklyPractice, value: fmtNum(data?.weeklyPracticeFrequency ?? null), icon: <Repeat className="w-4 h-4" />, info: t.kpiWeeklyPracticeInfo },
+    { key: "mau", label: t.kpiMau, value: fmtPct(data?.mauRate ?? null), icon: <CalendarClock className="w-4 h-4" />, info: t.kpiMauInfo },
+    { key: "delta", label: t.kpiDeltaScore, value: data?.deltaScore != null ? `${data.deltaScore > 0 ? "+" : ""}${data.deltaScore}` : "—", icon: <TrendUpIcon className="w-4 h-4" />, info: t.kpiDeltaScoreInfo },
+    { key: "readiness", label: t.kpiReadinessIndex, value: fmtPct(data?.readinessIndex ?? null), icon: <ShieldCheck className="w-4 h-4" />, info: t.kpiReadinessIndexInfo },
   ]), [data, t])
 
   if (!ready) {
@@ -101,23 +98,26 @@ export default function KpisPage() {
         ) : (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {cards.map(c => <MetricCard key={c.key} label={c.label} value={c.value} icon={c.icon} />)}
+              {cards.map(c => <MetricCard key={c.key} label={c.label} value={c.value} icon={c.icon} info={c.info} />)}
             </div>
 
             <SectionCard title={t.kpiMasteryDistTitle} subtitle={t.kpiMasteryDistSub}>
               {(data?.masteryDistribution?.length ?? 0) === 0 ? (
                 <p className="text-sm text-muted-foreground">{t.noDataAvailable}</p>
               ) : (
-                <div className="space-y-2">
-                  {data!.masteryDistribution.map(b => (
-                    <div key={b.label} className="flex items-center gap-3">
-                      <span className="w-40 shrink-0 text-xs font-medium text-muted-foreground">{b.label}</span>
-                      <div className="flex-1 h-5 bg-muted/40 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full bg-primary" style={{ width: `${Math.max(2, b.pct)}%` }} />
+                // Basic/Intermediate/Advanced sums to 100% -- a donut, never
+                // separate bars, with the exact count + share kept visible
+                // per level rather than replaced by the chart.
+                <div className="space-y-4">
+                  <DonutChart data={data!.masteryDistribution.map(b => ({ name: b.label, value: b.value }))} />
+                  <div className="space-y-1.5">
+                    {data!.masteryDistribution.map(b => (
+                      <div key={b.label} className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">{b.label}</span>
+                        <span className="font-semibold tabular-nums text-foreground">{b.value} ({b.pct}%)</span>
                       </div>
-                      <span className="w-20 shrink-0 text-right text-xs font-semibold tabular-nums text-foreground">{b.value} ({b.pct}%)</span>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               )}
             </SectionCard>

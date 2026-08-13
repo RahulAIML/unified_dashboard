@@ -106,27 +106,31 @@ export default function CoachPage() {
         value: overview.totalEvaluations,
         delta: calcDeltaPct(overview.totalEvaluations, overview.prevTotalEvaluations),
         tier: "A" as const,
+        info: t.totalSessionsInfo,
       },
       {
         label: "Pass Rate", labelKey: "passRate" as const,
         value: overview.passRate ?? 0, unit: "%",
         delta: calcDeltaPct(overview.passRate ?? 0, overview.prevPassRate ?? 0),
         tier: "B" as const,
+        info: t.passRateInfo,
       },
       {
         label: "Avg Score", labelKey: "avgScore" as const,
         value: overview.avgScore ?? 0, unit: "pts",
         delta: calcDeltaPct(overview.avgScore ?? 0, overview.prevAvgScore ?? 0),
         tier: "B" as const,
+        info: t.avgScoreInfo,
       },
       {
         label: "Successful Sessions", labelKey: "successfulSessions" as const,
         value: overview.passedEvaluations,
         delta: calcDeltaPct(overview.passedEvaluations, overview.prevTotalEvaluations),
         tier: "A" as const,
+        info: t.successfulSessionsInfo,
       },
     ]
-  }, [overview])
+  }, [overview, t])
 
   const activityData   = useMemo(() => trends?.evalCountTrend ?? [], [trends])
   const scoreTrendData = useMemo(() => trends?.scoreTrend ?? [],     [trends])

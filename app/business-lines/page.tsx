@@ -50,9 +50,9 @@ export default function BusinessLinesPage() {
         ) : (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <MetricCard label={t.blTotalLines}  value={rows.length}                       icon={<GitBranch className="w-4 h-4" />} />
-              <MetricCard label={t.blActiveLines} value={activeCount}                        icon={<Layers className="w-4 h-4" />} />
-              <MetricCard label={t.blBestLine}    value={best?.name ?? "—"} unit={best?.avgScore != null ? `· ${Math.round(best.avgScore)}%` : ""} icon={<TrendingUp className="w-4 h-4" />} />
+              <MetricCard label={t.blTotalLines}  value={rows.length}                       icon={<GitBranch className="w-4 h-4" />} info={t.blTotalLinesInfo} />
+              <MetricCard label={t.blActiveLines} value={activeCount}                        icon={<Layers className="w-4 h-4" />} info={t.blActiveLinesInfo} />
+              <MetricCard label={t.blBestLine}    value={best?.name ?? "—"} unit={best?.avgScore != null ? `· ${Math.round(best.avgScore)}%` : ""} icon={<TrendingUp className="w-4 h-4" />} info={t.blBestLineInfo} />
             </div>
 
             <div className="rounded-[16px] border border-border/60 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)] overflow-hidden">

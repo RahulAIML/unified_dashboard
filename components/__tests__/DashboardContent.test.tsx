@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, act } from '@testing-library/react'
 import React from 'react'
 
 // ── Next.js mocks ─────────────────────────────────────────────────────────────
@@ -86,7 +86,6 @@ vi.mock('framer-motion', () => ({
 vi.mock('@/components/DashboardHeader', () => ({
   DashboardHeader: ({ title }: { title: string }) => <div data-testid="header">{title}</div>,
 }))
-vi.mock('@/components/SummaryCard', () => ({ SummaryCard: () => <div /> }))
 vi.mock('@/components/MetricCard',   () => ({ MetricCard:   () => <div /> }))
 vi.mock('@/components/ChartCard',    () => ({ ChartCard:    ({ children }: { children: React.ReactNode }) => <div>{children}</div> }))
 vi.mock('@/components/DataTable',    () => ({ DataTable:    () => <div /> }))
@@ -99,16 +98,21 @@ vi.mock('@/components/charts/DonutChart',        () => ({ DonutChart:        () 
 
 let mockAccessStatus: Record<string, unknown> | null = null
 let mockAccessLoading = false
+let mockOverviewData: Record<string, unknown> | null = null
 
 vi.mock('@/lib/hooks/useApi', () => ({
   useApi: (url: string | null) => {
     if (url?.includes('access-status')) {
       return { data: mockAccessStatus, loading: mockAccessLoading, error: null }
     }
+    if (url?.includes('/api/dashboard/overview') && !url.includes('solution=certification')) {
+      return { data: mockOverviewData, loading: false, error: null }
+    }
     return { data: null, loading: false, error: null }
   },
-  buildApiUrl: (path: string, from: Date, to: Date) =>
-    `${path}?from=${from.toISOString()}&to=${to.toISOString()}`,
+  buildApiUrl: (path: string, from: Date, to: Date, extra?: Record<string, unknown>) =>
+    `${path}?from=${from.toISOString()}&to=${to.toISOString()}` +
+    (extra ? `&${Object.entries(extra).map(([k, v]) => `${k}=${v}`).join('&')}` : ''),
 }))
 
 import { DashboardContent } from '../DashboardContent'
@@ -118,7 +122,57 @@ import { DashboardContent } from '../DashboardContent'
 beforeEach(() => {
   mockAccessStatus  = null
   mockAccessLoading = false
+  mockOverviewData  = null
   mockRouterReplace.mockClear()
+})
+
+function coachAccess() {
+  return { hasCoachData: true, hasBancoAccess: false, hasSecondBrainData: false, hasAnyAccess: true }
+}
+
+/** The component shows a 400ms shimmer on mount (solution "changes" from
+ *  null to the initial value) before real KPI content renders. */
+async function renderPastInitialShimmer() {
+  vi.useFakeTimers()
+  render(<DashboardContent />)
+  await act(async () => { vi.advanceTimersByTime(500) })
+  vi.useRealTimers()
+}
+
+describe('DashboardContent — pass-rate legend / hide behavior', () => {
+  it('shows the pass-rate tile with its legend when the tenant has a configured threshold', async () => {
+    mockAccessStatus = coachAccess()
+    mockOverviewData = {
+      totalEvaluations: 100, avgScore: 82, passRate: 65, passedEvaluations: 65,
+      prevTotalEvaluations: 90, prevAvgScore: 80, prevPassRate: 60,
+      passRateLegend: 'Pass threshold: score ≥ 80 pts',
+    }
+    await renderPastInitialShimmer()
+    expect(screen.getByText('Pass threshold: score ≥ 80 pts')).toBeTruthy()
+  })
+
+  it('omits the pass-rate tile entirely for a tenant with no passing criteria', async () => {
+    mockAccessStatus = coachAccess()
+    mockOverviewData = {
+      totalEvaluations: 100, avgScore: 82, passRate: null, passedEvaluations: 0,
+      prevTotalEvaluations: 90, prevAvgScore: 80, prevPassRate: null,
+      passRateLegend: null,
+    }
+    await renderPastInitialShimmer()
+    expect(screen.queryByText('Pass Rate')).toBeNull()
+  })
+
+  it('shows the pass-rate tile with no legend for an org type that has not been wired up yet', async () => {
+    mockAccessStatus = coachAccess()
+    mockOverviewData = {
+      totalEvaluations: 100, avgScore: 82, passRate: 65, passedEvaluations: 65,
+      prevTotalEvaluations: 90, prevAvgScore: 80, prevPassRate: 60,
+      // passRateLegend intentionally absent (undefined), matching a
+      // response built before this field existed.
+    }
+    await renderPastInitialShimmer()
+    expect(screen.getByText('Pass Rate')).toBeTruthy()
+  })
 })
 
 describe('DashboardContent — access routing', () => {

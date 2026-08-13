@@ -66,8 +66,10 @@ DAILY_PASSFAIL_ID = "chart_daily_pass_fail"
 #
 # GROUP 1 (universal -- computed from r_user/r_user_session/SCORE_SQL alone,
 # same as every existing metric here, works for ANY rolplay_app_sql tenant):
-# activation_rate, weekly_practice_frequency, mau_rate, practices_to_mastery,
-# delta_score, readiness_index, mastery distribution.
+# activation_rate, weekly_practice_frequency, mau_rate, delta_score,
+# readiness_index, mastery distribution.
+# (Practices to Mastery and Trial-and-Error Index were REMOVED from scope
+# per the Aug 6 session with Silverio -- see CESAR_METRIC_KEYS below.)
 #
 # GROUP 2 (depends on raw_closing_data carrying a rich per-session evaluation
 # JSON -- confirmed real and richly structured for Siigo: 5 scored "bloque_*"
@@ -95,8 +97,7 @@ _CLOSING_DATA_SAMPLE_LIMIT = 500  # bounded scan, matches REPORTS_TABLE's own ca
 # the kind of "not in its proper place" clutter the user flagged.
 CESAR_METRIC_KEYS = {
     "activation_rate", "weekly_practice_frequency", "mau_rate",
-    "practices_to_mastery", "delta_score", "readiness_index",
-    "trial_and_error_rate",
+    "delta_score", "readiness_index",
 }
 
 
@@ -502,11 +503,11 @@ async def _rolplay_app_cesar_metrics(cid: int, module: str | None, frm: str, to:
     alone (no raw_closing_data JSON needed), so it works for any
     rolplay_app_sql tenant, same as the pre-existing KPI tiles.
 
-    Per-user sequencing (delta_score, practices_to_mastery, readiness_index)
-    is done in PYTHON after fetching one bounded (user_id, date, score) row
-    set, rather than as nested correlated SQL -- simpler to get right and
-    to test than re-deriving SCORE_SQL's alias-dependent CASE expression
-    inside a subquery, for a one-time-per-render scalar computation.
+    Per-user sequencing (delta_score, readiness_index) is done in PYTHON
+    after fetching one bounded (user_id, date, score) row set, rather than
+    as nested correlated SQL -- simpler to get right and to test than
+    re-deriving SCORE_SQL's alias-dependent CASE expression inside a
+    subquery, for a one-time-per-render scalar computation.
     """
     dc = _sql_date_clause("s.date_created", frm, to)
     cat = _category_clause(module)
@@ -535,9 +536,9 @@ async def _rolplay_app_cesar_metrics(cid: int, module: str | None, frm: str, to:
     )
     mau_users = int((mau_rows[0] if mau_rows else {}).get("n") or 0)
 
-    # Per-user chronological score sequence, for delta_score/practices_to_mastery/
-    # readiness_index -- bounded to a real bar (matches Reports' own cap) so a
-    # very large tenant doesn't pull its entire history into memory every render.
+    # Per-user chronological score sequence, for delta_score/readiness_index
+    # -- bounded to a real bar (matches Reports' own cap) so a very large
+    # tenant doesn't pull its entire history into memory every render.
     seq_rows = await _rolplay_app_sql(
         f"SELECT s.user_id, s.date_created, ({SCORE_SQL}) sc "
         f"FROM r_user_session s JOIN r_user u ON u.ID=s.user_id "
@@ -551,53 +552,14 @@ async def _rolplay_app_cesar_metrics(cid: int, module: str | None, frm: str, to:
     deltas = [scores[-1] - scores[0] for scores in by_user.values() if len(scores) >= 2]
     delta_score = round(sum(deltas) / len(deltas), 1) if deltas else None
 
-    practices = []
-    for scores in by_user.values():
-        for i, sc in enumerate(scores, start=1):
-            if sc >= MASTERY_THRESHOLD:
-                practices.append(i)
-                break
-    practices_to_mastery = round(sum(practices) / len(practices), 1) if practices else None
-
     mastered_users = sum(1 for scores in by_user.values() if any(sc >= MASTERY_THRESHOLD for sc in scores))
-
-    # KPI-2.4 Trial-and-Error Index: % of Certifier ("SEGMENT") attempts made
-    # by a user with no prior Coach ("COACH") session. Deliberately queried
-    # WITHOUT _category_clause(module) -- this needs to see a user's FULL
-    # cross-category session history to know what came "before", unlike
-    # every other metric here which is fine scoped to one module. Real only
-    # for a tenant whose r_simulator.category actually contains SEGMENT (few
-    # do -- confirmed live: Siigo/Rowe/Armstrong/Sanfer have none, M8 does);
-    # everyone else honestly gets None ("no data"), never a fabricated 0.
-    cat_seq_rows = await _rolplay_app_sql(
-        f"SELECT s.user_id, sim.category AS category, s.date_created "
-        f"FROM r_user_session s JOIN r_user u ON u.ID=s.user_id "
-        f"LEFT JOIN r_simulator sim ON sim.ID=s.simulator_id "
-        f"WHERE u.client_id={cid}{dc} "
-        f"ORDER BY s.user_id, s.date_created ASC LIMIT {_CLOSING_DATA_SAMPLE_LIMIT}"
-    )
-    certifier_attempts = 0
-    no_prior_coach = 0
-    seen_coach: set[Any] = set()
-    for r in cat_seq_rows:
-        category = str(r.get("category") or "").upper()
-        uid = r["user_id"]
-        if category == "COACH":
-            seen_coach.add(uid)
-        elif category == "SEGMENT":
-            certifier_attempts += 1
-            if uid not in seen_coach:
-                no_prior_coach += 1
-    trial_and_error_rate = round(100 * no_prior_coach / certifier_attempts, 1) if certifier_attempts else None
 
     return {
         "activation_rate": round(100 * active_users / enrolled, 1) if enrolled else None,
         "weekly_practice_frequency": round(period_sessions / active_weeks, 1) if active_weeks else None,
         "mau_rate": round(100 * mau_users / enrolled, 1) if enrolled else None,
-        "practices_to_mastery": practices_to_mastery,
         "delta_score": delta_score,
         "readiness_index": round(100 * mastered_users / enrolled, 1) if enrolled else None,
-        "trial_and_error_rate": trial_and_error_rate,
     }
 
 
