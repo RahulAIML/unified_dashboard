@@ -501,6 +501,27 @@ describe('DashboardRenderer — multi-page navigation', () => {
   })
 })
 
+describe('DashboardRenderer — mandatory sections with no data', () => {
+  it('shows an honest empty state for a mandatory page instead of silently omitting it', () => {
+    const config = {
+      company: 'Salinas', slug: 'salinas', title: 'Salinas Analytics', connector: 'rolplay_app_sql',
+      rows: [],
+      pages: [
+        { id: 'overview', title: 'Overview', rows: [{ id: 'row_kpis', widgets: [{ id: 'tile_total_sessions', type: 'kpi_tile', title: 'Total Sessions' }] }] },
+        { id: 'lms', title: 'LMS', mandatory: true, rows: [{ id: 'lms_empty', title: 'LMS', widgets: [] }] },
+      ],
+      recommendations: [],
+    }
+    const preview = { widgets: [{ widget_id: 'tile_total_sessions', ok: true, value: 144 }] }
+    const { getByText, getAllByRole } = render(<DashboardRenderer config={config} preview={preview} />)
+
+    expect(getAllByRole('tab').map(t => t.textContent)).toEqual(['Overview', 'LMS'])
+    fireEvent.click(getByText('LMS'))
+    expect(getByText('No data available yet')).toBeTruthy()
+    expect(getByText(/requested but has no data/)).toBeTruthy()
+  })
+})
+
 describe('ReportsTable', () => {
   const rows = Array.from({ length: 30 }, (_, i) => ({
     date: `2026-07-${String((i % 28) + 1).padStart(2, '0')}`,

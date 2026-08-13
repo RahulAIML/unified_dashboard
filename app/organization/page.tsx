@@ -56,9 +56,9 @@ export default function OrganizationPage() {
         ) : (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <MetricCard label={t.orgAdmins}      value={data.totalAdmins}      icon={<Shield className="w-4 h-4" />} />
-              <MetricCard label={t.orgSupervisors} value={data.totalSupervisors} icon={<UserCog className="w-4 h-4" />} />
-              <MetricCard label={t.orgMembers}      value={data.totalMembers}     icon={<Users className="w-4 h-4" />} />
+              <MetricCard label={t.orgAdmins}      value={data.totalAdmins}      icon={<Shield className="w-4 h-4" />} info={t.orgAdminsInfo} />
+              <MetricCard label={t.orgSupervisors} value={data.totalSupervisors} icon={<UserCog className="w-4 h-4" />} info={t.orgSupervisorsInfo} />
+              <MetricCard label={t.orgMembers}      value={data.totalMembers}     icon={<Users className="w-4 h-4" />} info={t.orgMembersInfo} />
             </div>
 
             <div className="space-y-4">

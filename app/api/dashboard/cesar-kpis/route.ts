@@ -24,7 +24,7 @@ export const runtime = 'nodejs'
 
 const EMPTY = {
   activationRate: null, weeklyPracticeFrequency: null, mauRate: null,
-  practicesToMastery: null, deltaScore: null, readinessIndex: null, trialAndErrorRate: null,
+  deltaScore: null, readinessIndex: null,
   masteryDistribution: [] as { label: string; value: number; pct: number }[],
   adoptionMovementRate: null as number | null,
   commercialDomain: [] as { domain: string; avgScore: number; sessions: number }[],

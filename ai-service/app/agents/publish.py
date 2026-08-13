@@ -19,12 +19,24 @@ _KIND_MAP = {
 }
 
 
-async def run(cfg: DashboardConfig, domains: list[str], log: LogFn) -> bool:
+async def run(cfg: DashboardConfig, domains: list[str], log: LogFn, force: bool = False) -> bool:
     pool = await get_pool()
     if not pool:
         await log("publish", "warn",
                   "No database configured — publishing is available from the in-memory job only")
         return True
+
+    # Post-launch layout freeze: once a slug is live, a second publish call
+    # (a manager re-running the builder for the same company, or an
+    # auto_publish on a re-generation) must not silently rearrange what the
+    # client already sees. Only an explicit force_republish=True — a human
+    # deliberately choosing to rebuild the live layout — may overwrite it.
+    existing = await pool.fetchrow("SELECT published FROM dashboard_metadata WHERE slug=$1", cfg.slug)
+    if existing and existing["published"] and not force:
+        await log("publish", "warn",
+                  f"'{cfg.slug}' is already published — its layout is frozen. This call was blocked to protect "
+                  "what the client already sees. Pass force_republish=True to intentionally rebuild it.")
+        return False
 
     # 1) store the metadata-driven config (source of truth for dynamic rendering)
     #

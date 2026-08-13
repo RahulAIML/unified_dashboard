@@ -27,6 +27,9 @@ export interface PharmaTenantRow {
   coachActivityIds: number[] | null
   authHeaderName: string | null
   authHeaderValue: string | null
+  /** NULL/undefined = not configured (see lib/kpi-builder.ts's resolvePassThreshold). */
+  passThreshold: number | null
+  hasNoPassingCriteria: boolean
   isActive: boolean
   createdAt: string
   updatedAt: string
@@ -52,6 +55,8 @@ interface TenantSqlRow {
   coach_activity_ids: number[] | null
   auth_header_name: string | null
   auth_header_value: string | null
+  pass_threshold: number | null
+  has_no_passing_criteria: boolean
   is_active: boolean
   created_at: Date | string
   updated_at: Date | string
@@ -77,6 +82,10 @@ function rowToTenant(r: TenantSqlRow): PharmaTenantRow {
     coachActivityIds: r.coach_activity_ids,
     authHeaderName: r.auth_header_name,
     authHeaderValue: r.auth_header_value,
+    // ?? null / ?? false so a pre-migration database (columns absent →
+    // undefined) resolves to exactly today's behaviour.
+    passThreshold: r.pass_threshold ?? null,
+    hasNoPassingCriteria: r.has_no_passing_criteria ?? false,
     isActive: r.is_active,
     createdAt: typeof r.created_at === 'string' ? r.created_at : r.created_at.toISOString(),
     updatedAt: typeof r.updated_at === 'string' ? r.updated_at : r.updated_at.toISOString(),
@@ -86,7 +95,8 @@ function rowToTenant(r: TenantSqlRow): PharmaTenantRow {
 const SELECT_COLS = `tenant_key, display_name, kind, url, x_tenant, ucids,
   has_certification, has_objections, has_business_lines, has_organization, has_top_stats,
   has_lms, has_simulator,
-  coach_activity_ids, auth_header_name, auth_header_value, is_active, created_at, updated_at`
+  coach_activity_ids, auth_header_name, auth_header_value,
+  pass_threshold, has_no_passing_criteria, is_active, created_at, updated_at`
 
 /** All active tenant rows — used to populate the runtime config cache. */
 export async function listActiveTenants(): Promise<PharmaTenantRow[]> {
@@ -141,6 +151,9 @@ export interface UpsertTenantInput {
   coachActivityIds?: number[] | null
   authHeaderName?: string | null
   authHeaderValue?: string | null
+  /** undefined/null = not configured (see lib/kpi-builder.ts's resolvePassThreshold). */
+  passThreshold?: number | null
+  hasNoPassingCriteria?: boolean
   createdBy?: number | null
 }
 
@@ -150,9 +163,10 @@ export async function upsertTenant(input: UpsertTenantInput): Promise<PharmaTena
        (tenant_key, display_name, kind, url, x_tenant, ucids,
         has_certification, has_objections, has_business_lines, has_organization, has_top_stats,
         has_lms, has_simulator,
-        coach_activity_ids, auth_header_name, auth_header_value, created_by, created_at, updated_at)
+        coach_activity_ids, auth_header_name, auth_header_value,
+        pass_threshold, has_no_passing_criteria, created_by, created_at, updated_at)
      VALUES
-       ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15, $16, $17, NOW(), NOW())
+       ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15, $16, $17, $18, $19, NOW(), NOW())
      ON CONFLICT (tenant_key) DO UPDATE SET
        display_name = EXCLUDED.display_name,
        kind = EXCLUDED.kind,
@@ -172,6 +186,9 @@ export async function upsertTenant(input: UpsertTenantInput): Promise<PharmaTena
        coach_activity_ids = EXCLUDED.coach_activity_ids,
        auth_header_name = EXCLUDED.auth_header_name,
        auth_header_value = EXCLUDED.auth_header_value,
+       -- Same tri-state reasoning as has_lms/has_simulator above.
+       pass_threshold = COALESCE(EXCLUDED.pass_threshold, pharma_tenants.pass_threshold),
+       has_no_passing_criteria = EXCLUDED.has_no_passing_criteria,
        is_active = TRUE,
        updated_at = NOW()
      RETURNING ${SELECT_COLS}`,
@@ -193,6 +210,8 @@ export async function upsertTenant(input: UpsertTenantInput): Promise<PharmaTena
       input.coachActivityIds ? JSON.stringify(input.coachActivityIds) : null,
       input.authHeaderName ?? null,
       input.authHeaderValue ?? null,
+      input.passThreshold ?? null,
+      input.hasNoPassingCriteria ?? false,
       input.createdBy ?? null,
     ]
   )

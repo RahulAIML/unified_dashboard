@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
+import { KpiInfoButton } from "@/components/KpiInfoButton"
 
 interface Props {
   label: string
@@ -9,10 +10,13 @@ interface Props {
   unit?: string
   icon?: React.ReactNode
   hint?: string
+  /** Definition + formula shown via the info/"eye" affordance next to the
+   *  label, on hover or click. Absent = no affordance for this tile. */
+  info?: string
   className?: string
 }
 
-export function MetricCard({ label, value, unit, icon, hint, className }: Props) {
+export function MetricCard({ label, value, unit, icon, hint, info, className }: Props) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
@@ -34,8 +38,9 @@ export function MetricCard({ label, value, unit, icon, hint, className }: Props)
 
       <div className="p-5 sm:p-6">
         <div className="flex items-center justify-between gap-3 mb-4">
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
             {label}
+            {info && <KpiInfoButton definition={info} />}
           </span>
           {icon && (
             <div 

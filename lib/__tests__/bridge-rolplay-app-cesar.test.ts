@@ -43,7 +43,6 @@ describe('rolplayAppCesarGroup1', () => {
     expect(result.mauRate).toBe(25)              // 5/20 * 100
     expect(result.weeklyPracticeFrequency).toBe(10) // 40/4
     expect(result.readinessIndex).toBe(0)
-    expect(result.practicesToMastery).toBeNull()
     expect(result.deltaScore).toBeNull()
     expect(result.masteryDistribution).toEqual([])
   })
@@ -64,7 +63,6 @@ describe('rolplayAppCesarGroup1', () => {
     const result = await mod.rolplayAppCesarGroup1(29, { fromIso: '2026-06-01T00:00:00.000Z', toIso: '2026-07-01T00:00:00.000Z' })
 
     expect(result.deltaScore).toBe(56)        // only user 1 has >=2 sessions: 96-40
-    expect(result.practicesToMastery).toBe(3) // user 1 hit mastery on their 3rd session
     expect(result.readinessIndex).toBe(10)    // 1 mastered / 10 enrolled * 100
     const advanced = result.masteryDistribution.find(b => b.label.startsWith('Advanced'))
     expect(advanced?.value).toBe(1) // only the 96
@@ -85,40 +83,6 @@ describe('rolplayAppCesarGroup1', () => {
     expect(result.weeklyPracticeFrequency).toBeNull()
   })
 
-  it('KPI-2.4: computes trial-and-error rate from real cross-category session sequencing', async () => {
-    const mod = await fresh()
-    fetchSpy
-      .mockResolvedValueOnce(respond([{ n: 10 }])) // enrolled
-      .mockResolvedValueOnce(respond([{ n: 5, sessions: 20, weeks: 2 }])) // active
-      .mockResolvedValueOnce(respond([{ n: 2 }])) // MAU
-      .mockResolvedValueOnce(respond([])) // seq rows (no scores needed for this KPI)
-      .mockResolvedValueOnce(respond([
-        // user 1: Coach before Certifier -- NOT trial-and-error
-        { user_id: 1, category: 'COACH', date_created: '2026-01-01' },
-        { user_id: 1, category: 'SEGMENT', date_created: '2026-01-02' },
-        // user 2: Certifier with no prior Coach -- IS trial-and-error
-        { user_id: 2, category: 'SEGMENT', date_created: '2026-01-01' },
-      ]))
-
-    const result = await mod.rolplayAppCesarGroup1(29, { fromIso: '2026-06-01T00:00:00.000Z', toIso: '2026-07-01T00:00:00.000Z' })
-    expect(result.trialAndErrorRate).toBe(50) // 1 of 2 certifier attempts had no prior coach
-  })
-
-  it('KPI-2.4: returns null (not a fabricated rate) for a tenant with no Certifier module', async () => {
-    const mod = await fresh()
-    fetchSpy
-      .mockResolvedValueOnce(respond([{ n: 10 }]))
-      .mockResolvedValueOnce(respond([{ n: 5, sessions: 20, weeks: 2 }]))
-      .mockResolvedValueOnce(respond([{ n: 2 }]))
-      .mockResolvedValueOnce(respond([]))
-      .mockResolvedValueOnce(respond([
-        { user_id: 1, category: 'SIM', date_created: '2026-01-01' },
-        { user_id: 1, category: 'COACH', date_created: '2026-01-02' },
-      ]))
-
-    const result = await mod.rolplayAppCesarGroup1(29, { fromIso: '2026-06-01T00:00:00.000Z', toIso: '2026-07-01T00:00:00.000Z' })
-    expect(result.trialAndErrorRate).toBeNull()
-  })
 })
 
 describe('rolplayAppCommercialDomain', () => {

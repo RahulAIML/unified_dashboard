@@ -10,6 +10,7 @@ import { DashboardHeader } from '@/components/DashboardHeader'
 import { useAuthContext } from '@/components/AuthProvider'
 import { useT } from '@/lib/lang-store'
 import { cn } from '@/lib/utils'
+import { DEFAULT_NEW_PASS_THRESHOLD } from '@/lib/kpi-builder'
 
 type Kind = 'sale_exercises' | 'kpi' | 'exceltis_rest'
 
@@ -28,6 +29,8 @@ interface TenantListItem {
   hasOrganization?: boolean
   hasTopStats?: boolean
   coachActivityIds?: number[] | null
+  passThreshold?: number | null
+  hasNoPassingCriteria?: boolean
 }
 
 interface DomainMapping {
@@ -58,6 +61,8 @@ const emptyForm = {
   hasOrganization: false,
   hasTopStats: false,
   coachActivityIdsText: '',
+  passThresholdText: '',
+  hasNoPassingCriteria: false,
 }
 type FormState = typeof emptyForm
 type FieldErrors = Partial<Record<keyof FormState, string>>
@@ -209,6 +214,8 @@ export default function AdminTenantsPage() {
       hasOrganization: !!tenant.hasOrganization,
       hasTopStats: !!tenant.hasTopStats,
       coachActivityIdsText: (tenant.coachActivityIds ?? []).join(', '),
+      passThresholdText: tenant.passThreshold != null ? String(tenant.passThreshold) : '',
+      hasNoPassingCriteria: !!tenant.hasNoPassingCriteria,
     })
     setEditingKey(tenant.tenantKey)
     setProbeResult(null); setErrors({}); setError(null); setSaved(null); setStep(0)
@@ -236,6 +243,13 @@ export default function AdminTenantsPage() {
     if (s === 2) {
       if (hasNonIntegerToken(form.ucidsText)) e.ucidsText = t.adminErrIdsFormat
       else if (parseIdList(form.ucidsText).length === 0) e.ucidsText = t.adminErrNoIds
+    }
+    if (s === 3) {
+      const raw = form.passThresholdText.trim()
+      if (raw) {
+        const n = Number(raw)
+        if (!Number.isInteger(n) || n < 1 || n > 100) e.passThresholdText = t.adminErrPassThresholdFormat
+      }
     }
     return e
   }
@@ -271,7 +285,7 @@ export default function AdminTenantsPage() {
 
   async function handleSave() {
     // Re-validate every gated step before committing.
-    for (let s = 0; s <= 2; s++) {
+    for (let s = 0; s <= 3; s++) {
       const e = validateStep(s)
       if (Object.values(e).some(Boolean)) { setErrors(e); setStep(s); return }
     }
@@ -292,6 +306,8 @@ export default function AdminTenantsPage() {
         hasOrganization: form.hasOrganization,
         hasTopStats: form.hasTopStats,
         coachActivityIds: parseIdList(form.coachActivityIdsText),
+        passThreshold: form.passThresholdText.trim() ? Number(form.passThresholdText.trim()) : undefined,
+        hasNoPassingCriteria: form.hasNoPassingCriteria,
         domains: parseDomainList(form.domainsText),
       }
       const url = editingKey ? `/api/admin/tenants/${editingKey}` : '/api/admin/tenants'
@@ -498,6 +514,26 @@ export default function AdminTenantsPage() {
                     )
                   })}
                 </div>
+
+                {/* Pass criteria: configurable score threshold, or "no criteria at
+                    all" for a client certified by completion (e.g. Sanfer). */}
+                <p className="text-sm font-semibold text-foreground mt-6 mb-3">{t.adminFieldPassCriteria}</p>
+                <Field id="passThresholdText" label={t.adminFieldPassThreshold} hint={t.adminFieldPassThresholdHint} error={errors.passThresholdText}>
+                  <input id="passThresholdText" inputMode="numeric" className={cn(inputErrCls('passThresholdText'), 'sm:max-w-[160px]')}
+                    aria-invalid={!!errors.passThresholdText} disabled={form.hasNoPassingCriteria}
+                    value={form.passThresholdText} onChange={e => set('passThresholdText', e.target.value)}
+                    placeholder={String(DEFAULT_NEW_PASS_THRESHOLD)} />
+                </Field>
+                <label htmlFor="hasNoPassingCriteria"
+                  className={cn(
+                    'mt-2 flex items-center gap-3 text-sm rounded-lg border p-3 cursor-pointer transition-colors',
+                    form.hasNoPassingCriteria ? 'border-primary bg-primary/5 text-foreground' : 'border-border/60 hover:bg-muted text-foreground/90',
+                  )}>
+                  <input id="hasNoPassingCriteria" type="checkbox" checked={form.hasNoPassingCriteria}
+                    onChange={e => set('hasNoPassingCriteria', e.target.checked)}
+                    className="rounded border-border/60 accent-[hsl(var(--primary))]" />
+                  {t.adminFieldNoPassingCriteria}
+                </label>
               </div>
             )}
 
@@ -668,6 +704,11 @@ function ReviewStep({ t, form }: { t: ReturnType<typeof useT>; form: FormState }
     form.hasOrganization && t.adminFieldOrganization,
     form.hasTopStats && t.adminFieldTopStats,
   ].filter(Boolean) as string[]
+  const passCriteria = form.hasNoPassingCriteria
+    ? t.adminFieldNoPassingCriteria
+    : form.passThresholdText.trim()
+      ? `≥ ${form.passThresholdText.trim()}`
+      : `${t.adminReviewFieldValue} (${DEFAULT_NEW_PASS_THRESHOLD})`
 
   return (
     <div className="space-y-3">
@@ -678,6 +719,7 @@ function ReviewStep({ t, form }: { t: ReturnType<typeof useT>; form: FormState }
         <Row label={t.adminFieldExerciseIds} value={ids.join(', ')} fallback={t.adminReviewFieldValue} />
         <Row label={t.adminFieldDomains} value={domains.join(', ')} fallback={t.adminReviewFieldValue} />
         <Row label={t.adminFieldModules} value={modules.length ? modules.join(', ') : t.adminReviewModulesNone} fallback={t.adminReviewFieldValue} />
+        <Row label={t.adminFieldPassCriteria} value={passCriteria} fallback={t.adminReviewFieldValue} />
       </div>
       {domains.length === 0 && (
         <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 px-4 py-3 flex items-start gap-2">

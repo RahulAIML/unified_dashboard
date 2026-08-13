@@ -101,6 +101,21 @@ export interface TenantConfig {
    * populated with data it does not have.
    */
   hasSimulator?: boolean
+  /**
+   * Explicit score-based pass threshold for this tenant (e.g. 70 or 80).
+   * undefined/null = not configured -- lib/kpi-builder.ts's
+   * resolvePassThreshold() falls back to LEGACY_PASS_THRESHOLD (70) so an
+   * already-live tenant's numbers never move just because this feature
+   * shipped. Ignored when hasNoPassingCriteria is true.
+   */
+  passThreshold?: number | null
+  /**
+   * True when this tenant has no score-based passing criteria at all (e.g.
+   * certification by completion, like Sanfer's). The pass-rate section is
+   * hidden entirely for these rather than showing a number computed against
+   * a threshold the client never agreed to.
+   */
+  hasNoPassingCriteria?: boolean
   /** Extra header to send when this tenant's endpoint lives on a different server and needs its own auth. */
   authHeaderName?: string
   authHeaderValue?: string
@@ -327,6 +342,14 @@ async function loadDynamicTenants(): Promise<void> {
       // and force the Simulator tab on for an LMS-only client. Precedence is
       // therefore: explicit DB value → static value → undefined (= on).
       hasSimulator: t.hasSimulator ?? prev?.hasSimulator ?? undefined,
+      // Same tri-state precedence as hasSimulator/hasLms: an explicit DB
+      // value wins, then a hand-verified static value, then "unconfigured"
+      // (resolvePassThreshold's LEGACY_PASS_THRESHOLD fallback).
+      passThreshold: t.passThreshold ?? prev?.passThreshold ?? undefined,
+      // Plain OR, like hasCertification/hasObjections/etc. above: once a
+      // tenant is marked as having no passing criteria, a DB row that
+      // omitted the flag must never silently turn it back on.
+      hasNoPassingCriteria: t.hasNoPassingCriteria || (prev?.hasNoPassingCriteria ?? false),
       authHeaderName: t.authHeaderName ?? undefined,
       authHeaderValue: t.authHeaderValue ?? undefined,
       // Add a field to TenantConfig and tsc FAILS HERE until it is handled.

@@ -106,6 +106,28 @@ describe('AI proxy authorisation', () => {
     expect(init.method).toBe('DELETE')
   })
 
+  it('gates PATCH too', async () => {
+    requireAdminFromRequest.mockResolvedValue(null)
+    const { PATCH } = await loadRoute()
+
+    const res = await PATCH(req('PATCH', '{}'), ctx(['dashboard', 'salinas', 'required-sections']))
+
+    expect(res.status).toBe(403)
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('forwards a PATCH for an authenticated admin, e.g. editing required sections', async () => {
+    requireAdminFromRequest.mockResolvedValue({ email: 'admin@rolplay.ai', role: 'admin' })
+    const { PATCH } = await loadRoute()
+
+    const res = await PATCH(req('PATCH', '{"sections":["lms"]}'), ctx(['dashboard', 'salinas', 'required-sections']))
+
+    expect(res.status).toBe(200)
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    const [, init] = fetchSpy.mock.calls[0]
+    expect(init.method).toBe('PATCH')
+  })
+
   it('forwards for an authenticated admin', async () => {
     requireAdminFromRequest.mockResolvedValue({ email: 'admin@rolplay.ai', role: 'admin' })
     const { POST } = await loadRoute()

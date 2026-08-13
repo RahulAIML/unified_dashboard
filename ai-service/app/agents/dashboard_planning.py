@@ -42,6 +42,33 @@ _LMS_METRIC_KEYS = {
     "lms_modules_completed", "lms_completion_trend", "lms_courses",
 }
 
+# GenerateRequest.services ids that map 1:1 onto a page id this planner can
+# build (either a real one, or -- via mandatory_empty_page -- a stand-in
+# empty one). "second-brain" is deliberately excluded: it's a secondary
+# connector's own page (_secondary_page), not a page keyed by service id, so
+# there's no single page id to mark mandatory for it.
+_SERVICE_PAGE_LABEL = {
+    "lms": "LMS", "simulator": "Practice Simulator",
+    "coach": "Master Coach", "certification": "Certification",
+}
+
+
+def mandatory_empty_page(service: str) -> DashboardPage | None:
+    """A page for a contracted-but-undiscovered service: renders with an
+    honest empty state (no widgets) rather than the section disappearing
+    from `pages` entirely. Shared by the build-time planner (_lms_page,
+    _module_pages) and the post-publish `required_sections` edit endpoint
+    (dashboard_versions.set_required_sections), so both produce identically
+    shaped stand-in pages. Returns None for a service id with no known page
+    (e.g. "second-brain") rather than guessing one.
+    """
+    label = _SERVICE_PAGE_LABEL.get(service)
+    if not label:
+        return None
+    return DashboardPage(id=service, title=label, mandatory=True, rows=[
+        DashboardRow(id=f"{service}_empty", title=label, widgets=[]),
+    ])
+
 # Human-readable page title per connector kind, used ONLY for a secondary
 # connector's page (see _secondary_page) — the primary connector's page is
 # always titled "Overview" regardless of kind. Generic on purpose: this maps
@@ -58,6 +85,7 @@ _KIND_LABEL = {
 
 async def run(
     schema: NormalizedSchema, log: LogFn, secondary_schema: NormalizedSchema | None = None,
+    required_services: frozenset[str] = frozenset(),
 ) -> tuple[list[DashboardPage], list[DashboardFilter], list[str]]:
     metrics = {m.key: m for m in schema.metrics}
 
@@ -70,7 +98,7 @@ async def run(
     if plan:
         overview_rows, filters, recs = _build_from_plan(plan, schema, metrics)
         if any(r.widgets for r in overview_rows):
-            pages = _assemble_pages(schema, metrics, overview_rows, secondary_schema)
+            pages = _assemble_pages(schema, metrics, overview_rows, secondary_schema, required_services)
             total = sum(len(r.widgets) for p in pages for r in p.rows)
             await log("dashboard_planning", "success",
                       f"Gemini plan → {total} widget(s) across {len(pages)} page(s), {len(filters)} filter(s)")
@@ -78,7 +106,7 @@ async def run(
         await log("dashboard_planning", "warn", "Gemini plan had no valid widgets — using heuristic")
 
     overview_rows, filters, recs = _heuristic(schema, metrics)
-    pages = _assemble_pages(schema, metrics, overview_rows, secondary_schema)
+    pages = _assemble_pages(schema, metrics, overview_rows, secondary_schema, required_services)
     total = sum(len(r.widgets) for p in pages for r in p.rows)
     await log("dashboard_planning", "success",
               f"Heuristic plan → {total} widget(s) across {len(pages)} page(s), {len(filters)} filter(s)")
@@ -88,6 +116,7 @@ async def run(
 def _assemble_pages(
     schema: NormalizedSchema, metrics: dict, overview_rows: list[DashboardRow],
     secondary_schema: NormalizedSchema | None = None,
+    required_services: frozenset[str] = frozenset(),
 ) -> list[DashboardPage]:
     """Turns the existing single-page widget set into a real multi-page
     dashboard: Overview (unchanged content) + an LMS page (when LMS was
@@ -99,12 +128,17 @@ def _assemble_pages(
     e.g. Besins' 17 real coach_app_sql sessions, previously dropped entirely
     because rolplay_app_sql won primary). Always at least one page
     (Overview), so nothing regresses for a schema with none of the above.
+
+    `required_services` (GenerateRequest.services — what the manager marked
+    as contracted) upgrades a would-be-dropped LMS/module page into a
+    mandatory, honestly-empty one instead of omitting it — see _lms_page and
+    _module_pages.
     """
     pages = [DashboardPage(id="overview", title="Overview", rows=overview_rows)]
-    lms_page = _lms_page(metrics)
+    lms_page = _lms_page(metrics, required_services)
     if lms_page:
         pages.append(lms_page)
-    pages.extend(_module_pages(schema, metrics))
+    pages.extend(_module_pages(schema, metrics, required_services))
     secondary_page = _secondary_page(secondary_schema)
     if secondary_page:
         pages.append(secondary_page)
@@ -158,11 +192,13 @@ def _cesar_kpis_page(schema: NormalizedSchema) -> DashboardPage | None:
     before building anything:
 
     GROUP 1 (this page's first row) is schema-only — activation rate, weekly
-    practice frequency, MAU, practices-to-mastery, competency gain (delta
-    score), field readiness index, and the Basic/Intermediate/Advanced
-    mastery distribution. Computed from r_user/r_user_session/SCORE_SQL
-    alone (preview_fetch.py's _rolplay_app_cesar_metrics), so these work for
-    ANY rolplay_app_sql tenant.
+    practice frequency, MAU, competency gain (delta score), field readiness
+    index, and the Basic/Intermediate/Advanced mastery distribution.
+    Computed from r_user/r_user_session/SCORE_SQL alone (preview_fetch.py's
+    _rolplay_app_cesar_metrics), so these work for ANY rolplay_app_sql
+    tenant.
+    (Practices to Mastery and Trial-and-Error Index were REMOVED from scope
+    per the Aug 6 session with Silverio.)
 
     GROUP 2 (this page's second row) depends on raw_closing_data carrying a
     rich per-session evaluation JSON — confirmed real and richly structured
@@ -176,15 +212,12 @@ def _cesar_kpis_page(schema: NormalizedSchema) -> DashboardPage | None:
     AI evaluator produces this shape and report "no data" (not a fabricated
     zero) for one that doesn't — same rule as every other widget here.
 
-    KPI-2.4 Trial-and-Error Index (added 2026-08-05, re-audited against the
-    real spreadsheet): % of Certifier attempts with no prior Coach session
-    for that user. Computed from real cross-category session sequencing
-    (preview_fetch.py's _rolplay_app_cesar_metrics) — real only for a tenant
-    whose r_simulator.category actually has a Certifier ("SEGMENT") module;
-    confirmed live most tenants (Siigo/Rowe/Armstrong/Sanfer) don't, M8 does.
-    Reports "no data" rather than a fabricated rate for everyone else.
-
     NOT implemented, and why (documented rather than silently skipped):
+      - KPI-2.4 Trial-and-Error Index (% of Certifier attempts with no prior
+        Coach session for that user): REMOVED from scope per the Aug 6
+        session with Silverio, not a feasibility gap — it was implemented
+        and working (preview_fetch.py's cross-category session sequencing)
+        before this decision.
       - KPI-2.1 Time-to-Mastery (minutes to reach mastery): r_user_session
         has no duration/time-spent column anywhere in the schema (confirmed
         via a live full-row SELECT) — not computable without fabricating a
@@ -223,10 +256,8 @@ def _cesar_kpis_page(schema: NormalizedSchema) -> DashboardPage | None:
         tile("activation_rate", "Activation Rate", "What % of enrolled reps have started at least one session?"),
         tile("weekly_practice_frequency", "Weekly Practice Frequency", "How many sessions run per active week, on average?"),
         tile("mau_rate", "Recurring Adoption (MAU)", "What % of reps used the platform in the last 30 days?"),
-        tile("practices_to_mastery", "Practices to Mastery", "How many attempts does it take to reach mastery (>=95)?"),
         tile("delta_score", "Competency Gain (Delta Score)", "How much do reps improve from their first to their most recent session?"),
         tile("readiness_index", "Field Readiness Index", "What % of the sales force has reached mastery-level certification?"),
-        tile("trial_and_error_rate", "Trial-and-Error Index", "What % of certification attempts happened with no prior coaching?"),
     ]
     mastery_widget = WidgetConfig(
         id=MASTERY_DISTRIBUTION_ID, type=WidgetType.donut, title="Distribution by Mastery Level",
@@ -350,7 +381,7 @@ def _secondary_page(secondary_schema: NormalizedSchema | None) -> DashboardPage 
     return DashboardPage(id=f"secondary_{kind.value}", title=title, rows=prefixed_rows)
 
 
-def _lms_page(metrics: dict) -> DashboardPage | None:
+def _lms_page(metrics: dict, required_services: frozenset[str] = frozenset()) -> DashboardPage | None:
     tile_keys = ["lms_enrolled_users", "lms_completion_rate", "lms_avg_quiz_score", "lms_modules_completed"]
     tiles = []
     for key in tile_keys:
@@ -360,7 +391,12 @@ def _lms_page(metrics: dict) -> DashboardPage | None:
         tiles.append(WidgetConfig(id=f"lms_tile_{key}", type=WidgetType.kpi_tile, title=m.label,
                                   metric_key=key, source_kind=m.source_kind, source_action=m.source_action))
     if not tiles:
-        return None  # no LMS discovered for this tenant
+        if "lms" in required_services:
+            # The manager marked LMS as contracted, but no LMS integration
+            # was discovered for this tenant -- render an honest empty page
+            # rather than making "lms" simply vanish from `pages`.
+            return mandatory_empty_page("lms")
+        return None  # no LMS discovered for this tenant, and not contracted either
 
     rows = [DashboardRow(id="lms_kpis", title="Overview", widgets=tiles)]
 
@@ -379,7 +415,16 @@ def _lms_page(metrics: dict) -> DashboardPage | None:
     return DashboardPage(id="lms", title="LMS", rows=rows)
 
 
-def _module_pages(schema: NormalizedSchema, metrics: dict) -> list[DashboardPage]:
+# GenerateRequest.services ids that map 1:1 onto a canonical per-module page
+# (journey_lib's CANONICAL_ORDER keys) -- "second-brain" has no such page
+# (it's a secondary connector, not a rolplay_app_sql module) so it's
+# deliberately excluded here rather than guessed at.
+_SERVICE_TO_MODULE = {"simulator", "coach", "certification"}
+
+
+def _module_pages(
+    schema: NormalizedSchema, metrics: dict, required_services: frozenset[str] = frozenset(),
+) -> list[DashboardPage]:
     """Per-module (Coach-only / Simulator-only / Certification-only) pages,
     each with its own scoped KPIs/trend/table — matching the real hand-built
     app's per-module pages, which show module-scoped numbers rather than one
@@ -398,8 +443,6 @@ def _module_pages(schema: NormalizedSchema, metrics: dict) -> list[DashboardPage
     if not dim or dim.source_kind != ServiceKind.rolplay_app_sql:
         return []
     canonical = [m for m in schema.modules if m in journey_lib.CANONICAL_ORDER]
-    if not canonical:
-        return []
     ts = next((m for m in schema.metrics if m.type == MetricType.timeseries), None)
 
     pages: list[DashboardPage] = []
@@ -430,6 +473,15 @@ def _module_pages(schema: NormalizedSchema, metrics: dict) -> list[DashboardPage
         ))
         rows.append(DashboardRow(id=f"{module}_analytics", title="Analytics", widgets=charts))
         pages.append(DashboardPage(id=module, title=label, rows=rows))
+
+    # Contracted-but-not-discovered modules (e.g. the manager marked
+    # "Simulator" as in-scope, but this tenant has zero sessions in that
+    # category): render an honest empty page instead of it never appearing.
+    missing = sorted((required_services & _SERVICE_TO_MODULE) - set(canonical))
+    for module in missing:
+        page = mandatory_empty_page(module)
+        if page:
+            pages.append(page)
     return pages
 
 

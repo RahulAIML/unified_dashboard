@@ -136,3 +136,9 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ path: 
 export async function DELETE(request: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
   return forward(request, (await ctx.params).path)
 }
+// PATCH is required by PATCH /ai/dashboard/{slug}/required-sections — the
+// lightweight mandatory-sections edit that intentionally does NOT go through
+// generate/publish (no schema re-discovery, no version bump).
+export async function PATCH(request: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
+  return forward(request, (await ctx.params).path)
+}
