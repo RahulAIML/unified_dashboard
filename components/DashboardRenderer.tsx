@@ -17,6 +17,7 @@ import {
   CartesianGrid, Tooltip, LabelList, PieChart, Pie, Cell, Legend,
 } from 'recharts'
 import { ExportButton } from './ExportButton'
+import { EmptyState } from './EmptyState'
 import { csvFilename } from '@/lib/csv-export'
 import { cn } from '@/lib/utils'
 
@@ -45,7 +46,11 @@ export interface DashRow { id: string; title?: string | null; widgets: WidgetCon
 // A real navigable page (Overview/LMS/Coach/...) — see ai-service's
 // DashboardPage model. Optional/absent on a config built before multi-page
 // generation existed; DashboardRenderer falls back to flat `rows` then.
-export interface DashPage { id: string; title: string; rows: DashRow[] }
+// mandatory: a service the manager explicitly contracted (ai-service's
+// GenerateRequest.services) but for which no data was discovered -- render
+// an honest "no data yet" state (below) instead of this page never
+// appearing in `pages` at all. Absent/false for every real, data-backed page.
+export interface DashPage { id: string; title: string; rows: DashRow[]; mandatory?: boolean }
 export interface DashboardConfig {
   company: string; slug: string; title: string; connector: string
   rows: DashRow[]; pages?: DashPage[]; recommendations: string[]
@@ -269,6 +274,14 @@ function DashboardRows({ rows, pv }: { rows: DashRow[]; pv: Map<string, WidgetPr
       {rows.map(row => (
         <div key={row.id}>
           {row.title && <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2.5">{row.title}</div>}
+          {row.widgets.length === 0 ? (
+            // A section the manager explicitly contracted (mandatory), but with
+            // no data discovered yet -- shown honestly, never silently omitted.
+            <EmptyState
+              title="No data available yet"
+              message="This section was requested but has no data to show for the selected period."
+            />
+          ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
             {row.widgets.map((w, i) => {
               const p = pv.get(w.id)
@@ -308,6 +321,7 @@ function DashboardRows({ rows, pv }: { rows: DashRow[]; pv: Map<string, WidgetPr
               )
             })}
           </div>
+          )}
         </div>
       ))}
     </div>

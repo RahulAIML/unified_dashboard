@@ -161,6 +161,10 @@ async def generate_sync(req: GenerateRequest) -> JobState:
 
 class PublishIn(BaseModel):
     job_id: str
+    # See GenerateRequest.force_republish's docstring -- same override,
+    # needed here too since a manager can re-open an existing job and
+    # publish it independently of the generate-sync auto_publish path.
+    force_republish: bool = False
 
 
 @router.post("/publish")
@@ -171,8 +175,13 @@ async def do_publish(body: PublishIn) -> dict:
     if job.validation and not job.validation.ok:
         raise HTTPException(status_code=400, detail="validation failed; cannot publish")
     domains = job.knowledge.domains if job.knowledge else []
-    ok = await publish.run(job.dashboard, domains, _noop_log)
+    ok = await publish.run(job.dashboard, domains, _noop_log, force=body.force_republish)
     job.published = ok
+    if not ok:
+        return {
+            "published": False, "slug": job.dashboard.slug,
+            "reason": "layout_frozen -- this dashboard is already live; pass force_republish=true to override",
+        }
     return {"published": ok, "slug": job.dashboard.slug}
 
 
@@ -249,3 +258,21 @@ async def rollback_dashboard(body: RollbackIn) -> dict:
     if not restored:
         raise HTTPException(status_code=404, detail=f"no version {body.version} found for '{body.slug}'")
     return {"slug": body.slug, "restored_from_version": body.version, "new_version": restored.version}
+
+
+class RequiredSectionsIn(BaseModel):
+    sections: list[str]
+
+
+@router.patch("/dashboard/{slug}/required-sections")
+async def update_required_sections(slug: str, body: RequiredSectionsIn) -> DashboardConfig:
+    """Mark/unmark which services are contracted on an ALREADY-PUBLISHED
+    dashboard -- e.g. a manager adding "lms" after the fact so it shows an
+    honest empty page instead of never appearing. Deliberately lightweight:
+    no schema re-discovery, no re-planning, no version bump -- see
+    dashboard_versions.set_required_sections's docstring."""
+    from .. import dashboard_versions
+    cfg = await dashboard_versions.set_required_sections(slug, body.sections)
+    if not cfg:
+        raise HTTPException(status_code=404, detail=f"dashboard '{slug}' not found")
+    return cfg

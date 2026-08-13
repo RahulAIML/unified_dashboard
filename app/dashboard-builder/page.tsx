@@ -115,12 +115,15 @@ function DashboardBuilder() {
       .catch(() => { /* picker is a convenience — free text still works */ })
   }, [])
   const [domainText, setDomainText] = useState('')
-  // Step 1 — services the client has contracted. Defaults to all selected so a
-  // rushed user can never create an empty dashboard; the platform still checks
-  // which of these actually have data (contracted ∩ has-data = rendered).
-  const [services, setServices] = useState<Set<string>>(
-    () => new Set(['simulator', 'coach', 'certification', 'lms', 'second-brain'])
-  )
+  // Step 1 — services the manager knows for CERTAIN this client is
+  // contracted for. Defaults to none selected: checking a box is now an
+  // affirmative "always show this section, even with no data yet" (see
+  // ai-service's mandatory_empty_page) -- ticking every box "to be safe"
+  // would fill every dashboard with empty placeholder tabs for services the
+  // tenant may not even want, so this must never be a rushed default.
+  // Anything left unchecked still appears automatically the moment real
+  // data is discovered for it -- unchecked only means "don't force it".
+  const [services, setServices] = useState<Set<string>>(() => new Set())
   const toggleService = (id: string) =>
     setServices(prev => {
       const next = new Set(prev)
@@ -278,10 +281,11 @@ function DashboardBuilder() {
 
       {/* Input card — company name is the only thing a manager needs */}
       <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-        {/* Step 1 — contracted services. Big multi-select cards, all on by
-            default; the platform still verifies which ones have data. */}
+        {/* Step 1 — contracted services. Off by default: this now controls
+            whether a section is FORCED to appear (mandatory, honest empty
+            state) even with no data -- not just a soft hint. */}
         <label className="text-sm font-semibold text-foreground mb-2 block">
-          Which services does this client have?
+          Is this client definitely contracted for any of these? (optional)
         </label>
         <div className="flex flex-wrap gap-2 mb-2">
           {SERVICE_OPTIONS.map(({ id, label }) => {
@@ -305,8 +309,9 @@ function DashboardBuilder() {
           })}
         </div>
         <p className="text-xs text-muted-foreground mb-5">
-          Only the selected services appear on their dashboard. Not sure? Leave all selected —
-          we detect which ones actually have data.
+          Checking a box guarantees that section always appears — even before we find any data for it — so a
+          contracted feature never silently vanishes. Leave unchecked if you&apos;re not sure: every service we
+          DO find real data for still shows up automatically, exactly as before.
         </p>
 
         <label className="text-sm font-semibold text-foreground mb-2 block">Company name</label>
