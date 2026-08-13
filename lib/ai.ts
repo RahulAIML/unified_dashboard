@@ -34,15 +34,13 @@ const GEMINI_API_URL =
 const PRODUCT_GLOSSARY: Record<string, string> = {
   "Master Coach / Coach Maestro": "AI role-play coaching sessions (category COACH). Practice-oriented, ungraded pass/fail is informational, not certifying.",
   "Simulator / Simulador": "Structured practice scenarios (category SIM). The bulk of session volume for most clients.",
-  "Certifier Coach / Coach Certificador": "Formal certification attempts (category SEGMENT). This is the module a Trial-and-Error Index or certification pass rate refers to.",
+  "Certifier Coach / Coach Certificador": "Formal certification attempts (category SEGMENT). This is the module a certification pass rate refers to.",
   "Second Brain": "A separate WhatsApp-based AI coaching follow-up product with its own API and data source -- never blended with Master Coach/Simulator/Certifier numbers, since it measures a different thing (ongoing field coaching, not a scored session).",
-  "Pass Rate": "% of sessions scoring 70 or above -- the one pass threshold used platform-wide.",
+  "Pass Rate": "% of sessions scoring at or above this client's pass threshold. The threshold is configurable per client (70 unless the client has explicitly set a different one, e.g. 80) and shown as a legend right on the Pass Rate tile -- never assume it's the same number for every client. Some clients have no score-based passing criteria at all (certified by completion instead), in which case the tile doesn't appear.",
   "MAU (Monthly Active Users)": "Users with at least one session in the real last 30 days, independent of whatever wider date range the dashboard filter currently shows.",
   "Activation Rate": "% of enrolled users who have started at least one session (not necessarily completed or passed one).",
-  "Mastery / Mastery threshold": "A score of 95 or above -- the Cesar KPI framework's bar for 'certified/mastered', distinct from the everyday 70 pass threshold.",
-  "Trial-and-Error Index": "% of Certifier Coach attempts made by a user with NO prior Master Coach session -- a proxy for 'rushing to certify without practicing first'. Lower is better.",
-  "Practices to Mastery": "Average number of sessions a user needed before their first score reaching Mastery (95+). Only meaningful for users who actually reached it.",
-  "KPIs page": "The Cesar KPI framework (activation, weekly practice frequency, MAU, mastery distribution, commercial-domain breakdown) -- only populated for rolplay_app_sql clients; every other connector shows it empty by design, not by bug.",
+  "Mastery / Mastery threshold": "A score of 95 or above -- the Cesar KPI framework's bar for 'certified/mastered', distinct from a client's own pass threshold.",
+  "KPIs page": "The Cesar KPI framework (activation, weekly practice frequency, MAU, mastery distribution, commercial-domain breakdown) -- only populated for rolplay_app_sql clients; every other connector shows it empty by design, not by bug. Practices to Mastery and Trial-and-Error Index were removed from this framework's scope and no longer exist as KPIs.",
   "Journey": "The cross-module progression view (LMS -> Master Coach/Simulator -> Certifier Coach -> Second Brain). Only appears in navigation when a tenant has 2+ of those modules -- a single module has nothing to sequence.",
   "Business Segments": "Pharma-tenant-only breakdown by business line/segment. Not available for rolplay_app_sql or banco tenants.",
   "Confidential label": "An optional tag an admin can set when generating/publishing a dashboard, shown on the published /d/[slug] view for links shared before a client's own login is set up.",
@@ -146,8 +144,52 @@ Rolplay glossary:
 ${JSON.stringify(PRODUCT_GLOSSARY, null, 2)}`
 }
 
+// ── Context-size guard (token overflow on large date ranges) ────────────────
+//
+// A long date range on a high-volume tenant (e.g. ~40k users) can grow the
+// context this assistant hands to the model well beyond what it can
+// reliably reason over in one pass. Two independent checks, both funneling
+// into the same outcome -- tell the user to narrow the range -- because the
+// alternative (the model quietly answering from a truncated/partial view of
+// the period) produces a number the user trusts but that was never computed
+// over the range they asked about.
+//
+//   1. Proactive: refuse before calling the model if our own payload is
+//      already past a conservative budget. Fails fast -- no wasted
+//      latency/cost on a call that was always going to be unreliable.
+//   2. Reactive: Gemini itself reports the condition (its own docs: an
+//      oversized request is rejected with a 400 citing the token count) --
+//      caught here and translated into the same guidance rather than surfaced
+//      as a generic "Gemini API error 400" message.
+//
+// ~4 chars/token is a standard rough estimate for English/Spanish prose;
+// 100k tokens is comfortably below Gemini's window but far above anything
+// this Q&A widget should legitimately need -- past this point the range
+// itself is the problem, not the size of a normal answer.
+const MAX_INPUT_CHARS = 400_000
+
+class ContextOverflowError extends Error {}
+
+function looksLikeContextOverflow(message: string): boolean {
+  const m = message.toLowerCase()
+  if (m.includes("context_length_exceeded") || m.includes("context length")) return true
+  if (m.includes("payload") && m.includes("too large")) return true
+  if (!m.includes("token")) return false
+  return m.includes("exceed") || m.includes("too long") || m.includes("too large") || m.includes("maximum number of tokens")
+}
+
+interface GeminiResult {
+  text: string
+  /** true when the model itself signalled it couldn't finish within budget -- never treat as a complete answer. */
+  truncated: boolean
+}
+
 /** Call Gemini once with the given system + user content. */
-async function callGemini(system: string, userContent: string, apiKey: string): Promise<string> {
+async function callGemini(system: string, userContent: string, apiKey: string): Promise<GeminiResult> {
+  if (system.length + userContent.length > MAX_INPUT_CHARS) {
+    throw new ContextOverflowError("Assembled prompt exceeds the safe input budget")
+  }
+
   const payload = {
     system_instruction: { parts: [{ text: system }] },
     contents: [{ role: "user", parts: [{ text: userContent }] }],
@@ -173,10 +215,14 @@ async function callGemini(system: string, userContent: string, apiKey: string): 
 
   if (!res.ok) {
     const errText = await res.text().catch(() => "")
+    if (res.status === 400 && looksLikeContextOverflow(errText)) {
+      throw new ContextOverflowError(errText)
+    }
     throw new Error(`Gemini API error ${res.status}: ${errText}`)
   }
 
   const data = await res.json()
+  const candidate = (data?.candidates ?? [])[0]
   const text: string = (data?.candidates ?? [])
     .flatMap((c: { content?: { parts?: { text?: string }[] } }) =>
       (c?.content?.parts ?? []).map((p: { text?: string }) => p?.text ?? "")
@@ -184,7 +230,14 @@ async function callGemini(system: string, userContent: string, apiKey: string): 
     .join("")
     .trim()
 
-  return text
+  // finishReason "MAX_TOKENS" means the model ran out of output budget while
+  // working through the input -- the same "answered on a partial view"
+  // failure mode as an input-side overflow, just discovered on the way out
+  // instead of the way in. Never present that truncated text as a complete
+  // answer.
+  const truncated = candidate?.finishReason === "MAX_TOKENS"
+
+  return { text, truncated }
 }
 
 /**
@@ -203,6 +256,11 @@ function hasGroundedContext(context: string): boolean {
 const INSUFFICIENT_CONTEXT_MESSAGE: Record<AssistantLang, string> = {
   en: "I don't have enough dashboard data loaded right now to answer that accurately. Try refreshing the page, or ask a more specific question once the data has loaded.",
   es: "No tengo suficientes datos del panel cargados en este momento para responder con precisión. Intenta actualizar la página o hacer una pregunta más específica una vez que los datos se hayan cargado.",
+}
+
+const RANGE_TOO_LARGE_MESSAGE: Record<AssistantLang, string> = {
+  en: "This date range has too much data for me to analyze reliably in one pass, so I won't guess from a partial view. Please narrow the date range and ask again.",
+  es: "Este rango de fechas tiene demasiados datos para analizarlos de forma confiable de una sola vez, así que no voy a adivinar con una vista parcial. Por favor, reduce el rango de fechas y vuelve a preguntar.",
 }
 
 export async function getAIResponse(
@@ -229,17 +287,31 @@ export async function getAIResponse(
       ? `Question: ${question}\n\nAnswer with a specific click-by-click path and, if relevant, what the feature is for. If it depends on a capability the user's organization might not have, say so.`
       : `Current dashboard data:\n${context}\n\nQuestion: ${question}\n\nAnalyze this data -- do not just restate it. Cite the real numbers, reference the trend/comparison already given if relevant, and suggest a next step if something looks off.`
 
-  let answer = await callGemini(system, userContent, apiKey)
+  let result: GeminiResult
+  try {
+    result = await callGemini(system, userContent, apiKey)
 
-  // Retry once if response is suspiciously short (< 80 chars) -- catches
-  // truncated/empty-ish responses regardless of which prompt was used.
-  if (answer.length < 80) {
-    answer = await callGemini(system, userContent, apiKey)
+    // Retry once if response is suspiciously short (< 80 chars) -- catches
+    // truncated/empty-ish responses regardless of which prompt was used.
+    if (!result.truncated && result.text.length < 80) {
+      result = await callGemini(system, userContent, apiKey)
+    }
+  } catch (err) {
+    if (err instanceof ContextOverflowError) return RANGE_TOO_LARGE_MESSAGE[lang]
+    throw err
   }
 
-  if (!answer) {
+  // A truncated response is, by definition, an answer computed from only
+  // part of what the model was asked to consider -- surfacing it as if it
+  // were complete is exactly the "silent partial answer" this guard exists
+  // to prevent, so it's never returned even if non-empty.
+  if (result.truncated) {
+    return RANGE_TOO_LARGE_MESSAGE[lang]
+  }
+
+  if (!result.text) {
     throw new Error("Empty response from Gemini after retry")
   }
 
-  return answer
+  return result.text
 }
