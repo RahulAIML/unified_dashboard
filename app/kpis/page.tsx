@@ -4,17 +4,24 @@
  * KPIs page — Sugerencia de KPI's Cesar.xlsx, ported to the hand-built
  * dashboard. rolplay-app only (see /api/dashboard/cesar-kpis and
  * lib/bridge-rolplay-app.ts's Cesar KPI functions for the full per-KPI
- * feasibility notes — 13 of 19 KPIs implemented, 6 documented as not
+ * feasibility notes — 9 of 19 KPIs implemented, 10 documented as not
  * computable without fabricating data the platform never recorded).
+ *
+ * Cards are grouped into the spec's own 5 perspectives and follow its card
+ * anatomy (title, description, formula, value, footer interpretation).
+ * Only Activation Rate (KPI-1.1) gets a goal bar/status badge -- it's the
+ * one KPI in the spec with an actual numeric target ("<80% indica
+ * barreras..."). Every other KPI in this set has no spec-sourced goal, so
+ * none is shown for it rather than inventing one.
  */
 
 import { useMemo } from "react"
 import {
   UserCheck, Repeat, CalendarClock, TrendingUp as TrendUpIcon,
-  ShieldCheck, Compass, ThumbsUp, ThumbsDown,
+  ShieldCheck, PieChart as MasteryIcon, Compass, Briefcase, ThumbsUp, ThumbsDown,
 } from "lucide-react"
 import { DashboardHeader } from "@/components/DashboardHeader"
-import { MetricCard } from "@/components/MetricCard"
+import { CesarKpiCard, CesarKpiValue } from "@/components/CesarKpiCard"
 import { DonutChart } from "@/components/charts/DonutChart"
 import { useApi, buildApiUrl } from "@/lib/hooks/useApi"
 import { useDashboardStore } from "@/lib/store"
@@ -26,33 +33,34 @@ interface AccessCaps { hasRolplayAppAccess?: boolean }
 
 interface CesarKpisResponse {
   activationRate: number | null
+  prevActivationRate: number | null
   weeklyPracticeFrequency: number | null
+  prevWeeklyPracticeFrequency: number | null
   mauRate: number | null
+  prevMauRate: number | null
   deltaScore: number | null
+  prevDeltaScore: number | null
   readinessIndex: number | null
+  prevReadinessIndex: number | null
   masteryDistribution: { label: string; value: number; pct: number }[]
   adoptionMovementRate: number | null
+  prevAdoptionMovementRate: number | null
   commercialDomain: { domain: string; avgScore: number; sessions: number }[]
   topStrengths: { item: string; count: number }[]
   topOpportunities: { item: string; count: number }[]
 }
 
-function fmtPct(v: number | null): string {
-  return v == null ? "—" : `${v}%`
-}
-function fmtNum(v: number | null): string {
-  return v == null ? "—" : `${v}`
-}
+// Sugerencia_de_KPIs_Cesar.xlsx, KPI-1.1: "<80% indica barreras de acceso,
+// falta de comunicación o baja prioridad gerencial" -- the one KPI in this
+// set with a real, spec-sourced numeric target.
+const ACTIVATION_RATE_GOAL = 80
 
-function SectionCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+function PerspectiveSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-[16px] border border-border/60 bg-card p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)]">
-      <div className="mb-4">
-        <h3 className="text-base sm:text-lg font-semibold text-foreground">{title}</h3>
-        {subtitle && <p className="text-xs sm:text-sm text-muted-foreground mt-1">{subtitle}</p>}
-      </div>
-      {children}
-    </div>
+    <section className="space-y-4">
+      <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground/70">{title}</h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">{children}</div>
+    </section>
   )
 }
 
@@ -69,13 +77,15 @@ export default function KpisPage() {
     : null
   const { data, loading } = useApi<CesarKpisResponse>(url)
 
-  const cards = useMemo(() => ([
-    { key: "activation", label: t.kpiActivationRate, value: fmtPct(data?.activationRate ?? null), icon: <UserCheck className="w-4 h-4" />, info: t.kpiActivationRateInfo },
-    { key: "weekly", label: t.kpiWeeklyPractice, value: fmtNum(data?.weeklyPracticeFrequency ?? null), icon: <Repeat className="w-4 h-4" />, info: t.kpiWeeklyPracticeInfo },
-    { key: "mau", label: t.kpiMau, value: fmtPct(data?.mauRate ?? null), icon: <CalendarClock className="w-4 h-4" />, info: t.kpiMauInfo },
-    { key: "delta", label: t.kpiDeltaScore, value: data?.deltaScore != null ? `${data.deltaScore > 0 ? "+" : ""}${data.deltaScore}` : "—", icon: <TrendUpIcon className="w-4 h-4" />, info: t.kpiDeltaScoreInfo },
-    { key: "readiness", label: t.kpiReadinessIndex, value: fmtPct(data?.readinessIndex ?? null), icon: <ShieldCheck className="w-4 h-4" />, info: t.kpiReadinessIndexInfo },
-  ]), [data, t])
+  const hasMasteryData = (data?.masteryDistribution?.length ?? 0) > 0
+  const hasCommercialDomainData = (data?.commercialDomain?.length ?? 0) > 0
+  const hasStrengthsData = (data?.topStrengths?.length ?? 0) > 0
+  const hasOpportunitiesData = (data?.topOpportunities?.length ?? 0) > 0
+
+  const masteryChartData = useMemo(
+    () => (data?.masteryDistribution ?? []).map(b => ({ name: b.label, value: b.value })),
+    [data],
+  )
 
   if (!ready) {
     return (
@@ -90,44 +100,146 @@ export default function KpisPage() {
     <div className="min-h-screen w-full">
       <DashboardHeader title={t.navKpis} subtitle={t.kpisSubtitle} showModuleFilter />
 
-      <div className="w-full px-4 sm:px-6 lg:px-8 py-5 sm:py-8 max-w-[1400px] mx-auto space-y-5">
+      <div className="w-full px-4 sm:px-6 lg:px-8 py-5 sm:py-8 max-w-[1400px] mx-auto space-y-8">
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-32 rounded-[16px] bg-muted/50 animate-pulse" />)}
+            {Array.from({ length: 9 }).map((_, i) => <div key={i} className="h-64 rounded-[16px] bg-muted/50 animate-pulse" />)}
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {cards.map(c => <MetricCard key={c.key} label={c.label} value={c.value} icon={c.icon} info={c.info} />)}
-            </div>
+            <PerspectiveSection title={t.perspAdoption}>
+              <CesarKpiCard
+                title={t.kpiActivationRate}
+                description={t.kpiActivationRateDesc}
+                formula={t.kpiActivationRateFormula}
+                footer={t.kpiActivationRateFooter}
+                icon={<UserCheck className="w-4 h-4" />}
+              >
+                <CesarKpiValue
+                  value={data?.activationRate ?? null}
+                  prevValue={data?.prevActivationRate ?? null}
+                  goal={ACTIVATION_RATE_GOAL}
+                  goalLabel={t.kpiActivationRateGoalLabel}
+                  deltaLabel={t.kpiVsPreviousPeriod}
+                />
+              </CesarKpiCard>
 
-            <SectionCard title={t.kpiMasteryDistTitle} subtitle={t.kpiMasteryDistSub}>
-              {(data?.masteryDistribution?.length ?? 0) === 0 ? (
-                <p className="text-sm text-muted-foreground">{t.noDataAvailable}</p>
-              ) : (
-                // Basic/Intermediate/Advanced sums to 100% -- a donut, never
-                // separate bars, with the exact count + share kept visible
-                // per level rather than replaced by the chart.
-                <div className="space-y-4">
-                  <DonutChart data={data!.masteryDistribution.map(b => ({ name: b.label, value: b.value }))} />
-                  <div className="space-y-1.5">
-                    {data!.masteryDistribution.map(b => (
-                      <div key={b.label} className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">{b.label}</span>
-                        <span className="font-semibold tabular-nums text-foreground">{b.value} ({b.pct}%)</span>
-                      </div>
-                    ))}
+              <CesarKpiCard
+                title={t.kpiWeeklyPractice}
+                description={t.kpiWeeklyPracticeDesc}
+                formula={t.kpiWeeklyPracticeFormula}
+                footer={t.kpiWeeklyPracticeFooter}
+                icon={<Repeat className="w-4 h-4" />}
+              >
+                <CesarKpiValue
+                  value={data?.weeklyPracticeFrequency ?? null}
+                  prevValue={data?.prevWeeklyPracticeFrequency ?? null}
+                  unit={t.kpiWeeklyPracticeUnit}
+                  deltaLabel={t.kpiVsPreviousPeriod}
+                />
+              </CesarKpiCard>
+
+              <CesarKpiCard
+                title={t.kpiMau}
+                description={t.kpiMauDesc}
+                formula={t.kpiMauFormula}
+                footer={t.kpiMauFooter}
+                icon={<CalendarClock className="w-4 h-4" />}
+              >
+                <CesarKpiValue
+                  value={data?.mauRate ?? null}
+                  prevValue={data?.prevMauRate ?? null}
+                  deltaLabel={t.kpiVsPreviousPeriod}
+                />
+              </CesarKpiCard>
+            </PerspectiveSection>
+
+            <PerspectiveSection title={t.perspEfficiency}>
+              <CesarKpiCard
+                title={t.kpiDeltaScore}
+                description={t.kpiDeltaScoreDesc}
+                formula={t.kpiDeltaScoreFormula}
+                footer={t.kpiDeltaScoreFooter}
+                icon={<TrendUpIcon className="w-4 h-4" />}
+              >
+                <CesarKpiValue
+                  value={data?.deltaScore ?? null}
+                  prevValue={data?.prevDeltaScore ?? null}
+                  unit={t.kpiDeltaScoreUnit}
+                  deltaLabel={t.kpiVsPreviousPeriod}
+                />
+              </CesarKpiCard>
+            </PerspectiveSection>
+
+            <PerspectiveSection title={t.perspTechnical}>
+              <CesarKpiCard
+                title={t.kpiMasteryDistTitle}
+                description={t.kpiMasteryDistDesc}
+                formula={t.kpiMasteryDistFormula}
+                footer={t.kpiMasteryDistFooter}
+                icon={<MasteryIcon className="w-4 h-4" />}
+                className="sm:col-span-2 lg:col-span-3"
+              >
+                {!hasMasteryData ? (
+                  <p className="text-sm text-muted-foreground">{t.noDataAvailable}</p>
+                ) : (
+                  // Basic/Intermediate/Advanced sums to 100% -- a donut, never
+                  // separate bars, with the exact count + share kept visible
+                  // per level rather than replaced by the chart.
+                  <div className="space-y-4">
+                    <DonutChart data={masteryChartData} />
+                    <div className="space-y-1.5 max-w-md mx-auto">
+                      {data!.masteryDistribution.map(b => (
+                        <div key={b.label} className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">{b.label}</span>
+                          <span className="font-semibold tabular-nums text-foreground">{b.value} ({b.pct}%)</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
-            </SectionCard>
+                )}
+              </CesarKpiCard>
+            </PerspectiveSection>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <MetricCard label={t.kpiAdoptionMovement} value={fmtPct(data?.adoptionMovementRate ?? null)} icon={<Compass className="w-4 h-4" />}
-                hint={t.kpiAdoptionMovementHint} />
+            <PerspectiveSection title={t.perspImpact}>
+              <CesarKpiCard
+                title={t.kpiAdoptionMovement}
+                description={t.kpiAdoptionMovementDesc}
+                formula={t.kpiAdoptionMovementFormula}
+                footer={t.kpiAdoptionMovementFooter}
+                icon={<Compass className="w-4 h-4" />}
+              >
+                <CesarKpiValue
+                  value={data?.adoptionMovementRate ?? null}
+                  prevValue={data?.prevAdoptionMovementRate ?? null}
+                  deltaLabel={t.kpiVsPreviousPeriod}
+                />
+              </CesarKpiCard>
 
-              <SectionCard title={t.kpiCommercialDomainTitle} subtitle={t.kpiCommercialDomainSub}>
-                {(data?.commercialDomain?.length ?? 0) === 0 ? (
+              <CesarKpiCard
+                title={t.kpiReadinessIndex}
+                description={t.kpiReadinessIndexDesc}
+                formula={t.kpiReadinessIndexFormula}
+                footer={t.kpiReadinessIndexFooter}
+                icon={<ShieldCheck className="w-4 h-4" />}
+              >
+                <CesarKpiValue
+                  value={data?.readinessIndex ?? null}
+                  prevValue={data?.prevReadinessIndex ?? null}
+                  deltaLabel={t.kpiVsPreviousPeriod}
+                />
+              </CesarKpiCard>
+            </PerspectiveSection>
+
+            <PerspectiveSection title={t.perspCommercial}>
+              <CesarKpiCard
+                title={t.kpiCommercialDomainTitle}
+                description={t.kpiCommercialDomainDesc}
+                formula={t.kpiCommercialDomainFormula}
+                footer={t.kpiCommercialDomainFooter}
+                icon={<Briefcase className="w-4 h-4" />}
+              >
+                {!hasCommercialDomainData ? (
                   <p className="text-sm text-muted-foreground">{t.noDataAvailable}</p>
                 ) : (
                   <div className="space-y-2">
@@ -142,12 +254,16 @@ export default function KpisPage() {
                     ))}
                   </div>
                 )}
-              </SectionCard>
-            </div>
+              </CesarKpiCard>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <SectionCard title={t.kpiTopStrengthsTitle} subtitle={t.kpiTopStrengthsSub}>
-                {(data?.topStrengths?.length ?? 0) === 0 ? (
+              <CesarKpiCard
+                title={t.kpiTopStrengthsTitle}
+                description={t.kpiTopStrengthsDesc}
+                formula={t.kpiTopStrengthsFormula}
+                footer={t.kpiTopStrengthsFooter}
+                icon={<ThumbsUp className="w-4 h-4" />}
+              >
+                {!hasStrengthsData ? (
                   <p className="text-sm text-muted-foreground">{t.noDataAvailable}</p>
                 ) : (
                   <ul className="space-y-2">
@@ -160,10 +276,16 @@ export default function KpisPage() {
                     ))}
                   </ul>
                 )}
-              </SectionCard>
+              </CesarKpiCard>
 
-              <SectionCard title={t.kpiTopOpportunitiesTitle} subtitle={t.kpiTopOpportunitiesSub}>
-                {(data?.topOpportunities?.length ?? 0) === 0 ? (
+              <CesarKpiCard
+                title={t.kpiTopOpportunitiesTitle}
+                description={t.kpiTopOpportunitiesDesc}
+                formula={t.kpiTopOpportunitiesFormula}
+                footer={t.kpiTopOpportunitiesFooter}
+                icon={<ThumbsDown className="w-4 h-4" />}
+              >
+                {!hasOpportunitiesData ? (
                   <p className="text-sm text-muted-foreground">{t.noDataAvailable}</p>
                 ) : (
                   <ul className="space-y-2">
@@ -176,8 +298,8 @@ export default function KpisPage() {
                     ))}
                   </ul>
                 )}
-              </SectionCard>
-            </div>
+              </CesarKpiCard>
+            </PerspectiveSection>
           </>
         )}
       </div>
