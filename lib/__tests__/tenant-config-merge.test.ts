@@ -144,3 +144,29 @@ describe('capability flags from the DB (migrations/007)', () => {
     expect(TENANT_CONFIG.apotex?.hasSimulator).toBe(false)
   })
 })
+
+describe('pass threshold from the DB (migrations/009)', () => {
+  it('lets a DB row configure an explicit pass threshold', async () => {
+    const { TENANT_CONFIG } = await loadWithDbRows([apotexRow({ passThreshold: 80 })])
+
+    expect(TENANT_CONFIG.apotex?.passThreshold).toBe(80)
+  })
+
+  it('leaves passThreshold unset (legacy) when the DB row has none', async () => {
+    const { TENANT_CONFIG } = await loadWithDbRows([apotexRow()])
+
+    expect(TENANT_CONFIG.apotex?.passThreshold).toBeFalsy()
+  })
+
+  it('lets a DB row mark a tenant as having no passing criteria', async () => {
+    const { TENANT_CONFIG } = await loadWithDbRows([apotexRow({ hasNoPassingCriteria: true })])
+
+    expect(TENANT_CONFIG.apotex?.hasNoPassingCriteria).toBe(true)
+  })
+
+  it('defaults hasNoPassingCriteria to false when the DB row omits it entirely', async () => {
+    const { TENANT_CONFIG } = await loadWithDbRows([apotexRow()])
+
+    expect(TENANT_CONFIG.apotex?.hasNoPassingCriteria).toBe(false)
+  })
+})
