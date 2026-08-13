@@ -29,6 +29,7 @@ async def run(
     recommendations: list[str],
     log: LogFn,
     secondary: ServiceDescriptor | None = None,
+    required_services: frozenset[str] = frozenset(),
 ) -> DashboardConfig:
     handle = dict(service.handle)
     # carry discovered ids so preview/publish can query without rediscovery
@@ -67,6 +68,7 @@ async def run(
         recommendations=recommendations,
         branding=branding,
         version=1,
+        required_sections=sorted(required_services),
     )
     await log("dashboard_config", "success",
               f"Built dashboard config '{config.title}' ({service.kind.value}) — {len(pages)} page(s)")

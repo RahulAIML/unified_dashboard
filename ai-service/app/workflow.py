@@ -205,8 +205,11 @@ async def resume_with_services(job: JobState, selected_modules: list[str], updat
 async def _continue_from_planning(job: JobState, knowledge, primary: ServiceDescriptor, schema: NormalizedSchema, update, log) -> None:
     req = job.request
     try:
+        required_services = frozenset(job.request.services)
         job.phase = JobPhase.dashboard_planning; await update(job)
-        pages, filters, recs = await dashboard_planning.run(schema, log, secondary_schema=job.secondary_schema)
+        pages, filters, recs = await dashboard_planning.run(
+            schema, log, secondary_schema=job.secondary_schema, required_services=required_services,
+        )
         job.percent = 68; await update(job)
 
         job.phase = JobPhase.dashboard_config; await update(job)
@@ -215,7 +218,8 @@ async def _continue_from_planning(job: JobState, knowledge, primary: ServiceDesc
         # merge its connector handle (e.g. coach_app_sql's customer_id) in
         # alongside the primary's -- cheap and deterministic, no re-probing.
         secondary = pick_secondary(knowledge, primary) if job.secondary_schema else None
-        cfg = await dashboard_config.run(knowledge, schema, primary, pages, filters, recs, log, secondary=secondary)
+        cfg = await dashboard_config.run(knowledge, schema, primary, pages, filters, recs, log,
+                                         secondary=secondary, required_services=required_services)
         cfg.connector_handle["base_url"] = primary.base_url
         cfg.confidential = req.confidential
         job.dashboard = cfg; job.percent = 76; await update(job)
@@ -236,7 +240,7 @@ async def _continue_from_planning(job: JobState, knowledge, primary: ServiceDesc
 
         if req.auto_publish and report.ok:
             job.phase = JobPhase.publish; await update(job)
-            job.published = await publish.run(cfg, knowledge.domains, log)
+            job.published = await publish.run(cfg, knowledge.domains, log, force=req.force_republish)
 
         job.phase = JobPhase.done; job.percent = 100
         await log("done", "success", f"Dashboard generated for '{req.company}'. Review the preview and publish.")

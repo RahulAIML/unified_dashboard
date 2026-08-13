@@ -648,8 +648,8 @@ async function _rolplayAppBestPerformersImpl(
 // AI-generated one.
 //
 // GROUP 1 (schema-only, works for any rolplay-app tenant): activation rate,
-// weekly practice frequency, MAU, practices-to-mastery, competency gain
-// (delta score), field readiness index, mastery distribution.
+// weekly practice frequency, MAU, competency gain (delta score), field
+// readiness index, mastery distribution.
 //
 // GROUP 2 (depends on raw_closing_data carrying a rich per-session
 // evaluation JSON -- confirmed real for Siigo, confirmed ABSENT for Takeda):
@@ -658,6 +658,10 @@ async function _rolplayAppBestPerformersImpl(
 // never a hardcoded field list -- works for any product whose evaluator
 // produces this shape, reports empty/null (never a fabricated value) for
 // one that doesn't.
+//
+// REMOVED FROM SCOPE (Aug 6 session with Silverio, not a feasibility gap --
+// both were implemented and working before this decision): Practices to
+// Mastery, KPI-2.4 Trial-and-Error Index.
 //
 // NOT implemented, same reasons as the Python port: KPI-2.1 Time-to-Mastery
 // (no duration column exists anywhere in r_user_session), KPI-3.1/3.3/5.2
@@ -672,18 +676,19 @@ export interface CesarGroup1Kpis {
   activationRate: number | null
   weeklyPracticeFrequency: number | null
   mauRate: number | null
-  practicesToMastery: number | null
   deltaScore: number | null
   readinessIndex: number | null
-  trialAndErrorRate: number | null
   masteryDistribution: { label: string; value: number; pct: number }[]
 }
 
 /** KPI-1.1/1.3/1.4/2.2/2.3/3.2/5.3. Per-user sequencing (delta score,
- *  practices-to-mastery, readiness, mastery distribution) is done in JS
- *  after fetching one bounded (user_id, score) row set, mirroring the
- *  Python port's own approach -- simpler and more testable than nested
- *  correlated SQL re-deriving SCORE_SQL inside a subquery. */
+ *  readiness, mastery distribution) is done in JS after fetching one
+ *  bounded (user_id, score) row set, mirroring the Python port's own
+ *  approach -- simpler and more testable than nested correlated SQL
+ *  re-deriving SCORE_SQL inside a subquery.
+ *  (Practices to Mastery and Trial-and-Error Index were REMOVED from scope
+ *  per the Aug 6 session with Silverio -- both were implemented and
+ *  working before this decision.) */
 export async function rolplayAppCesarGroup1(
   clientId: number,
   range?: { fromIso: string; toIso: string },
@@ -749,42 +754,11 @@ async function _rolplayAppCesarGroup1Impl(
   }
 
   const deltas: number[] = []
-  const practices: number[] = []
   let mastered = 0
   for (const scores of byUser.values()) {
     if (scores.length >= 2) deltas.push(scores[scores.length - 1] - scores[0])
-    const idx = scores.findIndex(s => s >= MASTERY_THRESHOLD)
-    if (idx >= 0) practices.push(idx + 1)
     if (scores.some(s => s >= MASTERY_THRESHOLD)) mastered++
   }
-
-  // KPI-2.4 Trial-and-Error Index: % of Certifier ("SEGMENT") attempts with
-  // no prior Coach ("COACH") session for that user. Queried WITHOUT `cat` --
-  // needs a user's full cross-category history, unlike every other metric
-  // here. Real only for a tenant whose r_simulator.category has a Certifier
-  // module (confirmed live: most don't); everyone else gets null, matching
-  // the Python port's own rule of "no data" over a fabricated rate.
-  const catSeqRows = await remoteSelect<{ user_id: number | string; category: string | null; date_created: string }>(
-    `SELECT s.user_id, sim.category AS category, s.date_created
-       FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
-       LEFT JOIN r_simulator sim ON sim.ID = s.simulator_id
-      WHERE u.client_id = ${cid}${dc}
-      ORDER BY s.user_id, s.date_created ASC
-      LIMIT ${_CLOSING_DATA_SAMPLE_LIMIT}`,
-  ).catch(() => [])
-  let certifierAttempts = 0
-  let noPriorCoach = 0
-  const seenCoach = new Set<string>()
-  for (const r of catSeqRows) {
-    const category = String(r.category ?? '').toUpperCase()
-    const uid = String(r.user_id)
-    if (category === 'COACH') seenCoach.add(uid)
-    else if (category === 'SEGMENT') {
-      certifierAttempts++
-      if (!seenCoach.has(uid)) noPriorCoach++
-    }
-  }
-  const trialAndErrorRate = certifierAttempts ? round1(100 * noPriorCoach / certifierAttempts) : null
 
   const allScores = seqRows.map(r => Number(r.sc)).filter(n => Number.isFinite(n))
   const basic = allScores.filter(s => s < 75).length
@@ -801,10 +775,8 @@ async function _rolplayAppCesarGroup1Impl(
     activationRate: enrolled ? round1(100 * activeUsers / enrolled) : null,
     weeklyPracticeFrequency: activeWeeks ? round1(periodSessions / activeWeeks) : null,
     mauRate: enrolled ? round1(100 * mauUsers / enrolled) : null,
-    practicesToMastery: practices.length ? round1(practices.reduce((a, b) => a + b, 0) / practices.length) : null,
     deltaScore: deltas.length ? round1(deltas.reduce((a, b) => a + b, 0) / deltas.length) : null,
     readinessIndex: enrolled ? round1(100 * mastered / enrolled) : null,
-    trialAndErrorRate,
     masteryDistribution,
   }
 }

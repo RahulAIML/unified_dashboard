@@ -52,8 +52,17 @@ import type {
 } from './types'
 import type { DrilldownResult, DrilldownField } from './data-provider'
 import { TENANT_CONFIG, type PharmaTenant } from './pharma-tenant'
+import { LEGACY_PASS_THRESHOLD, passRateLegend, resolvePassThreshold } from './kpi-builder'
 
-const PASS_THRESHOLD = 70 // matches every tenant's own pass/fail convention (>=70)
+/**
+ * Per-row score comparisons (Results table / drilldown "passed" badges) are
+ * cosmetic detail outside this ticket's scope -- always compared against
+ * LEGACY_PASS_THRESHOLD regardless of a tenant's configured/no-criteria
+ * threshold, unchanged from before configurability existed. Only the
+ * AGGREGATE pass-rate figures (pharmaDashboardOverview) honor the resolved,
+ * possibly-null, per-tenant threshold.
+ */
+const PASS_THRESHOLD = LEGACY_PASS_THRESHOLD
 
 const EMPTY_OVERVIEW: OverviewApiResponse = {
   totalEvaluations: 0, prevTotalEvaluations: 0,
@@ -95,7 +104,7 @@ function isoToDate(iso: string): string {
 
 // ── sale_exercises tenants: raw-row fetch + in-adapter aggregation ─────────────
 
-interface SaleExercisesRow {
+export interface SaleExercisesRow {
   id: number
   usecase_id: number
   usecase_name: string
@@ -303,15 +312,21 @@ async function fetchExceltisRestSessions(
     .filter((r): r is SaleExercisesRow => r !== null)
 }
 
-function aggregateSaleExercisesRows(rows: SaleExercisesRow[]) {
+/**
+ * @param threshold The tenant's resolved pass threshold (lib/kpi-builder.ts's
+ *   resolvePassThreshold) -- null means this tenant has no score-based
+ *   passing criteria, so passRate/passed are never computed (never a
+ *   misleading number against a threshold the client never agreed to).
+ */
+export function aggregateSaleExercisesRows(rows: SaleExercisesRow[], threshold: number | null) {
   const total  = rows.length
-  const passed = rows.filter(r => r.score >= PASS_THRESHOLD).length
+  const passed = threshold !== null ? rows.filter(r => r.score >= threshold).length : null
   const avg    = total ? rows.reduce((s, r) => s + r.score, 0) / total : null
   return {
     total,
     avgScore: avg != null ? Math.round(avg * 100) / 100 : null,
-    passRate: total ? Math.round((passed / total) * 10000) / 100 : null,
-    passed,
+    passRate: threshold !== null && total ? Math.round(((passed as number) / total) * 10000) / 100 : null,
+    passed: passed ?? 0,
   }
 }
 
@@ -407,6 +422,11 @@ async function sanferCertificationOverview(): Promise<OverviewApiResponse> {
     // real "previous period" to compare against, so we report zero change
     // rather than fabricate a trend that doesn't exist.
     prevTotalEvaluations: stats.total, prevAvgScore: avgScore, prevPassRate: stats.cert_pct,
+    // Not a score threshold at all -- cert_pct is % of users who completed
+    // every assigned simulation (official platform DB), a wholly different
+    // convention from PASS_THRESHOLD. Real number, so shown (not hidden),
+    // with an accurate legend rather than a fabricated "score >= N pts" one.
+    passRateLegend: 'Certified: % of users who completed every assigned simulation',
   }
 }
 
@@ -555,6 +575,10 @@ function summarizeApotexActivities(rows: ApotexActivityRow[]): OverviewApiRespon
     passRate: total ? Math.round((passed / total) * 10000) / 100 : null,
     passedEvaluations: passed,
     prevTotalEvaluations: 0, prevAvgScore: null, prevPassRate: null, // filled in by caller with a second window
+    // sessions_pass/pass_rate_pct come from Apotex's OWN bridge, computed by
+    // their system against a convention we don't control -- an honest label
+    // rather than a fabricated "score >= N pts" one implying we set it.
+    passRateLegend: 'Pass rate as reported by the source system',
   }
 }
 
@@ -716,15 +740,18 @@ export async function pharmaDashboardOverview(
       prevTotalEvaluations: Number(prev.overview.total_sessions),
       prevAvgScore:         prev.overview.avg_score != null ? Number(prev.overview.avg_score) : null,
       prevPassRate:         prev.overview.pass_rate_pct != null ? Number(prev.overview.pass_rate_pct) : null,
+      // Computed by Apotex's own bridge, not against our threshold.
+      passRateLegend: 'Pass rate as reported by the source system',
     }
   }
 
+  const threshold = resolvePassThreshold(TENANT_CONFIG[tenant])
   const [curRows, prevRows] = await Promise.all([
     fetchSaleExercisesSessions(tenant, params.fromIso, params.toIso),
     fetchSaleExercisesSessions(tenant, params.prevFromIso, params.prevToIso),
   ])
-  const cur  = aggregateSaleExercisesRows(curRows)
-  const prev = aggregateSaleExercisesRows(prevRows)
+  const cur  = aggregateSaleExercisesRows(curRows, threshold)
+  const prev = aggregateSaleExercisesRows(prevRows, threshold)
   return {
     totalEvaluations:     cur.total,
     avgScore:             cur.avgScore,
@@ -733,6 +760,7 @@ export async function pharmaDashboardOverview(
     prevTotalEvaluations: prev.total,
     prevAvgScore:         prev.avgScore,
     prevPassRate:         prev.passRate,
+    passRateLegend: passRateLegend(threshold),
   }
 }
 

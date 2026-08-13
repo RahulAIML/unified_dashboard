@@ -52,6 +52,14 @@ export interface KpiCard {
    *  (e.g. a current-state snapshot with no date range) — renders a neutral
    *  "no comparison" badge instead of a real-looking "+0%" delta. */
   noComparison?: boolean
+  /** Visible caption under the value, e.g. "Pass threshold: score >= 80 pts"
+   *  (see OverviewApiResponse.passRateLegend) — so an applied criterion is
+   *  never left for the viewer to infer. Absent for every KPI this doesn't
+   *  apply to. */
+  legend?: string | null
+  /** Definition + formula shown via the info/"eye" affordance next to the
+   *  label, on hover or click. Absent = no affordance for this tile. */
+  info?: string
 }
 
 export interface TimeSeriesPoint {
@@ -188,6 +196,16 @@ export interface OverviewApiResponse {
   prevTotalEvaluations: number
   prevAvgScore:         number | null
   prevPassRate:         number | null
+  /**
+   * The exact legend text for the pass-rate section (e.g. "Pass threshold:
+   * score >= 80 pts"), so the applied criteria are never left for the
+   * viewer to infer -- see lib/kpi-builder.ts's passRateLegend(). null means
+   * this tenant has no applicable passing criteria at all: the frontend
+   * must hide the pass-rate section entirely rather than show a misleading
+   * number. undefined (absent) means this org type hasn't been wired up to
+   * report it yet -- render exactly as before this field existed.
+   */
+  passRateLegend?: string | null
 }
 
 /** A single point in a time-series returned by GET /api/dashboard/trends */

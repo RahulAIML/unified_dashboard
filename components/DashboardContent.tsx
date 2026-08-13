@@ -30,6 +30,7 @@ import type {
   EvaluationApiRow,
   BestPerformersApiResponse,
   BestPerformerRow,
+  KpiCard,
 } from "@/lib/types"
 import type { Module } from "@/lib/types"
 
@@ -62,7 +63,17 @@ type SecondBrainProfile = {
 }
 
 // ── KPI icons ─────────────────────────────────────────────────────────────────
-const kpiIcons = [
+// Keyed by labelKey rather than array position: the "Overall Pass Rate" tile
+// can be omitted entirely (a tenant with no pass/fail criteria — see
+// kpiCards below), and a position-based lookup would then hand the WRONG
+// icon to every tile after it.
+const KPI_ICON_BY_LABEL_KEY: Partial<Record<KpiCard["labelKey"], React.ReactNode>> = {
+  practiceSessions:  <PlayCircle key="p"  className="w-4 h-4" />,
+  avgSessionScore:   <Target     key="t"  className="w-4 h-4" />,
+  overallPassRate:   <TrendingUp key="tr" className="w-4 h-4" />,
+  certifiedUsers:    <BadgeCheck key="b"  className="w-4 h-4" />,
+}
+const DEFAULT_KPI_ICONS = [
   <PlayCircle key="p"  className="w-4 h-4" />,
   <Target     key="t"  className="w-4 h-4" />,
   <TrendingUp key="tr" className="w-4 h-4" />,
@@ -251,21 +262,31 @@ export function DashboardContent() {
         value: overview!.totalEvaluations,
         delta: d(overview!.totalEvaluations, overview!.prevTotalEvaluations),
         tier: "A" as const,
+        info: t.practiceSessionsInfo,
       },
       {
         label: "Avg Session Score", labelKey: "avgSessionScore" as const,
         value: overview!.avgScore ?? 0, unit: "pts",
         delta: d(overview!.avgScore ?? 0, overview!.prevAvgScore ?? 0),
         tier: "B" as const,
+        info: t.avgSessionScoreInfo,
       },
-      {
+      // passRateLegend === null (explicit, not merely absent) means this
+      // tenant has no applicable pass/fail criteria at all -- omit the tile
+      // entirely rather than render a number computed against a threshold
+      // the client never agreed to. Every other org type simply doesn't set
+      // this field (undefined), so the tile renders exactly as before.
+      ...(overview!.passRateLegend === null ? [] : [{
         label: "Overall Pass Rate", labelKey: "overallPassRate" as const,
         value: overview!.passRate ?? 0, unit: "%",
         delta: d(overview!.passRate ?? 0, overview!.prevPassRate ?? 0),
         tier: "B" as const,
-      },
+        legend: overview!.passRateLegend,
+        info: t.overallPassRateInfo,
+      }]),
       {
         label: "Certified Users", labelKey: "certifiedUsers" as const,
+        info: t.certifiedUsersInfo,
         // cert.stats is a current-state snapshot with no date range, so there
         // is no real "previous period" to diff against — show "no comparison"
         // rather than a fabricated-looking 0% trend.
@@ -282,7 +303,7 @@ export function DashboardContent() {
         tier: "A" as const,
       },
     ]
-  }, [overview, overviewCert, hasOverviewData, isSecondBrain])
+  }, [overview, overviewCert, hasOverviewData, isSecondBrain, t])
 
   const secondBrainKpis = useMemo(() => {
     if (!isSecondBrain || !sbProfile) return []
@@ -694,7 +715,7 @@ export function DashboardContent() {
                         key={`${selectedSolution ?? "all"}-${kpi.label}`}
                         kpi={kpi}
                         index={i}
-                        icon={kpiIcons[i]}
+                        icon={KPI_ICON_BY_LABEL_KEY[kpi.labelKey] ?? DEFAULT_KPI_ICONS[i]}
                       />
                     ))
                   : Array.from({ length: 4 }).map((_, i) => (
@@ -980,22 +1001,19 @@ export function DashboardContent() {
                   <h3 className="text-base sm:text-lg font-semibold">{t.scoreDistribution}</h3>
                   <p className="text-xs sm:text-sm text-muted-foreground mt-1.5">{t.scoreDistributionSub}</p>
                 </div>
-                <div className="space-y-2">
-                  {trends!.scoreDistribution!.map(bucket => (
-                    <div key={bucket.range} className="flex items-center gap-3">
-                      <span className="w-16 shrink-0 text-xs font-medium text-muted-foreground tabular-nums">{bucket.range}</span>
-                      <div className="flex-1 h-5 bg-muted/40 rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full"
-                          style={{ width: `${Math.max(bucket.pct, bucket.count > 0 ? 2 : 0)}%`, background: `linear-gradient(90deg, hsl(var(--primary)), hsl(var(--accent)))` }}
-                        />
+                {/* Score buckets sum to 100% -- a donut, never separate
+                    bars, with each bucket's exact count + share kept
+                    visible rather than replaced by the chart. */}
+                <div className="space-y-4">
+                  <DonutChart data={trends!.scoreDistribution!.map(bucket => ({ name: bucket.range, value: bucket.count }))} />
+                  <div className="space-y-1.5">
+                    {trends!.scoreDistribution!.map(bucket => (
+                      <div key={bucket.range} className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground tabular-nums">{bucket.range}</span>
+                        <span className="font-semibold tabular-nums text-foreground">{bucket.count} ({bucket.pct}%)</span>
                       </div>
-                      <span className="w-20 shrink-0 text-xs text-right tabular-nums">
-                        <span className="font-semibold">{bucket.count}</span>
-                        <span className="text-muted-foreground"> ({bucket.pct}%)</span>
-                      </span>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               </div>
             )}

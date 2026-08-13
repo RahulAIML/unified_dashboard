@@ -189,6 +189,63 @@ export function deltaDirection(deltaPct: number): DeltaDirection {
   return "flat"
 }
 
+// ── Configurable pass-rate threshold ─────────────────────────────────────────
+//
+// Every pharma tenant's score-based pass rate was hardcoded to >=70 across
+// both this repo (bridge-pharma-analytics.ts) and ai-service, but real
+// contracts differ per client: some pass at 70, some at 80, and some (e.g.
+// Sanfer's certification module) have no score-based passing criteria at
+// all -- completion itself is the bar. This resolver is the one place that
+// decides which threshold applies, so it can never drift between callers.
+
+/** Preserves today's live numbers for every tenant that has never explicitly
+ *  configured a threshold -- changing this would silently move the goalposts
+ *  under an already-delivered dashboard. */
+export const LEGACY_PASS_THRESHOLD = 70
+
+/** Pre-filled when an admin configures a NEW tenant's threshold and leaves it
+ *  at the suggested value -- the ticket's own "80 as the default" ask. Only
+ *  takes effect when a tenant is explicitly given this value; it never
+ *  overrides an existing unconfigured tenant's LEGACY_PASS_THRESHOLD. */
+export const DEFAULT_NEW_PASS_THRESHOLD = 80
+
+export interface PassCriteria {
+  /** Explicitly configured score threshold. null/undefined = not configured. */
+  passThreshold?: number | null
+  /** True = this tenant has no score-based passing criteria at all (e.g.
+   *  certification by completion, not by score) -- takes priority over any
+   *  passThreshold value, since "no criteria" is a deliberate override, not
+   *  an absence of configuration. */
+  hasNoPassingCriteria?: boolean
+}
+
+/**
+ * Resolves the numeric pass threshold to apply, or null when this tenant has
+ * no score-based passing criteria (the caller must then omit/hide the
+ * pass-rate figure entirely rather than compute a misleading one).
+ *
+ * @example
+ *   resolvePassThreshold({ hasNoPassingCriteria: true })  // -> null
+ *   resolvePassThreshold({ passThreshold: 80 })            // -> 80
+ *   resolvePassThreshold({})                               // -> 70 (legacy)
+ *   resolvePassThreshold(undefined)                        // -> 70 (legacy)
+ */
+export function resolvePassThreshold(criteria: PassCriteria | null | undefined): number | null {
+  if (criteria?.hasNoPassingCriteria) return null
+  if (criteria?.passThreshold != null) return criteria.passThreshold
+  return LEGACY_PASS_THRESHOLD
+}
+
+/**
+ * The exact legend text for the pass-rate section, so the applied threshold
+ * is never left for the viewer to infer. null means the pass-rate section
+ * itself should be hidden (no applicable criteria).
+ */
+export function passRateLegend(threshold: number | null): string | null {
+  if (threshold === null) return null
+  return `Pass threshold: score ≥ ${threshold} pts`
+}
+
 /**
  * Estimates prior passed sessions from (total, passRate%).
  * Centralised here so pages don't duplicate KPI logic.

@@ -66,6 +66,9 @@ export async function POST(request: NextRequest) {
     coachActivityIds?: number[]
     authHeaderName?: string
     authHeaderValue?: string
+    /** Tri-state: omit/null = unspecified (LEGACY_PASS_THRESHOLD, 70). */
+    passThreshold?: number | null
+    hasNoPassingCriteria?: boolean
     domains?: string[]
   }
   try {
@@ -89,6 +92,9 @@ export async function POST(request: NextRequest) {
   if (body.ucids.some(id => !Number.isInteger(id))) {
     return buildApiError('ucids must all be integers', 400)
   }
+  if (body.passThreshold != null && (!Number.isInteger(body.passThreshold) || body.passThreshold < 1 || body.passThreshold > 100)) {
+    return buildApiError('passThreshold must be an integer between 1 and 100', 400)
+  }
 
   try {
     const tenant = await upsertTenant({
@@ -111,6 +117,13 @@ export async function POST(request: NextRequest) {
       coachActivityIds: body.coachActivityIds && body.coachActivityIds.length > 0 ? body.coachActivityIds : null,
       authHeaderName: body.authHeaderName?.trim() || null,
       authHeaderValue: body.authHeaderValue?.trim() || null,
+      // ?? null, NOT ?? DEFAULT_NEW_PASS_THRESHOLD: leaving the field blank
+      // here means "not configured" (LEGACY_PASS_THRESHOLD applies), the
+      // same tri-state contract as hasLms/hasSimulator above. The UI
+      // pre-fills the 80 suggestion as a form default the admin can accept
+      // or change -- that's a client-side convenience, not a server default.
+      passThreshold: body.passThreshold ?? null,
+      hasNoPassingCriteria: body.hasNoPassingCriteria ?? false,
       createdBy: admin.userId,
     })
 

@@ -86,27 +86,31 @@ export default function CertificationPage() {
         value: overview!.totalEvaluations,
         delta: 0, noComparison: true,
         tier: "A" as const,
+        info: t.candidatesEvaluatedInfo,
       },
       {
         label: "Pass Rate", labelKey: "passRate" as const,
         value: overview!.passRate ?? 0, unit: "%",
         delta: 0, noComparison: true,
         tier: "B" as const,
+        info: t.passRateInfo,
       },
       {
         label: "Avg Score", labelKey: "avgScore" as const,
         value: overview!.avgScore ?? 0, unit: "pts",
         delta: 0, noComparison: true,
         tier: "B" as const,
+        info: t.avgScoreInfo,
       },
       {
         label: "Certified Users", labelKey: "certifiedUsers" as const,
         value: overview!.passedEvaluations,
         delta: 0, noComparison: true,
         tier: "A" as const,
+        info: t.certifiedUsersInfo,
       },
     ]
-  }, [overview, hasData])
+  }, [overview, hasData, t])
 
   const passFailData  = useMemo(() => trends?.passFailTrend ?? [],  [trends])
   const scoreTrend    = useMemo(() => trends?.scoreTrend ?? [],      [trends])

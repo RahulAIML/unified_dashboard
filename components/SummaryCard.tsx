@@ -5,6 +5,7 @@ import { TrendingUp, TrendingDown, Minus } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { KpiCard } from "@/lib/types"
 import { useT } from "@/lib/lang-store"
+import { KpiInfoButton } from "@/components/KpiInfoButton"
 
 interface Props {
   kpi: KpiCard
@@ -14,7 +15,7 @@ interface Props {
 
 export function SummaryCard({ kpi, index = 0, icon }: Props) {
   const t = useT()
-  const { labelKey, label, value, delta, unit, noComparison } = kpi
+  const { labelKey, label, value, delta, unit, noComparison, legend, info } = kpi
   const displayLabel = t[labelKey] ?? label
   const isPositive = !noComparison && delta > 0
   const isNegative = !noComparison && delta < 0
@@ -36,8 +37,9 @@ export function SummaryCard({ kpi, index = 0, icon }: Props) {
       <div className="p-5 sm:p-6">
         {/* Label row */}
         <div className="flex items-center justify-between gap-3 mb-4">
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider leading-none select-none">
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider leading-none select-none">
             {displayLabel}
+            {info && <KpiInfoButton definition={info} />}
           </span>
           {icon && (
             <div 
@@ -78,6 +80,10 @@ export function SummaryCard({ kpi, index = 0, icon }: Props) {
           </div>
           <span className="text-xs text-muted-foreground/70">{noComparison ? t.noHistoricalComparison : t.vsPrior}</span>
         </div>
+
+        {legend && (
+          <p className="mt-2.5 text-[11px] text-muted-foreground/80 leading-snug">{legend}</p>
+        )}
       </div>
     </motion.div>
   )

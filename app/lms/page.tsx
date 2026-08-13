@@ -151,6 +151,7 @@ export default function LmsPage() {
         label: "Enrolled Users", labelKey: "enrolledUsers",
         value: data.enrolledUsers,
         delta: 0, noComparison: true, tier: "A",
+        info: t.enrolledUsersInfo,
       },
       {
         label: "Completion Rate", labelKey: "completionRate",
@@ -158,20 +159,23 @@ export default function LmsPage() {
         value: data.completionRate ?? "—",
         unit: data.completionRate != null ? "%" : undefined,
         delta: 0, noComparison: true, tier: "B",
+        info: t.completionRateInfo,
       },
       {
         label: "Avg Quiz Score", labelKey: "avgQuizScore",
         value: data.hasScoreData && data.avgQuizScore != null ? data.avgQuizScore : "—",
         unit: data.hasScoreData && data.avgQuizScore != null ? "%" : undefined,
         delta: 0, noComparison: true, tier: "B",
+        info: t.avgQuizScoreInfo,
       },
       {
         label: "Modules Completed", labelKey: "modulesCompleted",
         value: data.modulesCompleted,
         delta: 0, noComparison: true, tier: "A",
+        info: t.modulesCompletedInfo,
       },
     ]
-  }, [data])
+  }, [data, t])
 
   const columns: Column<LmsCourseRow>[] = useMemo(() => [
     {

@@ -200,6 +200,12 @@ class WidgetConfig(BaseModel):
     paginated: bool = False
     searchable: bool = False
     exportable: bool = False
+    # A section the manager explicitly contracted/requested (see
+    # GenerateRequest.services) that must still render even though no data
+    # was discovered for it — an honest "no data yet" empty state, never a
+    # silent disappearance. False for every widget built from real discovered
+    # data (the overwhelming majority).
+    mandatory: bool = False
 
 
 class DashboardRow(BaseModel):
@@ -225,6 +231,11 @@ class DashboardPage(BaseModel):
     # hidden by default; this proves the enforcement path works without
     # inventing a restriction nobody asked for.
     visibility: Literal["all_users", "admin_only"] = "all_users"
+    # Same contract as WidgetConfig.mandatory, at the page level: a whole
+    # page (e.g. "LMS") that the manager contracted but that has no
+    # discovered data still appears, with an honest empty state, instead of
+    # being omitted from `pages` entirely.
+    mandatory: bool = False
 
 
 class DashboardFilter(BaseModel):
@@ -266,6 +277,12 @@ class DashboardConfig(BaseModel):
     # outside the normal authenticated tenant flow. Defaults False so every
     # config built before this field existed deserializes unchanged.
     confidential: bool = False
+    # The contracted-services snapshot (GenerateRequest.services) this config
+    # was last built/edited with — which page ids are allowed to render as a
+    # mandatory empty state rather than disappearing. Persisted so a later
+    # edit (POST /ai/dashboard/{slug}/required-sections) can add/remove a
+    # required section without re-running discovery/planning from scratch.
+    required_sections: list[str] = Field(default_factory=list)
 
 
 # ── Validation ──────────────────────────────────────────────────────────────────
@@ -369,6 +386,12 @@ class GenerateRequest(BaseModel):
     services: list[str] = Field(default_factory=list)
     manager_request: str = ""
     auto_publish: bool = False
+    # Post-launch layout freeze override: once a slug is published, a second
+    # generate+auto_publish call for the SAME slug is blocked (see
+    # agents/publish.py) unless a human explicitly sets this — an accidental
+    # re-run of the builder must never silently rearrange what a client
+    # already sees. Defaults False (frozen).
+    force_republish: bool = False
     # Closing criterion: shown as a "CONFIDENTIAL" label on the published
     # /d/[slug] view -- for a link shared before the client's own login is
     # set up, or shared outside the platform entirely.
