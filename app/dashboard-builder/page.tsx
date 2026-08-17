@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuthContext } from '@/components/AuthProvider'
 import { DashboardRenderer, humanizeConnector } from '@/components/DashboardRenderer'
+import { useT } from '@/lib/lang-store'
 
 // ── Types mirroring the AI service JobState ─────────────────────────────────────
 type Phase =
@@ -31,26 +32,35 @@ interface JobState {
   available_modules?: string[]
 }
 
-const PHASE_STEPS: { key: Phase; label: string }[] = [
-  { key: 'planning', label: 'Plan' },
-  { key: 'company_discovery', label: 'Locate company' },
-  { key: 'service_discovery', label: 'Discover services' },
-  { key: 'schema_discovery', label: 'Understand schema' },
-  { key: 'dashboard_planning', label: 'Design dashboard' },
-  { key: 'validation', label: 'Validate' },
-  { key: 'preview', label: 'Preview' },
-  { key: 'done', label: 'Ready' },
-]
-const ORDER = PHASE_STEPS.map(s => s.key)
+type T = ReturnType<typeof useT>
 
-// Step 1 options. Labels match the dashboard's own module naming.
-const SERVICE_OPTIONS: { id: string; label: string }[] = [
-  { id: 'simulator',     label: 'Simulator'       },
-  { id: 'coach',         label: 'Master Coach'    },
-  { id: 'certification', label: 'Certifier Coach' },
-  { id: 'lms',           label: 'LMS'             },
-  { id: 'second-brain',  label: 'Second Brain'    },
+function getPhaseSteps(t: T): { key: Phase; label: string }[] {
+  return [
+    { key: 'planning', label: t.builderStepPlan },
+    { key: 'company_discovery', label: t.builderStepLocate },
+    { key: 'service_discovery', label: t.builderStepDiscover },
+    { key: 'schema_discovery', label: t.builderStepSchema },
+    { key: 'dashboard_planning', label: t.builderStepDesign },
+    { key: 'validation', label: t.builderStepValidate },
+    { key: 'preview', label: t.builderStepPreview },
+    { key: 'done', label: t.builderStepReady },
+  ]
+}
+const ORDER: Phase[] = [
+  'planning', 'company_discovery', 'service_discovery', 'schema_discovery',
+  'dashboard_planning', 'validation', 'preview', 'done',
 ]
+
+// Step 1 options. Labels match the dashboard's own module naming (nav translations).
+function getServiceOptions(t: T): { id: string; label: string }[] {
+  return [
+    { id: 'simulator',     label: t.navSimulator     },
+    { id: 'coach',         label: t.navCoach         },
+    { id: 'certification', label: t.navCertification },
+    { id: 'lms',           label: t.navLms           },
+    { id: 'second-brain',  label: t.navSecondBrain   },
+  ]
+}
 
 interface KnownCompany { id: number; name: string; sessions: number; users: number }
 
@@ -66,13 +76,14 @@ interface KnownCompany { id: number; name: string; sessions: number; users: numb
  */
 export default function DashboardBuilderPage() {
   const { user, isLoading } = useAuthContext()
+  const t = useT()
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
+          <p className="text-gray-600">{t.builderLoading}</p>
         </div>
       </div>
     )
@@ -82,16 +93,16 @@ export default function DashboardBuilderPage() {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center max-w-md">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Access Denied</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">{t.builderAccessDenied}</h1>
           <p className="text-gray-600 mb-6">
-            Only administrators can access the Dashboard Builder.
-            {!user && ' Please log in to continue.'}
+            {t.builderAccessDeniedMsg}
+            {!user && t.builderPleaseLogin}
           </p>
           <a
             href={user ? '/' : '/auth/login'}
             className="inline-block bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
           >
-            {user ? 'Back to Dashboard' : 'Go to Login'}
+            {user ? t.builderBackToDashboard : t.builderGoToLogin}
           </a>
         </div>
       </div>
@@ -102,6 +113,7 @@ export default function DashboardBuilderPage() {
 }
 
 function DashboardBuilder() {
+  const t = useT()
   const [company, setCompany] = useState('')
   // Populates a <datalist> so a manager can pick an existing rolplay_app_sql
   // client instead of retyping/misspelling its name — free-text entry still
@@ -252,7 +264,7 @@ function DashboardBuilder() {
   }
 
   function requestTemplate(): string {
-    return `Hi — we're setting up an analytics dashboard for ${company || 'our company'} and need one piece of info from you.\n\nCould you send us the list of "exercise" or "use case" IDs (numbers) used in our training platform? These identify each training scenario in the system. Once we have that list, the dashboard can go live.\n\nThanks!`
+    return t.builderRequestTemplate.replace('{company}', company || t.builderDefaultCompany)
   }
   async function copyTemplate() {
     try {
@@ -272,10 +284,9 @@ function DashboardBuilder() {
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
       <header className="mb-8">
-        <h1 className="text-2xl font-bold text-foreground">Build your dashboard</h1>
+        <h1 className="text-2xl font-bold text-foreground">{t.builderTitle}</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Type your company name and press <span className="font-semibold text-foreground">Generate</span>.
-          Our AI finds your data, builds the dashboard, and shows you a live preview. No setup, no code.
+          {t.builderSubtitlePre}<span className="font-semibold text-foreground">{t.builderGenerateWord}</span>{t.builderSubtitlePost}
         </p>
       </header>
 
@@ -285,10 +296,10 @@ function DashboardBuilder() {
             whether a section is FORCED to appear (mandatory, honest empty
             state) even with no data -- not just a soft hint. */}
         <label className="text-sm font-semibold text-foreground mb-2 block">
-          Is this client definitely contracted for any of these? (optional)
+          {t.builderServicesLabel}
         </label>
         <div className="flex flex-wrap gap-2 mb-2">
-          {SERVICE_OPTIONS.map(({ id, label }) => {
+          {getServiceOptions(t).map(({ id, label }) => {
             const on = services.has(id)
             return (
               <button
@@ -309,34 +320,31 @@ function DashboardBuilder() {
           })}
         </div>
         <p className="text-xs text-muted-foreground mb-5">
-          Checking a box guarantees that section always appears — even before we find any data for it — so a
-          contracted feature never silently vanishes. Leave unchecked if you&apos;re not sure: every service we
-          DO find real data for still shows up automatically, exactly as before.
+          {t.builderServicesHint}
         </p>
 
-        <label className="text-sm font-semibold text-foreground mb-2 block">Company name</label>
+        <label className="text-sm font-semibold text-foreground mb-2 block">{t.builderCompanyLabel}</label>
         <div className="flex flex-col sm:flex-row gap-3">
           <input value={company} onChange={e => setCompany(e.target.value)}
-            placeholder="e.g. Acme Pharma — or pick an existing client below" disabled={running}
+            placeholder={t.builderCompanyPlaceholder} disabled={running}
             list="known-companies-list"
             onKeyDown={e => { if (e.key === 'Enter' && company.trim() && !running) generate() }}
             className="flex-1 rounded-lg border border-border bg-background px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-primary" />
           <datalist id="known-companies-list">
             {knownCompanies.map(c => (
               <option key={c.id} value={c.name}>
-                {c.sessions > 0 ? `${c.sessions} sessions, ${c.users} users` : 'no activity yet'}
+                {c.sessions > 0 ? `${c.sessions} ${t.builderSessionsUsers}, ${c.users} ${t.builderUsersWord}` : t.builderNoActivityYet}
               </option>
             ))}
           </datalist>
           <button onClick={generate} disabled={running || starting || !company.trim()}
             className="px-6 py-3 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 disabled:opacity-50 whitespace-nowrap">
-            {running ? 'Generating…' : '✨ Generate Dashboard'}
+            {running ? t.builderGenerating : t.builderGenerateBtn}
           </button>
         </div>
         {knownCompanies.length > 0 && (
           <p className="text-xs text-muted-foreground mt-1">
-            Start typing to pick from {knownCompanies.filter(c => c.sessions > 0).length} existing rolplay_app_sql
-            clients with real activity, or type a new company name.
+            {t.builderKnownCompaniesPre}{knownCompanies.filter(c => c.sessions > 0).length}{t.builderKnownCompaniesPost}
           </p>
         )}
 
@@ -345,37 +353,35 @@ function DashboardBuilder() {
             correct value here avoids the "guessed the wrong domain, nobody can
             log in" problem. */}
         <label className="text-sm font-semibold text-foreground mt-4 mb-2 block">
-          Company email domain <span className="font-normal text-muted-foreground">(recommended)</span>
+          {t.builderDomainLabel} <span className="font-normal text-muted-foreground">{t.builderRecommended}</span>
         </label>
         <input value={domainText} onChange={e => setDomainText(e.target.value)}
-          placeholder="e.g. acmepharma.com — the domain their team uses to log in" disabled={running}
+          placeholder={t.builderDomainPlaceholder} disabled={running}
           className="w-full rounded-lg border border-border bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
         <p className="text-xs text-muted-foreground mt-1">
-          Everyone who logs in with an email at this domain will see this dashboard. Ask the client which domain
-          their team uses. Leave blank only if you&apos;re not sure — you can set it later.
+          {t.builderDomainHint}
         </p>
 
         <button type="button" onClick={() => setShowAdvanced(v => !v)}
           className="mt-3 text-xs text-muted-foreground hover:text-foreground">
-          {showAdvanced ? '▾' : '▸'} Advanced (optional)
+          {showAdvanced ? '▾' : '▸'} {t.builderAdvanced}
         </button>
         {showAdvanced && (
           <div className="mt-2 space-y-3">
             <div>
-              <label className="text-xs font-medium text-foreground mb-1 block">Exercise IDs</label>
+              <label className="text-xs font-medium text-foreground mb-1 block">{t.builderExerciseIds}</label>
               <input value={idsText} onChange={e => setIdsText(e.target.value)}
-                placeholder="Leave blank — the AI finds these automatically" disabled={running}
+                placeholder={t.builderExerciseIdsPlaceholder} disabled={running}
                 className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
-              <p className="text-xs text-muted-foreground mt-1">Only fill this in if you already know the specific exercise IDs. Otherwise leave it empty.</p>
+              <p className="text-xs text-muted-foreground mt-1">{t.builderExerciseIdsHint}</p>
             </div>
             <label className="flex items-center gap-2 text-xs text-foreground">
               <input type="checkbox" checked={confidential} onChange={e => setConfidential(e.target.checked)} disabled={running}
                 className="rounded border-border" />
-              Mark this dashboard&apos;s published link as CONFIDENTIAL
+              {t.builderConfidentialLabel}
             </label>
             <p className="text-xs text-muted-foreground -mt-2">
-              Shows a confidential label on the published view — use this before sharing a link outside the
-              client&apos;s normal login.
+              {t.builderConfidentialHint}
             </p>
           </div>
         )}
@@ -386,7 +392,7 @@ function DashboardBuilder() {
         <div className="mt-6 rounded-2xl border border-border bg-card p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <div className="flex flex-wrap gap-x-4 gap-y-2">
-              {PHASE_STEPS.map((s, i) => {
+              {getPhaseSteps(t).map((s, i) => {
                 const state = job.phase === 'error' ? (i <= currentIdx ? 'done' : 'todo')
                   : (currentIdx > i || job.phase === 'done') ? 'done' : currentIdx === i ? 'current' : 'todo'
                 return (
@@ -427,20 +433,18 @@ function DashboardBuilder() {
           {/* Error — a clear, actionable card, never a raw exception string */}
           {job.phase === 'error' && (
             <div className="mt-4 rounded-xl border border-destructive/30 bg-destructive/5 p-4">
-              <p className="text-sm font-semibold text-foreground mb-1">We couldn&apos;t find this company&apos;s data yet</p>
+              <p className="text-sm font-semibold text-foreground mb-1">{t.builderErrorTitle}</p>
               <p className="text-xs text-muted-foreground mb-3">
-                This usually means the company hasn&apos;t been connected to any of our systems yet — it&apos;s not
-                necessarily a problem on your end. Double-check the company name for typos and try again, or reach
-                out to support if you believe this company should already be connected.
+                {t.builderErrorMsg}
               </p>
               <div className="flex flex-wrap items-center gap-3">
                 <button onClick={() => { setJob(null); setCompany('') }}
                   className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:opacity-90">
-                  Try again
+                  {t.builderTryAgain}
                 </button>
                 <a href="mailto:info@rolplay.ai?subject=Dashboard%20builder%20-%20company%20not%20found"
                   className="text-xs font-semibold text-primary hover:underline">
-                  Contact support
+                  {t.builderContactSupport}
                 </a>
               </div>
             </div>
@@ -451,29 +455,25 @@ function DashboardBuilder() {
               to supply them. Not a failure — a normal one-time setup step. */}
           {job.phase === 'needs_ids' && (
             <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
-              <p className="text-sm font-semibold text-foreground mb-1">One more thing needed — this is normal, not an error</p>
+              <p className="text-sm font-semibold text-foreground mb-1">{t.builderNeedsIdsTitle}</p>
               <p className="text-xs text-muted-foreground mb-3">
-                We found your company&apos;s data ({humanizeConnector(job.pending_connector)}), but this particular system
-                doesn&apos;t let us automatically list the ID numbers for each training scenario. If you already know them,
-                enter them below. If not, that&apos;s fine — copy the message below and send it to whoever manages your
-                training platform (usually your IT team or platform admin). Once you have the numbers, come back and paste
-                them in.
+                {t.builderNeedsIdsMsgPre}{humanizeConnector(job.pending_connector)}{t.builderNeedsIdsMsgPost}
               </p>
               <div className="mb-3 rounded-lg border border-border bg-background p-3">
                 <p className="text-xs text-muted-foreground whitespace-pre-wrap">{requestTemplate()}</p>
                 <button onClick={copyTemplate} type="button"
                   className="mt-2 text-xs font-semibold text-primary hover:underline">
-                  {copied ? '✓ Copied' : 'Copy this message'}
+                  {copied ? t.builderCopied : t.builderCopyMessage}
                 </button>
               </div>
               <div className="flex flex-col sm:flex-row gap-3">
                 <input value={pendingIdsText} onChange={e => setPendingIdsText(e.target.value)}
-                  placeholder="e.g. 137, 159, 173" disabled={resuming}
+                  placeholder={t.builderIdsPlaceholder} disabled={resuming}
                   onKeyDown={e => { if (e.key === 'Enter' && pendingIdsText.trim()) provideIds() }}
                   className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
                 <button onClick={provideIds} disabled={resuming || !pendingIdsText.trim()}
                   className="px-5 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 disabled:opacity-50 whitespace-nowrap">
-                  {resuming ? 'Continuing…' : 'Continue'}
+                  {resuming ? t.builderContinuing : t.builderContinue}
                 </button>
               </div>
             </div>
@@ -483,10 +483,9 @@ function DashboardBuilder() {
               manager reviews/narrows exactly that list, never picks blind. */}
           {job.phase === 'review_services' && (
             <div className="mt-4 rounded-xl border border-border bg-background p-4">
-              <p className="text-sm font-semibold text-foreground mb-1">We found these real services for your company</p>
+              <p className="text-sm font-semibold text-foreground mb-1">{t.builderReviewTitle}</p>
               <p className="text-xs text-muted-foreground mb-3">
-                These are the services your training data actually contains — nothing guessed. Uncheck any you don&apos;t
-                want included in the dashboard.
+                {t.builderReviewMsg}
               </p>
               <div className="space-y-2 mb-4">
                 {(job.available_modules ?? []).map(m => (
@@ -499,7 +498,7 @@ function DashboardBuilder() {
               </div>
               <button onClick={confirmServices} disabled={resuming || selectedModules.size === 0}
                 className="px-5 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 disabled:opacity-50">
-                {resuming ? 'Continuing…' : `Continue with ${selectedModules.size} selected`}
+                {resuming ? t.builderContinuing : `${t.builderContinueWithPre}${selectedModules.size}${t.builderContinueWithPost}`}
               </button>
             </div>
           )}
@@ -512,11 +511,11 @@ function DashboardBuilder() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-lg font-bold text-foreground">{job.dashboard.title}</h2>
-              <p className="text-xs text-muted-foreground">Live preview · source: {humanizeConnector(job.dashboard.connector)} · real data</p>
+              <p className="text-xs text-muted-foreground">{t.builderLivePreviewPre}{humanizeConnector(job.dashboard.connector)}{t.builderLivePreviewPost}</p>
             </div>
             {job.validation && (
               <span className={`text-xs font-semibold px-2 py-1 rounded-full ${job.validation.ok ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-destructive/10 text-destructive'}`}>
-                {job.validation.ok ? 'Validation passed' : 'Validation failed'} · {job.validation.summary}
+                {job.validation.ok ? t.builderValidationPassed : t.builderValidationFailed} · {job.validation.summary}
               </span>
             )}
           </div>
@@ -535,16 +534,14 @@ function DashboardBuilder() {
               impossible to publish this without seeing it spelled out first. */}
           {job.validation?.issues.some(i => i.code === 'no_data') && (
             <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
-              <p className="text-sm font-semibold text-foreground mb-1">Heads up — this dashboard will look empty</p>
+              <p className="text-sm font-semibold text-foreground mb-1">{t.builderEmptyTitle}</p>
               <p className="text-xs text-muted-foreground mb-3">
-                We connected to {company || 'this company'}&apos;s system successfully, but it has no data yet for the
-                current view. If you publish now, whoever looks at it will see blank charts and zeros — that&apos;s
-                expected for a brand-new company with no activity yet, but worth confirming before you go ahead.
+                {t.builderEmptyMsgPre}{company || t.builderThisCompany}{t.builderEmptyMsgPost}
               </p>
               <label className="flex items-center gap-2 text-xs font-medium text-foreground cursor-pointer">
                 <input type="checkbox" checked={acknowledgedEmpty} onChange={e => setAcknowledgedEmpty(e.target.checked)}
                   className="rounded border-border" />
-                I understand this will publish with no visible data yet
+                {t.builderAckEmpty}
               </label>
             </div>
           )}
@@ -558,14 +555,14 @@ function DashboardBuilder() {
                 (!!job.validation?.issues.some(i => i.code === 'no_data') && !acknowledgedEmpty)
               }
               className="px-5 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50">
-              {job.published ? '✓ Published — live' : publishing ? 'Publishing…' : 'Publish dashboard'}
+              {job.published ? t.builderPublished : publishing ? t.builderPublishing : t.builderPublishBtn}
             </button>
-            {job.published && <span className="text-xs text-muted-foreground">Live within ~30s. Users on this company&apos;s domain now see it.</span>}
+            {job.published && <span className="text-xs text-muted-foreground">{t.builderLiveNote}</span>}
             {publishError && <span className="text-xs text-destructive">{publishError}</span>}
             {publishedSlug && (
               <a href={`/d/${publishedSlug}`} target="_blank" rel="noreferrer"
                 className="text-xs font-semibold text-primary hover:underline">
-                Open published dashboard
+                {t.builderOpenPublished}
               </a>
             )}
           </div>
