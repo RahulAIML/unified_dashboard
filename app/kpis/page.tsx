@@ -120,6 +120,8 @@ export default function KpisPage() {
                   prevValue={data?.prevActivationRate ?? null}
                   goal={ACTIVATION_RATE_GOAL}
                   goalLabel={t.kpiActivationRateGoalLabel}
+                  onTrackLabel={t.kpiOnTrackLabel}
+                  belowGoalLabel={t.kpiBelowGoalLabel}
                   deltaLabel={t.kpiVsPreviousPeriod}
                 />
               </CesarKpiCard>
