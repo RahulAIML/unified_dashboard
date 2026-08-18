@@ -66,6 +66,8 @@ not by test failures — 20/20 files that *did* start passed).
 | **rolplay_app_sql: `rolplayAppClosingDataRows` truncation not flagged** (feeds Commercial Domain / Top Strengths / Top Opportunities / Adoption Movement) | **OPEN** — same class of bug as the two fixed above, lower traffic surfaces. Not yet flagged with a `sampled` boolean |
 | **rolplay_app_sql: Reports/Results hard 200-row cap, no "showing N of M" indicator** | OPEN — silent truncation for a &gt;200-session tenant, not a crash |
 | **rolplay_app_sql: no UI/server cap on date-range span** | OPEN — a 10-year range risks a 20s bridge timeout per query, degrading to the same silent-empty behavior above (now at least logged) |
+| **Dashboard Builder page has no language-toggle affordance** | **FIXED** — it renders its own `<header>` instead of the shared `DashboardHeader`, so an admin landing directly on `/dashboard-builder` had no way to switch language without navigating away first. Added the same toggle button, same behavior |
+| **Parallel session's rolplay_app_sql hardening (origin/main `f210303`)** | **MERGED** — a concurrent session independently fixed the same silent-failure class more thoroughly (removed all `.catch(() => [])`, letting errors genuinely propagate to each route's own try/catch) and fixed 3 real `passRate`-uses-`total`-instead-of-`scored` numerator/denominator mismatches. Both sessions' work verified compatible: this session's SQL-injection fix, Python readiness_index fix, and frontend null-vs-zero/error-banner fixes touch disjoint code; the one overlapping function (`remoteSelect`) was merged to keep both the improved timeout/unreachable error detail and this session's explicit logging
 
 ### Note: membership checks sit on the request path
 
