@@ -2,10 +2,16 @@
 
 import Link from 'next/link'
 import { APP_NAME } from '@/lib/constants'
+import { useT } from '@/lib/lang-store'
 
 export function DashboardFooter() {
+  const t = useT()
+
   return (
-    <footer className="border-t border-border bg-background/60 px-6 py-4">
+    <footer className="border-t border-border bg-background/60 px-4 py-4 sm:px-6">
+      <p className="mb-3 text-center text-xs font-medium tracking-wide text-muted-foreground" data-testid="dashboard-confidentiality">
+        {t.dashboardConfidentiality}
+      </p>
       <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-muted-foreground">
         <div className="flex items-center gap-4 flex-wrap justify-center sm:justify-start">
           <span className="font-semibold text-foreground/70" translate="no">{APP_NAME}</span>
