@@ -91,31 +91,36 @@ async function remoteSelect<T = Record<string, unknown>>(sql: string): Promise<T
   const token = process.env.ROLPLAY_APP_SQL_TOKEN
   if (token) headers['X-Rolplay-Auth'] = token
 
-  // Every one of this function's ~15 call sites does `.catch(() => [])`, so a
-  // remote timeout, a 500, or a malformed response has always been completely
-  // indistinguishable downstream from "this tenant genuinely has zero rows" --
-  // same HTTP 200, same empty KPI numbers, no error field, nothing in server
-  // logs either. That silent-failure behavior is left unchanged here (routes
-  // still degrade to empty rather than 500ing the whole dashboard on one bad
-  // widget), but the failure itself is now at least observable: log before
-  // rethrowing, so an outage shows up in Render logs instead of only as
-  // suspiciously-flat dashboard numbers a human has to notice by eye.
+  // A parallel session removed every call site's `.catch(() => [])` (see
+  // below in this file), so a failed query now correctly propagates as a real
+  // error instead of degrading to indistinguishable-from-empty -- that WAS
+  // this function's biggest gap. This session's own contribution on top: even
+  // a propagated error was invisible anywhere in server logs, so a caller
+  // that still swallows (a future one, or an external consumer of this
+  // module) would have no trace of *why* it got nothing. Log before
+  // rethrowing so an outage always shows up in Render logs, independent of
+  // whether the caller re-swallows or lets it bubble.
+  let res: Response
   try {
-    const res = await fetch(sqlUrl(), {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ sql }),
-      cache: 'no-store',
-      signal: AbortSignal.timeout(20_000),
-    })
-    if (!res.ok) throw new Error(`rolplay-app SQL HTTP ${res.status}`)
-    const json = (await res.json()) as { result?: string; data?: T[]; error?: string }
-    if (json.result !== 'success') throw new Error(json.error ?? 'rolplay-app SQL error')
-    return Array.isArray(json.data) ? json.data : []
-  } catch (err) {
-    console.error('[rolplay-app] SQL query failed (caller will treat this as empty data):', (err as Error).message)
+    res = await fetch(sqlUrl(), { method: 'POST', headers, body: JSON.stringify({ sql }), cache: 'no-store', signal: AbortSignal.timeout(20_000) })
+  } catch (error) {
+    const detail = error instanceof Error && error.name === 'TimeoutError' ? 'timed out after 20 seconds' : 'is unreachable'
+    const err = new Error(`rolplay-app SQL ${detail}`, { cause: error })
+    console.error('[rolplay-app] SQL query failed:', err.message)
     throw err
   }
+  if (!res.ok) {
+    const err = new Error(`rolplay-app SQL HTTP ${res.status}`)
+    console.error('[rolplay-app] SQL query failed:', err.message)
+    throw err
+  }
+  const json = (await res.json()) as { result?: string; data?: T[]; error?: string }
+  if (json.result !== 'success') {
+    const err = new Error(json.error ?? 'rolplay-app SQL error')
+    console.error('[rolplay-app] SQL query failed:', err.message)
+    throw err
+  }
+  return Array.isArray(json.data) ? json.data : []
 }
 
 // ── Login → client_id resolution ────────────────────────────────────────────
@@ -378,6 +383,12 @@ function categoryClause(solution?: string | null): string {
   return ` AND s.simulator_id IN (SELECT ID FROM r_simulator WHERE category = '${cat}')`
 }
 
+function tenantId(clientId: number): number {
+  const cid = Math.trunc(clientId)
+  if (!Number.isSafeInteger(cid) || cid < 1) throw new Error('rolplay-app SQL: invalid client id')
+  return cid
+}
+
 /**
  * Which dashboard modules this client actually has data for — drives dynamic
  * rendering so a client sees only their contracted/used services (no empty
@@ -389,14 +400,14 @@ export async function rolplayAppAvailableModules(clientId: number): Promise<stri
 }
 
 async function _rolplayAppAvailableModulesImpl(clientId: number): Promise<string[]> {
-  const cid = Math.trunc(clientId)
+  const cid = tenantId(clientId)
   const rows = await remoteSelect<{ category: string | null; n: number | string }>(
     `SELECT sim.category AS category, COUNT(*) AS n
        FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
        LEFT JOIN r_simulator sim ON sim.ID = s.simulator_id
       WHERE u.client_id = ${cid}
       GROUP BY sim.category`,
-  ).catch(() => [])
+  )
   const present = new Set(
     rows.filter(r => Number(r.n) > 0 && r.category).map(r => String(r.category).toUpperCase()),
   )
@@ -423,7 +434,7 @@ async function fetchScoreStats(cid: number, fromIso?: string, toIso?: string, so
            FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
           WHERE u.client_id = ${cid}${dateClause(fromIso, toIso)}${categoryClause(solution)}
        ) t`,
-  ).catch(() => [])
+  )
   const r = rows[0]
   return {
     total:  Number(r?.total ?? 0),
@@ -449,7 +460,7 @@ async function _rolplayAppOverviewImpl(
   range?: { fromIso: string; toIso: string },
   solution?: string | null,
 ): Promise<OverviewApiResponse> {
-  const cid = Math.trunc(clientId)
+  const cid = tenantId(clientId)
 
   // Previous period = the equal-length window immediately before `from`.
   let prevRange: { fromIso: string; toIso: string } | undefined
@@ -466,7 +477,7 @@ async function _rolplayAppOverviewImpl(
     prevRange ? fetchScoreStats(cid, prevRange.fromIso, prevRange.toIso, solution) : Promise.resolve<ScoreStats | null>(null),
   ])
 
-  const passRate = (s: ScoreStats) => s.total > 0 ? Math.round((s.passed / s.total) * 1000) / 10 : null
+  const passRate = (s: ScoreStats) => s.scored > 0 ? Math.round((s.passed / s.scored) * 1000) / 10 : null
 
   return {
     totalEvaluations:     cur.total,
@@ -488,12 +499,12 @@ export async function rolplayAppDataBounds(
 async function _rolplayAppDataBoundsImpl(
   clientId: number,
 ): Promise<{ min: string; max: string } | null> {
-  const cid = Math.trunc(clientId)
+  const cid = tenantId(clientId)
   const rows = await remoteSelect<{ min_date: string | null; max_date: string | null }>(
     `SELECT MIN(s.date_created) AS min_date, MAX(s.date_created) AS max_date
        FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
       WHERE u.client_id = ${cid}`,
-  ).catch(() => [])
+  )
   const r = rows[0]
   if (!r?.min_date || !r?.max_date) return null
   return { min: String(r.min_date), max: String(r.max_date) }
@@ -515,20 +526,22 @@ async function _rolplayAppResultsImpl(
   range?: { fromIso: string; toIso: string },
   solution?: string | null,
 ): Promise<ResultsApiResponse> {
-  const cid = Math.trunc(clientId)
+  const cid = tenantId(clientId)
   const lim = Math.max(1, Math.min(200, Math.trunc(limit)))
   const rows = await remoteSelect<{
     id: number | string
     simulator_id: number | string | null
+    simulator_name: string | null
     date_created: string
     sc: string | null
   }>(
-    `SELECT s.ID AS id, s.simulator_id, s.date_created, ${SCORE_SQL} AS sc
+    `SELECT s.ID AS id, s.simulator_id, sim.name AS simulator_name, s.date_created, ${SCORE_SQL} AS sc
        FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
+       LEFT JOIN r_simulator sim ON sim.ID = s.simulator_id
       WHERE u.client_id = ${cid}${dateClause(range?.fromIso, range?.toIso)}${categoryClause(solution)}
       ORDER BY s.date_created DESC
       LIMIT ${lim}`,
-  ).catch(() => [])
+  )
 
   const data: EvaluationApiRow[] = rows.map((r) => {
     const score = r.sc != null ? Number(r.sc) : null
@@ -536,7 +549,7 @@ async function _rolplayAppResultsImpl(
     return {
       savedReportId: Number(r.id),
       usecaseId: r.simulator_id != null ? Number(r.simulator_id) : null,
-      usecaseName: null,    // simulator display name not joined here
+      usecaseName: r.simulator_name?.trim() || null,
       score,
       result: score != null ? (passed ? 'pass' : 'fail') : null,
       passed,
@@ -560,7 +573,7 @@ async function _rolplayAppTrendsImpl(
   range?: { fromIso: string; toIso: string },
   solution?: string | null,
 ): Promise<TrendsApiResponse> {
-  const cid = Math.trunc(clientId)
+  const cid = tenantId(clientId)
   const dc = dateClause(range?.fromIso, range?.toIso)
 
   const daily = await remoteSelect<{ day: string; sessions: number | string; avg: string | null; passed: number | string }>(
@@ -570,7 +583,7 @@ async function _rolplayAppTrendsImpl(
                FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
               WHERE u.client_id = ${cid}${dc}${categoryClause(solution)}) t
       GROUP BY day ORDER BY day`,
-  ).catch(() => [])
+  )
 
   const scoreTrend: ApiTrendPoint[] = daily.filter(r => r.avg != null).map(r => ({ date: String(r.day).slice(0, 10), value: Number(r.avg) }))
   const evalCountTrend: ApiTrendPoint[] = daily.map(r => ({ date: String(r.day).slice(0, 10), value: Number(r.sessions) }))
@@ -581,7 +594,7 @@ async function _rolplayAppTrendsImpl(
        FROM (SELECT ${SCORE_SQL} AS sc FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
               WHERE u.client_id = ${cid}${dc}${categoryClause(solution)}) t
       WHERE sc IS NOT NULL GROUP BY bucket ORDER BY bucket`,
-  ).catch(() => [])
+  )
   const totalScored = buckets.reduce((s, b) => s + Number(b.count), 0) || 1
   const scoreDistribution = buckets.map(b => {
     const lo = Number(b.bucket)
@@ -605,27 +618,28 @@ async function _rolplayAppUsecaseBreakdownImpl(
   range?: { fromIso: string; toIso: string },
   solution?: string | null,
 ): Promise<UsecaseBreakdownApiResponse> {
-  const cid = Math.trunc(clientId)
+  const cid = tenantId(clientId)
   const dc = dateClause(range?.fromIso, range?.toIso)
-  const rows = await remoteSelect<{ simulator_id: number | string; name: string | null; total: number | string; avg: string | null; passed: number | string }>(
+  const rows = await remoteSelect<{ simulator_id: number | string; name: string | null; total: number | string; scored: number | string; avg: string | null; passed: number | string }>(
     `SELECT s.simulator_id, sim.name,
-            COUNT(*) AS total, ROUND(AVG(${SCORE_SQL}),2) AS avg,
+            COUNT(*) AS total, COUNT(${SCORE_SQL}) AS scored, ROUND(AVG(${SCORE_SQL}),2) AS avg,
             SUM(CASE WHEN (${SCORE_SQL}) >= ${PASS_THRESHOLD} THEN 1 ELSE 0 END) AS passed
        FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
        LEFT JOIN r_simulator sim ON sim.ID = s.simulator_id
       WHERE u.client_id = ${cid}${dc}${categoryClause(solution)}
       GROUP BY s.simulator_id, sim.name ORDER BY total DESC`,
-  ).catch(() => [])
+  )
 
   const data: UsecaseApiRow[] = rows.map(r => {
     const total = Number(r.total)
     const passed = Number(r.passed)
+    const scored = Number(r.scored)
     return {
       usecaseId: Number(r.simulator_id),
       usecase_name: r.name?.trim() || `Simulator ${r.simulator_id}`,
       totalEvaluations: total,
       avgScore: r.avg != null ? Number(r.avg) : null,
-      passRate: total ? Math.round((passed / total) * 1000) / 10 : null,
+      passRate: scored ? Math.round((passed / scored) * 1000) / 10 : null,
       passed,
     }
   })
@@ -648,12 +662,12 @@ async function _rolplayAppBestPerformersImpl(
   range?: { fromIso: string; toIso: string },
   solution?: string | null,
 ): Promise<BestPerformersApiResponse> {
-  const cid = Math.trunc(clientId)
+  const cid = tenantId(clientId)
   const lim = Math.max(1, Math.min(50, Math.trunc(limit)))
   const dc = dateClause(range?.fromIso, range?.toIso)
-  const rows = await remoteSelect<{ email: string; name: string | null; sessions: number | string; avg: string | null; passed: number | string }>(
+  const rows = await remoteSelect<{ email: string; name: string | null; sessions: number | string; scored: number | string; avg: string | null; passed: number | string }>(
     `SELECT u.email, u.name,
-            COUNT(*) AS sessions, ROUND(AVG(${SCORE_SQL}),2) AS avg,
+            COUNT(*) AS sessions, COUNT(${SCORE_SQL}) AS scored, ROUND(AVG(${SCORE_SQL}),2) AS avg,
             SUM(CASE WHEN (${SCORE_SQL}) >= ${PASS_THRESHOLD} THEN 1 ELSE 0 END) AS passed
        FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
       WHERE u.client_id = ${cid}${dc}${categoryClause(solution)}
@@ -661,17 +675,18 @@ async function _rolplayAppBestPerformersImpl(
       HAVING COUNT(${SCORE_SQL}) > 0
       ORDER BY avg DESC, sessions DESC
       LIMIT ${lim}`,
-  ).catch(() => [])
+  )
 
   const data: BestPerformerRow[] = rows.map(r => {
     const sessions = Number(r.sessions)
     const passed = Number(r.passed)
+    const scored = Number(r.scored)
     return {
       user_email: r.email,
       user_name: r.name?.trim() || null,
       sessions,
       avg_score: r.avg != null ? Number(r.avg) : 0,
-      pass_rate: sessions ? Math.round((passed / sessions) * 1000) / 10 : 0,
+      pass_rate: scored ? Math.round((passed / scored) * 1000) / 10 : 0,
     }
   })
   return { data }
@@ -747,14 +762,14 @@ async function _rolplayAppCesarGroup1Impl(
   range?: { fromIso: string; toIso: string },
   solution?: string | null,
 ): Promise<CesarGroup1Kpis> {
-  const cid = Math.trunc(clientId)
+  const cid = tenantId(clientId)
   const dc = dateClause(range?.fromIso, range?.toIso)
   const cat = categoryClause(solution)
   const round1 = (n: number) => Math.round(n * 10) / 10
 
   const enrolledRows = await remoteSelect<{ n: number | string }>(
     `SELECT COUNT(*) AS n FROM r_user u WHERE u.client_id = ${cid}`,
-  ).catch(() => [])
+  )
   const enrolled = Number(enrolledRows[0]?.n ?? 0)
 
   const activeRows = await remoteSelect<{ n: number | string; sessions: number | string; weeks: number | string }>(
@@ -762,7 +777,7 @@ async function _rolplayAppCesarGroup1Impl(
             COUNT(DISTINCT YEARWEEK(s.date_created)) AS weeks
        FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
       WHERE u.client_id = ${cid}${cat}${dc}`,
-  ).catch(() => [])
+  )
   const activeUsers = Number(activeRows[0]?.n ?? 0)
   const periodSessions = Number(activeRows[0]?.sessions ?? 0)
   const activeWeeks = Number(activeRows[0]?.weeks ?? 0)
@@ -776,7 +791,7 @@ async function _rolplayAppCesarGroup1Impl(
       `SELECT COUNT(DISTINCT s.user_id) AS n FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
         WHERE u.client_id = ${cid}${cat} AND s.date_created >= DATE_SUB('${toDate}', INTERVAL 30 DAY)
           AND s.date_created <= '${toDate} 23:59:59'`,
-    ).catch(() => [])
+    )
     mauUsers = Number(mauRows[0]?.n ?? 0)
   }
 
@@ -804,7 +819,7 @@ async function _rolplayAppCesarGroup1Impl(
           WHERE u.client_id = ${cid}${cat}${dc}
        ) t
       WHERE sc IS NOT NULL`,
-  ).catch(() => [])
+  )
 
   // deltaScore still needs per-user first/last ordering, which has no portable
   // aggregate form on the MySQL version behind this bridge (no window functions
@@ -817,7 +832,7 @@ async function _rolplayAppCesarGroup1Impl(
       WHERE u.client_id = ${cid}${cat}${dc} AND (${SCORE_SQL}) IS NOT NULL
       ORDER BY s.user_id, s.date_created ASC
       LIMIT ${_CLOSING_DATA_SAMPLE_LIMIT}`,
-  ).catch(() => [])
+  )
   const deltaScoreSampled = seqRows.length >= _CLOSING_DATA_SAMPLE_LIMIT
 
   const byUser = new Map<string, number[]>()
@@ -877,14 +892,14 @@ async function _rolplayAppClosingDataRowsImpl(
   range?: { fromIso: string; toIso: string },
   solution?: string | null,
 ): Promise<Record<string, unknown>[]> {
-  const cid = Math.trunc(clientId)
+  const cid = tenantId(clientId)
   const dc = dateClause(range?.fromIso, range?.toIso)
   const cat = categoryClause(solution)
   const rows = await remoteSelect<{ d: string | null }>(
     `SELECT s.raw_closing_data AS d FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
       WHERE u.client_id = ${cid}${cat}${dc} AND s.raw_closing_data IS NOT NULL
       ORDER BY s.date_created DESC LIMIT ${_CLOSING_DATA_SAMPLE_LIMIT}`,
-  ).catch(() => [])
+  )
   const out: Record<string, unknown>[] = []
   for (const r of rows) {
     if (!r.d) continue

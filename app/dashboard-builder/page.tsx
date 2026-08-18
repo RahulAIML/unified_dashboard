@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuthContext } from '@/components/AuthProvider'
 import { DashboardRenderer, humanizeConnector } from '@/components/DashboardRenderer'
-import { useT } from '@/lib/lang-store'
+import { useLangStore, useT } from '@/lib/lang-store'
 
 // ── Types mirroring the AI service JobState ─────────────────────────────────────
 type Phase =
@@ -114,6 +114,7 @@ export default function DashboardBuilderPage() {
 
 function DashboardBuilder() {
   const t = useT()
+  const { lang, toggle: toggleLang } = useLangStore()
   const [company, setCompany] = useState('')
   // Populates a <datalist> so a manager can pick an existing rolplay_app_sql
   // client instead of retyping/misspelling its name — free-text entry still
@@ -283,11 +284,26 @@ function DashboardBuilder() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
-      <header className="mb-8">
-        <h1 className="text-2xl font-bold text-foreground">{t.builderTitle}</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {t.builderSubtitlePre}<span className="font-semibold text-foreground">{t.builderGenerateWord}</span>{t.builderSubtitlePost}
-        </p>
+      <header className="mb-8 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">{t.builderTitle}</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {t.builderSubtitlePre}<span className="font-semibold text-foreground">{t.builderGenerateWord}</span>{t.builderSubtitlePost}
+          </p>
+        </div>
+        {/* This page had NO language-toggle affordance at all -- it renders its
+            own <header> instead of the shared DashboardHeader every other page
+            uses, so the store's language was correctly applied to every
+            useT()-driven string here, but a user landing directly on this page
+            had no way to switch it without navigating away first. Same button,
+            same behavior as DashboardHeader's toggle. */}
+        <button
+          onClick={toggleLang}
+          className="shrink-0 px-3 py-2 rounded-lg text-xs font-semibold border border-border bg-muted hover:bg-muted/70 transition-colors tabular-nums min-h-[36px]"
+          aria-label="Toggle language"
+        >
+          {lang === "en" ? "ES" : "EN"}
+        </button>
       </header>
 
       {/* Input card — company name is the only thing a manager needs */}

@@ -60,9 +60,9 @@ describe('rolplayAppAvailableModules', () => {
     expect(await rolplayAppAvailableModules(33)).toEqual(['coach'])
   })
 
-  it('returns [] when the query fails (caller falls back, never crashes)', async () => {
+  it('surfaces a transport failure instead of pretending the tenant has no modules', async () => {
     fetchMock.mockRejectedValue(new Error('network'))
     const { rolplayAppAvailableModules } = await import('../bridge-rolplay-app')
-    expect(await rolplayAppAvailableModules(29)).toEqual([])
+    await expect(rolplayAppAvailableModules(29)).rejects.toThrow('rolplay-app SQL is unreachable')
   })
 })

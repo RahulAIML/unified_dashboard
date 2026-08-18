@@ -88,6 +88,7 @@ export async function GET(request: NextRequest) {
     )
   } catch (err) {
     console.error('[/api/dashboard/cesar-kpis]', err)
+    if (err instanceof RangeError) return buildApiError(err.message, 422)
     return buildApiError('Failed to load KPIs')
   }
 }
