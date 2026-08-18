@@ -3,7 +3,7 @@ import { getDrilldown } from '@/lib/data-provider'
 import { buildSuccess, buildApiError } from '@/lib/api-utils'
 import { getAuthContextFromRequest } from '@/lib/server-auth'
 import { resolveOrgType } from '@/lib/org-type'
-import { resolvePharmaTenant } from '@/lib/pharma-tenant'
+import { resolvePharmaTenantAccess } from '@/lib/pharma-tenant'
 import { pharmaDashboardDrilldown } from '@/lib/bridge-pharma-analytics'
 import { isDemoDataEnabled } from '@/lib/demo'
 import { getDemoReport } from '@/lib/demo/reports'
@@ -35,7 +35,7 @@ export async function GET(
 
     const orgType = await resolveOrgType(ctx.email, ctx.customerId)
     if (orgType === 'pharma') {
-      const tenant = await resolvePharmaTenant(ctx.email)
+      const tenant = await resolvePharmaTenantAccess(ctx.email)
       if (!tenant) return buildApiError('Pharma tenant could not be resolved', 500)
 
       const data = await pharmaDashboardDrilldown(tenant, id)

@@ -246,7 +246,18 @@ export async function resolveRolplayAppAccess(email: string): Promise<number | n
 
 // ── Score extraction (SQL) ────────────────────────────────────────────────────
 
-const PASS_THRESHOLD = 70 // platform-wide pass convention (matches every tenant)
+// Pass convention for rolplay_app_sql tenants.
+//
+// The old comment here read "matches every tenant", which is no longer true:
+// migration 009 made the threshold per-tenant configurable and pharma tenants
+// can now sit at 80 or have no score-based criteria at all (see
+// kpi-builder.ts's resolvePassThreshold). It stays 70 for this connector
+// because rolplay_app_sql has NO configured-threshold storage -- 009 added
+// pass_threshold/has_no_passing_criteria to `pharma_tenants` only, and there is
+// no equivalent column for a rolplay-app client. Making this configurable needs
+// that storage first; hardcoding a different number here would just move the
+// assumption, not remove it.
+const PASS_THRESHOLD = 70
 
 /**
  * SQL expression yielding a 0-100 score per r_user_session row `s`, or NULL.

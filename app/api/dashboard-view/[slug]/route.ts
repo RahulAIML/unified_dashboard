@@ -10,7 +10,7 @@
  * user" true: any authenticated user whose resolved tenant matches the
  * dashboard's OWNING tenant may view it — not just admins, and not any other
  * signed-in user. Resolution reuses the exact same functions every other
- * route in this app already uses for tenant isolation (resolvePharmaTenant,
+ * route in this app already uses for tenant isolation (resolvePharmaTenantAccess,
  * resolveRolplayAppAccess) — never a new, parallel authorization rule.
  *
  * dashboard_metadata lives in the SAME Postgres auth DB the rest of this app
@@ -22,7 +22,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authQuery } from '@/lib/db-auth'
 import { getAuthContextFromRequest, type ApiAuthContext } from '@/lib/server-auth'
 import { findUserById } from '@/lib/db-users'
-import { resolvePharmaTenant } from '@/lib/pharma-tenant'
+import { resolvePharmaTenantAccess } from '@/lib/pharma-tenant'
 import { resolveRolplayAppAccess } from '@/lib/bridge-rolplay-app'
 import { rateLimit, rateLimitHeaders } from '@/lib/rate-limit'
 
@@ -44,7 +44,7 @@ async function checkAccess(auth: ApiAuthContext, slug: string, cfg: StoredConfig
   if (isAdmin) return { authorized: true, isAdmin: true }
 
   if (PHARMA_KINDS.has(cfg.connector)) {
-    const tenant = await resolvePharmaTenant(auth.email)
+    const tenant = await resolvePharmaTenantAccess(auth.email)
     return { authorized: tenant === slug, isAdmin: false }
   }
   if (cfg.connector === 'rolplay_app_sql') {

@@ -19,7 +19,7 @@ import { NextRequest } from 'next/server'
 import { buildSuccess, buildApiError } from '@/lib/api-utils'
 import { getAuthContextFromRequest } from '@/lib/server-auth'
 import { resolveOrgType } from '@/lib/org-type'
-import { resolvePharmaTenant, TENANT_CONFIG } from '@/lib/pharma-tenant'
+import { resolvePharmaTenantAccess, TENANT_CONFIG } from '@/lib/pharma-tenant'
 import { resolveRolplayAppAccess, rolplayAppAvailableModules } from '@/lib/bridge-rolplay-app'
 import { resolveSecondBrainProfile } from '@/lib/banco-second-brain'
 import { hasLmsCredentialsAsync } from '@/lib/lms-learnworlds'
@@ -46,8 +46,8 @@ export async function GET(request: NextRequest) {
         for (const m of await rolplayAppAvailableModules(clientId)) modules.add(m)
       }
     } else if (orgType === 'pharma') {
-      // resolvePharmaTenant() already loads dynamic tenants into TENANT_CONFIG.
-      const tenant = await resolvePharmaTenant(ctx.email)
+      // resolvePharmaTenantAccess() already loads dynamic tenants into TENANT_CONFIG.
+      const tenant = await resolvePharmaTenantAccess(ctx.email)
       const cfg = tenant ? TENANT_CONFIG[tenant] : null
       if (cfg) {
         // Simulator defaults on — every pharma bridge exposes sim data — but an
@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
     // the dependency on an env var NAME matching the DB-assigned tenant key —
     // the mismatch that kept Apotex's tab hidden. Same resolver as the data
     // path, so the tab can never appear without resolvable credentials behind it.
-    const lmsTenant = orgType === 'pharma' ? await resolvePharmaTenant(ctx.email) : null
+    const lmsTenant = orgType === 'pharma' ? await resolvePharmaTenantAccess(ctx.email) : null
     if (await hasLmsCredentialsAsync(lmsTenant)) modules.add('lms')
 
     // Second Brain is independent of the above: it resolves only if the tenant

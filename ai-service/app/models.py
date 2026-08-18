@@ -379,10 +379,17 @@ class GenerateRequest(BaseModel):
     # reps are actually on "sanfer.com.mx"), which silently breaks logins.
     domains: list[str] = Field(default_factory=list)
     # Services the client has CONTRACTED (guided config step 1): simulator,
-    # coach, certification, lms, second-brain. Empty = no restriction. Intent
-    # only — the platform still verifies which of these actually have data, so a
-    # contracted-but-empty service is hidden rather than shown as zeros
-    # (contracted ∩ has-data = rendered).
+    # coach, certification, lms, second-brain. Empty = no restriction.
+    #
+    # A contracted service is MANDATORY: it always gets a page, even with zero
+    # data, rendered as an honest empty state rather than fabricated zeros. See
+    # agents/dashboard_planning.py::mandatory_empty_page and the fallbacks in
+    # _lms_page / _module_pages / _assemble_pages.
+    #
+    # (This comment previously documented the opposite, older rule --
+    # "contracted ∩ has-data = rendered", i.e. hide a contracted-but-empty
+    # service. That rule no longer exists; silently dropping a section the
+    # client is paying for is precisely what the mandatory design prevents.)
     services: list[str] = Field(default_factory=list)
     manager_request: str = ""
     auto_publish: bool = False

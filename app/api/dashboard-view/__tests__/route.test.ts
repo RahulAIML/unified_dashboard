@@ -6,7 +6,7 @@
  * admin through the builder's own admin-gated proxy. This route lets any
  * authenticated user view it, but ONLY if their resolved tenant actually owns
  * the slug — verified via the exact same functions every other route in this
- * app already uses for isolation (resolvePharmaTenant, resolveRolplayAppAccess),
+ * app already uses for isolation (resolvePharmaTenantAccess, resolveRolplayAppAccess),
  * never a new ad hoc rule. These tests assert the GATE, mirroring
  * ai-proxy-auth.test.ts's pattern for the sibling admin-only proxy.
  */
@@ -16,7 +16,7 @@ import { NextRequest } from 'next/server'
 const getAuthContextFromRequest = vi.fn()
 const authQuery = vi.fn()
 const findUserById = vi.fn()
-const resolvePharmaTenant = vi.fn()
+const resolvePharmaTenantAccess = vi.fn()
 const resolveRolplayAppAccess = vi.fn()
 const fetchSpy = vi.fn()
 
@@ -30,7 +30,7 @@ vi.mock('@/lib/db-users', () => ({
   findUserById: (...a: unknown[]) => findUserById(...a),
 }))
 vi.mock('@/lib/pharma-tenant', () => ({
-  resolvePharmaTenant: (...a: unknown[]) => resolvePharmaTenant(...a),
+  resolvePharmaTenantAccess: (...a: unknown[]) => resolvePharmaTenantAccess(...a),
 }))
 vi.mock('@/lib/bridge-rolplay-app', () => ({
   resolveRolplayAppAccess: (...a: unknown[]) => resolveRolplayAppAccess(...a),
@@ -56,7 +56,7 @@ beforeEach(() => {
   getAuthContextFromRequest.mockReset()
   authQuery.mockReset()
   findUserById.mockReset()
-  resolvePharmaTenant.mockReset()
+  resolvePharmaTenantAccess.mockReset()
   resolveRolplayAppAccess.mockReset()
   fetchSpy.mockReset()
   findUserById.mockResolvedValue({ role: 'user' })
@@ -126,7 +126,7 @@ describe('GET /api/dashboard-view/[slug]', () => {
   it('denies a pharma viewer whose resolved tenant does not match the slug', async () => {
     getAuthContextFromRequest.mockResolvedValue({ userId: 1, email: 'a@takeda.com', customerId: 0 })
     mockPublishedConfig('pharma_kpi')
-    resolvePharmaTenant.mockResolvedValue('takeda') // resolves to a DIFFERENT tenant than the slug below
+    resolvePharmaTenantAccess.mockResolvedValue('takeda') // resolves to a DIFFERENT tenant than the slug below
     const { GET } = await loadRoute()
 
     const res = await GET(req(), ctx('apotex'))
@@ -138,7 +138,7 @@ describe('GET /api/dashboard-view/[slug]', () => {
   it('allows a pharma viewer whose resolved tenant matches the slug', async () => {
     getAuthContextFromRequest.mockResolvedValue({ userId: 1, email: 'a@apotex.com', customerId: 0 })
     mockPublishedConfig('pharma_kpi')
-    resolvePharmaTenant.mockResolvedValue('apotex')
+    resolvePharmaTenantAccess.mockResolvedValue('apotex')
     const { GET } = await loadRoute()
 
     const res = await GET(req(), ctx('apotex'))

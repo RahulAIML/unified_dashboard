@@ -373,3 +373,69 @@ export async function bancoDashboardResults(params: {
 
   return { data }
 }
+
+// ── Authorization (tenant isolation) ─────────────────────────────────────────
+//
+// Domain match is NOT authorization. Registration is open (no invite, no email
+// verification), so before this check anyone could sign up as
+// intruder@bancoppel.com and inherit Banco's entire dashboard. Mirrors
+// bridge-rolplay-app's r_user check and pharma-tenant's roster check.
+//
+// coach_users is the real roster here -- it is the same table every banco
+// adapter above already joins through (sessionSubquery's `cu`), so a user who
+// exists in it is by definition a user whose sessions this dashboard reports on.
+
+const bancoUserCache = new Map<string, { ok: boolean; at: number }>()
+const BANCO_USER_TTL_MS = 10 * 60_000
+const BANCO_MEMBER_TIMEOUT_MS = 2_000
+
+/**
+ * True when `email` is a real Banco user, not merely someone on a Banco email
+ * domain. Fails OPEN on a DB error: failing closed would take the whole Banco
+ * dashboard down on a transient outage. Failures are not cached, so it self-heals.
+ */
+export async function bancoUserExists(email: string): Promise<boolean> {
+  const clean = email.toLowerCase().trim()
+  if (!clean) return false
+
+  const cached = bancoUserCache.get(clean)
+  if (cached && Date.now() - cached.at < BANCO_USER_TTL_MS) return cached.ok
+
+  const { cond, params } = bancoDomains()
+  // No configured domains -> bancoDomains() yields 1=0, so nobody would match.
+  // isBancoOrg() would already have returned false in that case, but guard here
+  // too rather than caching a misleading "not a member" for every address.
+  if (cond === '1=0') return false
+
+  try {
+    // Hard time bound. This check now sits on the request path for every banco
+    // user (via resolveOrgType), so an unreachable/slow DB must not hold the
+    // whole dashboard open waiting for a driver-level timeout -- fail open fast
+    // instead. Found by the suite: without this, a missing-DB environment stalled
+    // ~5s per call.
+    const rows = await Promise.race([
+      query<{ n: number | string }>(
+        `SELECT COUNT(*) AS n FROM coach_users cu
+          WHERE LOWER(TRIM(cu.user_email)) = ? AND ${cond}`,
+        [clean, ...params],
+      ),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('membership check timed out')), BANCO_MEMBER_TIMEOUT_MS),
+      ),
+    ])
+    const ok = Number(rows[0]?.n ?? 0) > 0
+    bancoUserCache.set(clean, { ok, at: Date.now() })
+    return ok
+  } catch (err) {
+    console.warn(
+      '[banco] membership check unavailable; allowing this request:',
+      (err as Error).message,
+    )
+    return true
+  }
+}
+
+/** Test seam: membership results are cached for 10 minutes in-process. */
+export function invalidateBancoUserCache(): void {
+  bancoUserCache.clear()
+}

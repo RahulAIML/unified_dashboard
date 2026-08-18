@@ -15,7 +15,7 @@ import { NextRequest } from 'next/server'
 import { buildSuccess, buildApiError, parseDateRange } from '@/lib/api-utils'
 import { getAuthContextFromRequest } from '@/lib/server-auth'
 import { resolveOrgType } from '@/lib/org-type'
-import { resolvePharmaTenant } from '@/lib/pharma-tenant'
+import { resolvePharmaTenantAccess } from '@/lib/pharma-tenant'
 import { lmsDashboard, lmsEnvPrefix } from '@/lib/lms-learnworlds'
 import { diagnoseTenantCredentials } from '@/lib/tenant-credentials'
 import { isDemoDataEnabled } from '@/lib/demo'
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     // The LMS is keyed by tenant so a second client with its own LearnWorlds
     // school works via env config alone (LMS_<TENANT>_*), with no code change.
     const orgType = await resolveOrgType(ctx.email, ctx.customerId)
-    const tenantKey = orgType === 'pharma' ? await resolvePharmaTenant(ctx.email) : null
+    const tenantKey = orgType === 'pharma' ? await resolvePharmaTenantAccess(ctx.email) : null
 
     const data = await lmsDashboard(tenantKey, from, to)
 

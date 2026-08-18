@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { buildSuccess, buildApiError } from '@/lib/api-utils'
 import { getAuthContextFromRequest } from '@/lib/server-auth'
 import { resolveOrgType } from '@/lib/org-type'
-import { resolvePharmaTenant } from '@/lib/pharma-tenant'
+import { resolvePharmaTenantAccess } from '@/lib/pharma-tenant'
 import { pharmaDashboardOrganization } from '@/lib/bridge-pharma-analytics'
 import { isDemoDataEnabled } from '@/lib/demo'
 import { demoOrganization } from '@/lib/demo/engine'
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
   if (orgType !== 'pharma') return buildSuccess(EMPTY)
 
   try {
-    const tenant = await resolvePharmaTenant(ctx.email)
+    const tenant = await resolvePharmaTenantAccess(ctx.email)
     if (!tenant) return buildApiError('Pharma tenant could not be resolved', 500)
 
     const data = await pharmaDashboardOrganization(tenant)

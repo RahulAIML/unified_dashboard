@@ -6,7 +6,7 @@ import { resolveDynamicUsecaseIds } from '@/lib/dynamic-usecase-resolver'
 import { resolveOrgType } from '@/lib/org-type'
 import { bancoOverviewFromSecondBrain } from '@/lib/banco-second-brain'
 import { resolveRolplayAppAccess, rolplayAppOverview } from '@/lib/bridge-rolplay-app'
-import { resolvePharmaTenant } from '@/lib/pharma-tenant'
+import { resolvePharmaTenantAccess } from '@/lib/pharma-tenant'
 import { pharmaDashboardOverview } from '@/lib/bridge-pharma-analytics'
 import { isDemoDataEnabled } from '@/lib/demo'
 import { demoOverview } from '@/lib/demo/engine'
@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
 
     // ── Pharma-sim pipeline (Sanfer, Apotex, …) ───────────────────────────────
     if (orgType === 'pharma') {
-      const tenant = await resolvePharmaTenant(ctx.email)
+      const tenant = await resolvePharmaTenantAccess(ctx.email)
       if (!tenant) return buildApiError('Pharma tenant could not be resolved', 500)
 
       const spanMs   = Math.max(0, range.to.getTime() - range.from.getTime())
