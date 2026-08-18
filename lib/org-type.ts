@@ -14,13 +14,32 @@
  *
  * Second Brain is probed separately (API call) and does not affect org type.
  */
-import { resolvePharmaTenant } from './pharma-tenant'
+import { resolvePharmaTenantAccess } from './pharma-tenant'
 import { resolveRolplayAppClientIdAsync } from './bridge-rolplay-app'
 
 /**
  * Returns true when the given email belongs to the Banco organization.
  * Identification is domain-based because banco_users has no email column.
  * Set BANCO_EMAIL_DOMAINS=bancoppel.com,coppel.com (comma-separated) in env.
+ */
+/**
+ * Access-grant resolution for Banco: on a Banco domain AND a real coach_users
+ * row. isBancoOrg alone is only a domain match and must not be used to decide
+ * whether to serve data -- see docs/PRODUCTION_READINESS_AUDIT.md (S1).
+ *
+ * The roster query is imported lazily so this module stays importable from
+ * contexts that must not pull in the MySQL layer, matching how pharma-tenant.ts
+ * lazily imports db-tenants.
+ */
+export async function resolveBancoAccess(email: string): Promise<boolean> {
+  if (!isBancoOrg(email)) return false
+  const { bancoUserExists } = await import('./bridge-banco-analytics')
+  return bancoUserExists(email)
+}
+
+/**
+ * Domain-only check. PIPELINE SELECTION ONLY -- never authorization.
+ * Use resolveBancoAccess() anywhere Banco data is actually served.
  */
 export function isBancoOrg(email: string): boolean {
   const raw = process.env.BANCO_EMAIL_DOMAINS ?? ""
@@ -40,8 +59,12 @@ export async function resolveOrgType(
   email: string,
   customerId: number,
 ): Promise<'banco' | 'pharma' | 'rolplay-app' | 'analytics' | 'none'> {
-  if (isBancoOrg(email))                 return 'banco'
-  if (await resolvePharmaTenant(email))  return 'pharma'
+  // Both branches below are ACCESS checks, not just domain matches. A domain
+  // squatter (registration is open) falls through them and ends at 'none',
+  // which serves no tenant data anywhere -- the correct outcome. See
+  // docs/PRODUCTION_READINESS_AUDIT.md (S1).
+  if (await resolveBancoAccess(email))          return 'banco'
+  if (await resolvePharmaTenantAccess(email))   return 'pharma'
   // Before analytics: rolplay-app clients can share a domain with a coach_app
   // analytics customer (audioweb.com.mx), so the explicit login map wins.
   if (await resolveRolplayAppClientIdAsync(email)) return 'rolplay-app'

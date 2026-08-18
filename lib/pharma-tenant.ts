@@ -384,6 +384,13 @@ async function ensureDynamicTenantsLoaded(): Promise<void> {
   await dynamicTenantsPromise
 }
 
+/**
+ * Domain -> tenant key. This is PIPELINE SELECTION ONLY, never authorization.
+ *
+ * Mirrors bridge-rolplay-app.ts's split between resolveRolplayAppClientId
+ * (pipeline) and resolveRolplayAppAccess (authorization). Use
+ * resolvePharmaTenantAccess() anywhere tenant data is actually served.
+ */
 export async function resolvePharmaTenant(email: string): Promise<PharmaTenant | null> {
   await ensureDynamicTenantsLoaded()
   const userDomain = email.toLowerCase().split('@')[1] ?? ''
@@ -396,4 +403,83 @@ export async function resolvePharmaTenant(email: string): Promise<PharmaTenant |
   // dashboard) rather than returning a key with no config (which would crash
   // downstream on cfg.url).
   return TENANT_CONFIG[key] ? key : null
+}
+
+// ── Authorization (tenant isolation) ─────────────────────────────────────────
+//
+// Domain match is NOT authorization. Registration is open (no invite, no email
+// verification), so before this check anyone could sign up as
+// intruder@sanfer.com.mx and inherit Sanfer's entire dashboard. bridge-rolplay-app
+// has always guarded against this by verifying the address exists in r_user;
+// pharma had no equivalent.
+//
+// COVERAGE IS PARTIAL, BY DATA AVAILABILITY -- not by choice. Membership can only
+// be verified for a tenant that actually exposes a roster, i.e. one with
+// hasOrganization (the org.members / list.members bridge actions): today Sanfer
+// and Apotex. Weser, Adium, Heineken, M8, Lacoste, Lacoste Asistentes, Chiesi and
+// Labomed expose no roster endpoint at all, so there is nothing to check an email
+// against. For those, this returns the tenant unverified rather than denying --
+// denying would lock out 100% of their real users to close a hole for zero of
+// them. Closing open registration is the only mitigation that reaches those
+// tenants; see docs/PRODUCTION_READINESS_AUDIT.md (S1).
+const pharmaMemberCache = new Map<string, { ok: boolean; at: number }>()
+const PHARMA_MEMBER_TTL_MS = 10 * 60_000
+
+/** True when this tenant can be membership-checked at all (has a roster endpoint). */
+export function pharmaMembershipVerifiable(tenant: PharmaTenant): boolean {
+  return TENANT_CONFIG[tenant]?.hasOrganization === true
+}
+
+async function pharmaMemberExists(email: string, tenant: PharmaTenant): Promise<boolean> {
+  const clean = email.toLowerCase().trim()
+  const key = `${tenant}:${clean}`
+  const cached = pharmaMemberCache.get(key)
+  if (cached && Date.now() - cached.at < PHARMA_MEMBER_TTL_MS) return cached.ok
+
+  // Lazy import breaks the cycle: bridge-pharma-analytics imports TENANT_CONFIG
+  // from this module. Same pattern ensureDynamicTenantsLoaded uses for db-tenants.
+  let ok = false
+  try {
+    const { pharmaDashboardOrganization } = await import('./bridge-pharma-analytics')
+    const org = await pharmaDashboardOrganization(tenant)
+    const roster = [
+      ...org.members.map(m => m.email),
+      ...org.admins.map(a => a.email),
+    ]
+    // A tenant whose roster comes back empty is treated as UNVERIFIABLE for this
+    // call rather than "nobody is a member" -- an upstream hiccup must not lock
+    // out every real user. It is not cached, so the next request retries.
+    if (roster.length === 0) return true
+    ok = roster.some(e => (e ?? '').toLowerCase().trim() === clean)
+  } catch (err) {
+    // Bridge unreachable: fail OPEN for availability, and say so loudly. Failing
+    // closed here would take a whole tenant's dashboard down on a transient
+    // upstream error. Not cached, so it self-heals.
+    console.warn(
+      `[pharma-tenant] membership check unavailable for tenant=${tenant}; allowing this request:`,
+      (err as Error).message,
+    )
+    return true
+  }
+
+  pharmaMemberCache.set(key, { ok, at: Date.now() })
+  return ok
+}
+
+/**
+ * Access-grant resolution. Returns the tenant key ONLY for a user actually
+ * authorized on it, else null -- so a domain squatter is denied even though the
+ * domain resolves a tenant. Use this anywhere pharma data is served; use
+ * resolvePharmaTenant only to pick the pipeline.
+ */
+export async function resolvePharmaTenantAccess(email: string): Promise<PharmaTenant | null> {
+  const tenant = await resolvePharmaTenant(email)
+  if (!tenant) return null
+  if (!pharmaMembershipVerifiable(tenant)) return tenant
+  return (await pharmaMemberExists(email, tenant)) ? tenant : null
+}
+
+/** Test seam: membership results are cached for 10 minutes in-process. */
+export function invalidatePharmaMemberCache(): void {
+  pharmaMemberCache.clear()
 }

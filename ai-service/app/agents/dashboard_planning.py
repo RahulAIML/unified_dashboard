@@ -44,12 +44,20 @@ _LMS_METRIC_KEYS = {
 
 # GenerateRequest.services ids that map 1:1 onto a page id this planner can
 # build (either a real one, or -- via mandatory_empty_page -- a stand-in
-# empty one). "second-brain" is deliberately excluded: it's a secondary
-# connector's own page (_secondary_page), not a page keyed by service id, so
-# there's no single page id to mark mandatory for it.
+# empty one).
+#
+# "second-brain" IS included. When its data is discovered it renders as a
+# secondary connector's own page (_secondary_page, id "secondary_second_brain")
+# rather than under this service id -- but it previously had no entry here at
+# all, so mandatory_empty_page() returned None for it and a manager who marked
+# Second Brain as contracted saw the selection silently do nothing. A contracted
+# service must stay visible even with no data, so it needs a stand-in page id
+# like every other service. _assemble_pages only falls back to it when no real
+# Second Brain page was produced.
 _SERVICE_PAGE_LABEL = {
     "lms": "LMS", "simulator": "Practice Simulator",
     "coach": "Master Coach", "certification": "Certification",
+    "second-brain": "Second Brain",
 }
 
 
@@ -57,10 +65,10 @@ def mandatory_empty_page(service: str) -> DashboardPage | None:
     """A page for a contracted-but-undiscovered service: renders with an
     honest empty state (no widgets) rather than the section disappearing
     from `pages` entirely. Shared by the build-time planner (_lms_page,
-    _module_pages) and the post-publish `required_sections` edit endpoint
-    (dashboard_versions.set_required_sections), so both produce identically
-    shaped stand-in pages. Returns None for a service id with no known page
-    (e.g. "second-brain") rather than guessing one.
+    _module_pages, _assemble_pages) and the post-publish `required_sections`
+    edit endpoint (dashboard_versions.set_required_sections), so all of them
+    produce identically shaped stand-in pages. Returns None for a service id
+    with no known page rather than guessing one.
     """
     label = _SERVICE_PAGE_LABEL.get(service)
     if not label:
@@ -142,6 +150,17 @@ def _assemble_pages(
     secondary_page = _secondary_page(secondary_schema)
     if secondary_page:
         pages.append(secondary_page)
+    # Second Brain renders as a secondary connector page when discovered. If it
+    # was contracted but no such page was produced (no secondary source, or the
+    # secondary is a different connector), fall back to the honest empty
+    # stand-in -- otherwise ticking "Second Brain" in the builder has no visible
+    # effect whatsoever, which is what used to happen.
+    if "second-brain" in required_services:
+        sb_page_id = f"secondary_{ServiceKind.second_brain.value}"
+        if not any(p.id == sb_page_id for p in pages):
+            sb_stand_in = mandatory_empty_page("second-brain")
+            if sb_stand_in:
+                pages.append(sb_stand_in)
     ranking_page = _ranking_page(schema)
     if ranking_page:
         pages.append(ranking_page)
@@ -440,13 +459,24 @@ def _module_pages(
     only until that classification work exists, not a wrong per-module split.
     """
     dim = next((m for m in schema.metrics if m.type == MetricType.dimension), None)
-    if not dim or dim.source_kind != ServiceKind.rolplay_app_sql:
-        return []
-    canonical = [m for m in schema.modules if m in journey_lib.CANONICAL_ORDER]
+    # Real per-module pages need exact module->query scoping, which today only
+    # rolplay_app_sql has. This used to `return []` right here -- which also
+    # skipped the contracted-but-missing loop at the bottom, so a pharma_kpi /
+    # exceltis_rest / sale_exercises tenant that contracted Simulator, Coach or
+    # Certification got NO page for it at all, not even the honest empty stand-in
+    # the mandatory-section design promises. Silently dropping a contracted
+    # section is the exact failure that design exists to prevent, so the flag
+    # below now gates only the REAL page construction; the mandatory fallback
+    # runs for every connector.
+    supports_module_scoping = dim is not None and dim.source_kind == ServiceKind.rolplay_app_sql
+    canonical = (
+        [m for m in schema.modules if m in journey_lib.CANONICAL_ORDER]
+        if supports_module_scoping else []
+    )
     ts = next((m for m in schema.metrics if m.type == MetricType.timeseries), None)
 
     pages: list[DashboardPage] = []
-    for module in journey_lib.ordered_stages(canonical):
+    for module in journey_lib.ordered_stages(canonical) if supports_module_scoping else []:
         label = journey_lib.LABEL[module]
         tiles = [
             WidgetConfig(id=f"{module}_tile_total_sessions", type=WidgetType.kpi_tile, title="Total Sessions",
@@ -477,6 +507,12 @@ def _module_pages(
     # Contracted-but-not-discovered modules (e.g. the manager marked
     # "Simulator" as in-scope, but this tenant has zero sessions in that
     # category): render an honest empty page instead of it never appearing.
+    #
+    # Runs for EVERY connector, not just rolplay_app_sql. For a connector with
+    # no module scoping, `canonical` is empty by construction above, so every
+    # contracted module lands here and gets a stand-in page. That is deliberate:
+    # the section staying visible with an honest empty state is the contract,
+    # and it is strictly better than the section vanishing with no trace.
     missing = sorted((required_services & _SERVICE_TO_MODULE) - set(canonical))
     for module in missing:
         page = mandatory_empty_page(module)

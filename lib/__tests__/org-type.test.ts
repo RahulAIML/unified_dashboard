@@ -1,6 +1,17 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { isBancoOrg, resolveOrgType } from '../org-type'
 
+// resolveOrgType now performs a real ACCESS check for banco (a coach_users
+// roster lookup), not just a domain match -- see org-type.ts's resolveBancoAccess
+// and docs/PRODUCTION_READINESS_AUDIT.md (S1). These tests are about ROUTING, so
+// the roster is stubbed to "is a member"; without this they would exercise DB
+// reachability instead and fail open after a multi-second driver timeout.
+// Denial behaviour is covered separately in bridge-banco-access.test.ts.
+vi.mock('../bridge-banco-analytics', () => ({
+  bancoUserExists: vi.fn(async () => true),
+  invalidateBancoUserCache: vi.fn(),
+}))
+
 // ── isBancoOrg ────────────────────────────────────────────────────────────────
 
 describe('isBancoOrg', () => {

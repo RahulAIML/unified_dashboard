@@ -36,6 +36,48 @@ not by test failures — 20/20 files that *did* start passed).
 
 ---
 
+## Status log
+
+| Item | State |
+|---|---|
+| S2 `/api/banco` cross-tenant leak | **FIXED** — `resolveBancoAccess` gate |
+| S3 `/api/debug/banco-test` | **FIXED** — admin-gated |
+| S4 `/api/health` disclosure | **FIXED** — liveness public, diagnostics admin-only |
+| S1 pharma membership check | **FIXED where verifiable** — Sanfer + Apotex; 8 tenants have no roster (see below) |
+| S1 banco membership check | **FIXED** — `coach_users` roster via `bancoUserExists` |
+| S1 open registration | **OPEN** — the only mitigation for the 8 roster-less tenants |
+| C1 Cesar KPI sampling bias | **FIXED** — DB-side aggregate + `deltaScoreSampled` flag |
+| C3 pass threshold inconsistency | **FIXED** — one `isPassForTenant` predicate across `bridge-pharma-analytics.ts` |
+| Phase 2 `second-brain` maps to no page | **FIXED** — stand-in page via `_assemble_pages` |
+| Phase 2 mandatory sections dropped on non-rolplay connectors | **FIXED** — mandatory loop no longer skipped |
+| C2 static ratio shown as a trend | OPEN |
+| C4 no-criteria tenants still see pass-rate UI | OPEN (partially mitigated: `isPassForTenant` no longer invents 70) |
+| C5 frozen-layout reason swallowed by builder UI | OPEN |
+| C6 unbounded queries | OPEN |
+| S5 banco domains merged | OPEN |
+| S6 shared LMS credential fallback | OPEN |
+| Phase 6 / 7 / 8 / 10 / 12 | OPEN |
+
+### Note: membership checks sit on the request path
+
+Both new checks (`bancoUserExists`, `pharmaMemberExists`) run inside
+`resolveOrgType`, which nearly every API request calls. Three properties keep that
+safe, and all three are covered by tests:
+
+1. **Fast path preserved** — the cheap domain check runs first, so a non-banco /
+   non-pharma user triggers no roster lookup at all.
+2. **Bounded** — the banco roster query races a 2 s timeout
+   (`BANCO_MEMBER_TIMEOUT_MS`). Found during this work: without it, a missing-DB
+   environment stalled ~5 s per call and blew the suite's default test timeout.
+   In production that would have been a 5 s stall on every banco request.
+3. **Fails open, never cached on failure** — a roster outage must not take a
+   whole tenant's dashboard down, and the next request retries.
+
+Only Sanfer/Apotex (roster endpoint) and banco (`coach_users`) are actually
+verified; every other pharma tenant passes through unverified by necessity.
+
+---
+
 ## SECURITY — fix before anything else
 
 These outrank every cosmetic phase in this document. Four of them leak data across

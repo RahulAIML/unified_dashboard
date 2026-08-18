@@ -19,7 +19,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContextFromRequest } from '@/lib/server-auth'
-import { isBancoOrg } from '@/lib/org-type'
+import { resolveBancoAccess } from '@/lib/org-type'
 import { bridgeBancoKpis, bridgeBancoSessions } from '@/lib/bridge-banco'
 
 export const dynamic = 'force-dynamic'
@@ -49,7 +49,9 @@ export async function GET(request: NextRequest) {
   // 403 (not 404) because the caller IS authenticated -- they simply are not a
   // banco user. Mirrors how every other org-scoped dashboard route early-returns
   // on the wrong org type.
-  if (!isBancoOrg(auth.email)) {
+  // Access check, not just a domain match: a squatter on a Banco domain is
+  // denied because they have no coach_users row.
+  if (!(await resolveBancoAccess(auth.email))) {
     return NextResponse.json(
       { success: false, data: null, meta: { message: 'Forbidden' } },
       { status: 403 }

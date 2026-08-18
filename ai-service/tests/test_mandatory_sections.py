@@ -12,6 +12,7 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 from app.agents.dashboard_planning import (
+    _assemble_pages,
     _lms_page,
     _module_pages,
     mandatory_empty_page,
@@ -44,6 +45,90 @@ def _rolplay_app_schema(modules: list[str]) -> NormalizedSchema:
                              source_kind=ServiceKind.rolplay_app_sql, source_action="r_user_session"),
         ],
     )
+
+
+def _pharma_schema(kind: ServiceKind = ServiceKind.pharma_kpi) -> NormalizedSchema:
+    """A non-rolplay_app_sql primary. Its dimension metric's source_kind is what
+    gates real per-module page construction in _module_pages."""
+    return NormalizedSchema(
+        company="Apotex", slug="apotex", modules=[],
+        dimensions=["activity"],
+        metrics=[
+            DiscoveredMetric(key="total_sessions", label="Total Sessions", type=MetricType.count,
+                             source_kind=kind, source_action="kpi.activity_summary"),
+            DiscoveredMetric(key="sessions_by_activity", label="Sessions by Activity", type=MetricType.dimension,
+                             source_kind=kind, source_action="kpi.activity_summary"),
+        ],
+    )
+
+
+class NonRolplayConnectorMandatoryTests(unittest.TestCase):
+    """Regression: _module_pages used to `return []` for any non-rolplay_app_sql
+    primary BEFORE reaching the contracted-but-missing loop, so a pharma /
+    exceltis / coach_app tenant that contracted Simulator, Coach or Certification
+    got no page at all -- not even the honest empty stand-in. Real per-module
+    pages still require exact module scoping; only the fallback is universal."""
+
+    def test_contracted_modules_get_stand_ins_on_a_pharma_primary(self):
+        pages = _module_pages(
+            _pharma_schema(), {}, required_services=frozenset({"simulator", "coach"}),
+        )
+        self.assertEqual({p.id for p in pages}, {"simulator", "coach"})
+        self.assertTrue(all(p.mandatory for p in pages))
+        self.assertTrue(all(p.rows[0].widgets == [] for p in pages))
+
+    def test_pharma_primary_still_builds_no_real_per_module_pages(self):
+        # Nothing contracted -> nothing invented. The scoping restriction that
+        # the original early-return enforced must survive this change.
+        pages = _module_pages(_pharma_schema(), {}, required_services=frozenset())
+        self.assertEqual(pages, [])
+
+    def test_exceltis_primary_behaves_the_same(self):
+        pages = _module_pages(
+            _pharma_schema(ServiceKind.pharma_exceltis_rest), {},
+            required_services=frozenset({"certification"}),
+        )
+        self.assertEqual({p.id for p in pages}, {"certification"})
+
+
+class SecondBrainMandatoryTests(unittest.TestCase):
+    """Regression: "second-brain" was selectable in the builder but mapped to no
+    page id, so mandatory_empty_page returned None and the selection silently did
+    nothing at all."""
+
+    def test_contracted_second_brain_gets_a_page_when_no_secondary_exists(self):
+        pages = _assemble_pages(
+            _rolplay_app_schema(modules=[]), {}, overview_rows=[],
+            secondary_schema=None, required_services=frozenset({"second-brain"}),
+        )
+        sb = [p for p in pages if p.id == "second-brain"]
+        self.assertEqual(len(sb), 1, f"expected a Second Brain stand-in, got {[p.id for p in pages]}")
+        self.assertTrue(sb[0].mandatory)
+
+    def test_not_contracted_second_brain_stays_absent(self):
+        pages = _assemble_pages(
+            _rolplay_app_schema(modules=[]), {}, overview_rows=[],
+            secondary_schema=None, required_services=frozenset(),
+        )
+        self.assertNotIn("second-brain", {p.id for p in pages})
+
+    def test_real_secondary_second_brain_page_suppresses_the_stand_in(self):
+        # A discovered Second Brain renders as secondary_second_brain; adding the
+        # empty stand-in alongside it would duplicate the section.
+        secondary = NormalizedSchema(
+            company="Salinas", slug="salinas", modules=[], dimensions=[],
+            metrics=[
+                DiscoveredMetric(key="total_sessions", label="Total Sessions", type=MetricType.count,
+                                 source_kind=ServiceKind.second_brain, source_action="profile"),
+            ],
+        )
+        pages = _assemble_pages(
+            _rolplay_app_schema(modules=[]), {}, overview_rows=[],
+            secondary_schema=secondary, required_services=frozenset({"second-brain"}),
+        )
+        ids = {p.id for p in pages}
+        self.assertIn(f"secondary_{ServiceKind.second_brain.value}", ids)
+        self.assertNotIn("second-brain", ids)
 
 
 class LmsPageMandatoryTests(unittest.TestCase):
@@ -102,8 +187,21 @@ class MandatoryEmptyPageHelperTests(unittest.TestCase):
         self.assertEqual(page.rows[0].widgets, [])
 
     def test_unknown_service_returns_none(self):
-        self.assertIsNone(mandatory_empty_page("second-brain"))
         self.assertIsNone(mandatory_empty_page("not-a-real-service"))
+
+    def test_second_brain_now_has_a_stand_in_page(self):
+        # Regression: this used to return None, so ticking "Second Brain" in the
+        # builder silently did nothing -- no page, no empty state, no trace. A
+        # contracted service must stay visible even with no data. It is still
+        # never synthesized as a per-MODULE page (see the _module_pages test
+        # above); the fallback lives in _assemble_pages and only fires when no
+        # real secondary Second Brain page was produced.
+        page = mandatory_empty_page("second-brain")
+        self.assertIsNotNone(page)
+        self.assertEqual(page.id, "second-brain")
+        self.assertEqual(page.title, "Second Brain")
+        self.assertTrue(page.mandatory)
+        self.assertEqual(page.rows[0].widgets, [])
 
 
 class _FakePool:

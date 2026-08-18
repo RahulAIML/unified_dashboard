@@ -5,7 +5,7 @@ import { getAuthContextFromRequest } from '@/lib/server-auth'
 import { resolveDynamicUsecaseIds } from '@/lib/dynamic-usecase-resolver'
 import { resolveOrgType } from '@/lib/org-type'
 import { bancoDashboardTrends } from '@/lib/bridge-banco-analytics'
-import { resolvePharmaTenant } from '@/lib/pharma-tenant'
+import { resolvePharmaTenantAccess } from '@/lib/pharma-tenant'
 import { pharmaDashboardTrends } from '@/lib/bridge-pharma-analytics'
 import { resolveRolplayAppAccess, rolplayAppTrends } from '@/lib/bridge-rolplay-app'
 import { isDemoDataEnabled } from '@/lib/demo'
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
       source = 'banco'
       fetchTrends = (from, to) => bancoDashboardTrends({ fromIso: from.toISOString(), toIso: to.toISOString() })
     } else if (orgType === 'pharma') {
-      const tenant = await resolvePharmaTenant(ctx.email)
+      const tenant = await resolvePharmaTenantAccess(ctx.email)
       if (!tenant) return buildApiError('Pharma tenant could not be resolved', 500)
       source = `pharma-${tenant}`
       fetchTrends = (from, to) => pharmaDashboardTrends(tenant, { fromIso: from.toISOString(), toIso: to.toISOString(), solution })
