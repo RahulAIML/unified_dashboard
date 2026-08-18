@@ -7,6 +7,7 @@ Mirrors how the Next.js dashboard queries each pipeline.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from datetime import date, datetime
 from typing import Any
@@ -448,8 +449,23 @@ async def _sale_exercises(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPrevie
 
 
 # ── rolplay-app (query endpoint; scores from raw_closing_data/closing_analysis) ──────
+_logger = logging.getLogger(__name__)
+
+
 async def _rolplay_app_sql(sql: str) -> list[dict]:
+    """Every caller treats a failed query as an empty result -- see
+    lib/bridge-rolplay-app.ts's remoteSelect for the TS mirror of this same
+    silent-degradation contract and why it stays unchanged (one bad widget
+    must not 500 the whole dashboard). But an httpx/network failure or a
+    non-2xx status previously vanished into (body or {}).get("data", [])
+    with zero trace anywhere -- post_json swallows the exception into an
+    "__error" key (app/http.py) that nothing ever read or logged. Log it here
+    so an outage is visible in ai-service logs instead of only as
+    suspiciously-flat KPI numbers.
+    """
     _, body = await post_json(get_settings().rolplay_app_sql_url, {"sql": sql})
+    if isinstance(body, dict) and "__error" in body:
+        _logger.error("rolplay-app SQL query failed (treated as empty data): %s", body["__error"])
     return (body or {}).get("data", []) if isinstance(body, dict) else []
 
 
@@ -536,9 +552,31 @@ async def _rolplay_app_cesar_metrics(cid: int, module: str | None, frm: str, to:
     )
     mau_users = int((mau_rows[0] if mau_rows else {}).get("n") or 0)
 
-    # Per-user chronological score sequence, for delta_score/readiness_index
-    # -- bounded to a real bar (matches Reports' own cap) so a very large
-    # tenant doesn't pull its entire history into memory every render.
+    # mastered_users comes from a DEDICATED, UNBOUNDED DB-side aggregate over
+    # every scored session in range -- NOT from the bounded seq_rows scan
+    # below. This mirrors a fix already shipped on the TS side
+    # (lib/bridge-rolplay-app.ts's rolplayAppCesarGroup1): mastered_users used
+    # to be derived from the same LIMIT-500 scan as delta_score, so
+    # readiness_index (= mastered_users / enrolled) divided a capped
+    # numerator by an uncapped denominator and silently trended toward 0% as
+    # a tenant grew. Worse, the scan is ORDER BY user_id, so the 500 rows are
+    # always the same lowest-numbered users -- a systematic bias, not a
+    # sample. This query has no LIMIT, so it cannot exhibit that bias.
+    mastery_rows = await _rolplay_app_sql(
+        f"SELECT COUNT(DISTINCT CASE WHEN sc>={MASTERY_THRESHOLD} THEN user_id END) mastered_users "
+        f"FROM (SELECT s.user_id user_id, ({SCORE_SQL}) sc "
+        f"FROM r_user_session s JOIN r_user u ON u.ID=s.user_id "
+        f"WHERE u.client_id={cid}{cat}{dc}) t WHERE sc IS NOT NULL"
+    )
+    mastered_users = int((mastery_rows[0] if mastery_rows else {}).get("mastered_users") or 0)
+
+    # delta_score genuinely needs per-user chronological ordering, which has
+    # no portable single-aggregate form here (no window functions are used
+    # anywhere in this connector) -- it keeps the bounded scan, matching
+    # Reports' own cap so a very large tenant doesn't pull its entire history
+    # into memory every render. Unlike mastered_users, it is honestly flagged
+    # as sampled when the cap is actually hit, rather than silently passing a
+    # truncated average off as complete.
     seq_rows = await _rolplay_app_sql(
         f"SELECT s.user_id, s.date_created, ({SCORE_SQL}) sc "
         f"FROM r_user_session s JOIN r_user u ON u.ID=s.user_id "
@@ -551,14 +589,16 @@ async def _rolplay_app_cesar_metrics(cid: int, module: str | None, frm: str, to:
 
     deltas = [scores[-1] - scores[0] for scores in by_user.values() if len(scores) >= 2]
     delta_score = round(sum(deltas) / len(deltas), 1) if deltas else None
-
-    mastered_users = sum(1 for scores in by_user.values() if any(sc >= MASTERY_THRESHOLD for sc in scores))
+    delta_score_sampled = len(seq_rows) >= _CLOSING_DATA_SAMPLE_LIMIT
 
     return {
         "activation_rate": round(100 * active_users / enrolled, 1) if enrolled else None,
         "weekly_practice_frequency": round(period_sessions / active_weeks, 1) if active_weeks else None,
         "mau_rate": round(100 * mau_users / enrolled, 1) if enrolled else None,
         "delta_score": delta_score,
+        "delta_score_sampled": delta_score_sampled,
+        # Both operands now count every scored session/user in range -- no
+        # capped-numerator-over-uncapped-denominator mismatch.
         "readiness_index": round(100 * mastered_users / enrolled, 1) if enrolled else None,
     }
 

@@ -17,7 +17,7 @@
 
 import { useMemo } from "react"
 import {
-  UserCheck, Repeat, CalendarClock, TrendingUp as TrendUpIcon,
+  AlertTriangle, UserCheck, Repeat, CalendarClock, TrendingUp as TrendUpIcon,
   ShieldCheck, PieChart as MasteryIcon, Compass, Briefcase, ThumbsUp, ThumbsDown,
 } from "lucide-react"
 import { DashboardHeader } from "@/components/DashboardHeader"
@@ -40,6 +40,14 @@ interface CesarKpisResponse {
   prevMauRate: number | null
   deltaScore: number | null
   prevDeltaScore: number | null
+  // True when deltaScore was computed from a truncated per-user scan (the
+  // bridge's own sampling cap was actually hit) rather than from every scored
+  // session in range -- see lib/bridge-rolplay-app.ts's CesarGroup1Kpis. This
+  // used to be dropped silently right here: the bridge computed and returned
+  // it, the API route forwarded it, but this interface never declared or read
+  // it, so a truncated (sampled) average was shown identically to a complete
+  // one with no indication to the viewer.
+  deltaScoreSampled?: boolean
   readinessIndex: number | null
   prevReadinessIndex: number | null
   masteryDistribution: { label: string; value: number; pct: number }[]
@@ -54,6 +62,15 @@ interface CesarKpisResponse {
 // falta de comunicación o baja prioridad gerencial" -- the one KPI in this
 // set with a real, spec-sourced numeric target.
 const ACTIVATION_RATE_GOAL = 80
+
+function ErrorBanner({ message }: { message: string }) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive mb-4">
+      <AlertTriangle className="w-4 h-4 shrink-0" />
+      <span>{message}</span>
+    </div>
+  )
+}
 
 function PerspectiveSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -75,7 +92,7 @@ export default function KpisPage() {
   const url = ready
     ? buildApiUrl("/api/dashboard/cesar-kpis", dateRange.from, dateRange.to, { solution: selectedSolution, rk: refreshKey })
     : null
-  const { data, loading } = useApi<CesarKpisResponse>(url)
+  const { data, loading, error } = useApi<CesarKpisResponse>(url)
 
   const hasMasteryData = (data?.masteryDistribution?.length ?? 0) > 0
   const hasCommercialDomainData = (data?.commercialDomain?.length ?? 0) > 0
@@ -101,6 +118,10 @@ export default function KpisPage() {
       <DashboardHeader title={t.navKpis} subtitle={t.kpisSubtitle} showModuleFilter />
 
       <div className="w-full px-4 sm:px-6 lg:px-8 py-5 sm:py-8 max-w-[1400px] mx-auto space-y-8">
+        {/* Was silently dropped: a backend/tenant-resolution failure rendered
+            identically to a real "no KPI data" tenant. Surfacing it
+            distinguishes "something broke" from "genuinely empty". */}
+        {error && <ErrorBanner message={`${t.errorLoading}: ${error}`} />}
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {Array.from({ length: 9 }).map((_, i) => <div key={i} className="h-64 rounded-[16px] bg-muted/50 animate-pulse" />)}
@@ -161,7 +182,7 @@ export default function KpisPage() {
                 title={t.kpiDeltaScore}
                 description={t.kpiDeltaScoreDesc}
                 formula={t.kpiDeltaScoreFormula}
-                footer={t.kpiDeltaScoreFooter}
+                footer={data?.deltaScoreSampled ? `${t.kpiDeltaScoreFooter} ${t.kpiDeltaScoreSampledNote}` : t.kpiDeltaScoreFooter}
                 icon={<TrendUpIcon className="w-4 h-4" />}
               >
                 <CesarKpiValue

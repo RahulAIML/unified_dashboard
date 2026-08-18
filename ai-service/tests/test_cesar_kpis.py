@@ -243,5 +243,72 @@ class FetchWidgetIntegrationTests(unittest.TestCase):
         self.assertEqual(pv.value, 50.0)  # 10 active / 20 enrolled * 100
 
 
+
+class ReadinessIndexSamplingBiasTests(unittest.TestCase):
+    """Regression: mastered_users used to come from the SAME LIMIT-500,
+    ORDER BY user_id scan as delta_score, so readiness_index (mastered_users /
+    enrolled) divided a capped, systematically-biased numerator (always the
+    lowest-numbered user_ids) by an UNCAPPED enrolled denominator -- silently
+    trending toward 0% as a tenant grew past 500 scored sessions. This mirrors
+    a fix already shipped on the TS side (lib/bridge-rolplay-app.ts's
+    rolplayAppCesarGroup1) that this test file had no equivalent coverage for.
+    """
+
+    def test_mastered_users_counted_over_the_whole_range_not_just_the_delta_scan(self):
+        # A large tenant: 1000 enrolled, but only the mastery AGGREGATE query
+        # (no ORDER BY, no LIMIT) reports the true count of 250 mastered users.
+        # The bounded delta-score scan (ORDER BY s.user_id ... LIMIT 500) would
+        # only ever see a handful of them if it were (wrongly) used for this.
+        async def fake_sql(_url, payload):
+            sql = payload["sql"]
+            if "YEARWEEK" in sql:
+                return 200, {"data": [{"n": 800, "sessions": 4000, "weeks": 4}]}
+            if "DATE_SUB" in sql:
+                return 200, {"data": [{"n": 600}]}
+            if "mastered_users" in sql:
+                # The DEDICATED unbounded aggregate -- must be trusted.
+                return 200, {"data": [{"mastered_users": 250}]}
+            if "ORDER BY s.user_id" in sql:
+                # The bounded delta-score scan -- sees only 2 rows, 1 user.
+                return 200, {"data": [
+                    {"user_id": 1, "date_created": "2026-06-24", "sc": 40},
+                    {"user_id": 1, "date_created": "2026-06-25", "sc": 96},
+                ]}
+            return 200, {"data": [{"n": 1000}]}  # enrolled count
+
+        widget = _widget("tile_cesar_readiness_index", WidgetType.kpi_tile, "readiness_index")
+        with patch("app.preview_fetch.post_json", new=AsyncMock(side_effect=fake_sql)):
+            pv = _run(fetch_widget(_cfg(), widget))
+
+        self.assertTrue(pv.ok)
+        # 250/1000, from the aggregate -- NOT 1/1000 from the truncated scan.
+        self.assertEqual(pv.value, 25.0)
+
+    def test_delta_score_still_computed_from_the_bounded_scan(self):
+        async def fake_sql(_url, payload):
+            sql = payload["sql"]
+            if "YEARWEEK" in sql:
+                return 200, {"data": [{"n": 5, "sessions": 20, "weeks": 2}]}
+            if "DATE_SUB" in sql:
+                return 200, {"data": [{"n": 2}]}
+            if "mastered_users" in sql:
+                return 200, {"data": [{"mastered_users": 1}]}
+            if "ORDER BY s.user_id" in sql:
+                return 200, {"data": [
+                    {"user_id": 1, "date_created": "2026-06-24", "sc": 40},
+                    {"user_id": 1, "date_created": "2026-06-25", "sc": 60},
+                    {"user_id": 1, "date_created": "2026-06-26", "sc": 96},
+                    {"user_id": 2, "date_created": "2026-06-24", "sc": 80},
+                ]}
+            return 200, {"data": [{"n": 10}]}
+
+        widget = _widget("tile_cesar_delta_score", WidgetType.kpi_tile, "delta_score")
+        with patch("app.preview_fetch.post_json", new=AsyncMock(side_effect=fake_sql)):
+            pv = _run(fetch_widget(_cfg(), widget))
+
+        self.assertTrue(pv.ok)
+        self.assertEqual(pv.value, 56)  # only user 1 has >=2 sessions: 96-40
+
+
 if __name__ == "__main__":
     unittest.main()

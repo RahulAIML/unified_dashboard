@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
-import { Activity, CheckCircle2, XCircle } from "lucide-react"
+import { Activity, AlertTriangle, CheckCircle2, XCircle } from "lucide-react"
 import { DashboardHeader } from "@/components/DashboardHeader"
 import { useApi, buildApiUrl } from "@/lib/hooks/useApi"
 import { useDashboardStore } from "@/lib/store"
@@ -11,6 +11,15 @@ import { cn } from "@/lib/utils"
 import type { UsecaseBreakdownApiResponse } from "@/lib/types"
 
 interface AccessCaps { hasCoachData?: boolean; hasPharmaAccess?: boolean; hasBancoAccess?: boolean; hasRolplayAppAccess?: boolean }
+
+function ErrorBanner({ message }: { message: string }) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive mb-4">
+      <AlertTriangle className="w-4 h-4 shrink-0" />
+      <span>{message}</span>
+    </div>
+  )
+}
 
 function scoreColor(pct: number): string {
   if (pct >= 70) return "text-emerald-600 dark:text-emerald-400"
@@ -29,7 +38,7 @@ export default function ActivitiesPage() {
   const url = ready
     ? buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to, { solution: selectedSolution, rk: refreshKey })
     : null
-  const { data, loading } = useApi<UsecaseBreakdownApiResponse>(url)
+  const { data, loading, error } = useApi<UsecaseBreakdownApiResponse>(url)
 
   const rows = useMemo(
     () => [...(data?.data ?? [])].sort((a, b) => b.totalEvaluations - a.totalEvaluations),
@@ -41,6 +50,10 @@ export default function ActivitiesPage() {
       <DashboardHeader title={t.actTitle} subtitle={t.actSub} showModuleFilter />
 
       <div className="w-full px-4 sm:px-6 lg:px-8 py-5 sm:py-8 max-w-[1400px] mx-auto">
+        {/* Was silently dropped: a backend/tenant-resolution failure rendered
+            identically to a real "no activities yet" tenant (rows=[] either
+            way). Surfacing it distinguishes "something broke" from "empty". */}
+        {error && <ErrorBanner message={`${t.errorLoading}: ${error}`} />}
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-40 rounded-[16px] bg-muted/50 animate-pulse" />)}

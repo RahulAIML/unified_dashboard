@@ -91,17 +91,31 @@ async function remoteSelect<T = Record<string, unknown>>(sql: string): Promise<T
   const token = process.env.ROLPLAY_APP_SQL_TOKEN
   if (token) headers['X-Rolplay-Auth'] = token
 
-  const res = await fetch(sqlUrl(), {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ sql }),
-    cache: 'no-store',
-    signal: AbortSignal.timeout(20_000),
-  })
-  if (!res.ok) throw new Error(`rolplay-app SQL HTTP ${res.status}`)
-  const json = (await res.json()) as { result?: string; data?: T[]; error?: string }
-  if (json.result !== 'success') throw new Error(json.error ?? 'rolplay-app SQL error')
-  return Array.isArray(json.data) ? json.data : []
+  // Every one of this function's ~15 call sites does `.catch(() => [])`, so a
+  // remote timeout, a 500, or a malformed response has always been completely
+  // indistinguishable downstream from "this tenant genuinely has zero rows" --
+  // same HTTP 200, same empty KPI numbers, no error field, nothing in server
+  // logs either. That silent-failure behavior is left unchanged here (routes
+  // still degrade to empty rather than 500ing the whole dashboard on one bad
+  // widget), but the failure itself is now at least observable: log before
+  // rethrowing, so an outage shows up in Render logs instead of only as
+  // suspiciously-flat dashboard numbers a human has to notice by eye.
+  try {
+    const res = await fetch(sqlUrl(), {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ sql }),
+      cache: 'no-store',
+      signal: AbortSignal.timeout(20_000),
+    })
+    if (!res.ok) throw new Error(`rolplay-app SQL HTTP ${res.status}`)
+    const json = (await res.json()) as { result?: string; data?: T[]; error?: string }
+    if (json.result !== 'success') throw new Error(json.error ?? 'rolplay-app SQL error')
+    return Array.isArray(json.data) ? json.data : []
+  } catch (err) {
+    console.error('[rolplay-app] SQL query failed (caller will treat this as empty data):', (err as Error).message)
+    throw err
+  }
 }
 
 // ── Login → client_id resolution ────────────────────────────────────────────
@@ -221,9 +235,23 @@ async function rolplayAppUserExists(email: string, clientId: number): Promise<bo
   const cached = userExistsCache.get(key)
   if (cached && Date.now() - cached.at < USER_EXISTS_TTL_MS) return cached.ok
 
-  const esc = clean.replace(/'/g, "''") // inlined, so escape quotes
+  // Reject rather than escape. `email` is attacker-reachable: registration's
+  // own validateEmail() regex (lib/password.ts) has no denylist on quote or
+  // backslash characters, so a self-registered account CAN carry an email
+  // like `a'or'1'='1@example.com`. The `.replace(/'/g, "''")` this used to do
+  // is the classic unsafe pattern (fragile under backslash-escape SQL modes,
+  // and this endpoint has no parameterization to fall back on -- remoteSelect
+  // sends a raw SQL string). A real email has no operational need for a quote
+  // or backslash, so refuse to query rather than trust a manual escape. This
+  // function decides tenant-membership ACCESS -- a bypass here would defeat
+  // the very check S1 (docs/PRODUCTION_READINESS_AUDIT.md) added.
+  if (clean.includes("'") || clean.includes("\\")) {
+    console.warn('[rolplay-app] rejecting membership check for an email containing a quote/backslash character')
+    return false
+  }
+
   const rows = await remoteSelect<{ n: number | string }>(
-    `SELECT COUNT(*) AS n FROM r_user WHERE LOWER(email) = '${esc}' AND client_id = ${cid}`,
+    `SELECT COUNT(*) AS n FROM r_user WHERE LOWER(email) = '${clean}' AND client_id = ${cid}`,
   ).catch(() => [])
   const ok = Number(rows[0]?.n ?? 0) > 0
   userExistsCache.set(key, { ok, at: Date.now() })

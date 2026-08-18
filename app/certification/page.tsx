@@ -90,14 +90,18 @@ export default function CertificationPage() {
       },
       {
         label: "Pass Rate", labelKey: "passRate" as const,
-        value: overview!.passRate ?? 0, unit: "%",
+        // Was `?? 0`: a "0%" tile is indistinguishable from a real all-fail
+        // certification cohort. passRate is only ever null when there is
+        // nothing to compute a rate from.
+        value: overview!.passRate ?? "—", unit: overview!.passRate != null ? "%" : undefined,
         delta: 0, noComparison: true,
         tier: "B" as const,
         info: t.passRateInfo,
       },
       {
         label: "Avg Score", labelKey: "avgScore" as const,
-        value: overview!.avgScore ?? 0, unit: "pts",
+        // Same null-vs-zero fix as Pass Rate above.
+        value: overview!.avgScore ?? "—", unit: overview!.avgScore != null ? "pts" : undefined,
         delta: 0, noComparison: true,
         tier: "B" as const,
         info: t.avgScoreInfo,

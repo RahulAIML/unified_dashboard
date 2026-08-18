@@ -47,7 +47,9 @@ vi.mock('@/lib/lang-store', () => ({
 
     kpiDeltaScore: 'Delta Score',
     kpiDeltaScoreDesc: 'desc', kpiDeltaScoreFormula: 'formula', kpiDeltaScoreFooter: 'footer',
-    kpiDeltaScoreUnit: 'pts',
+    kpiDeltaScoreUnit: 'pts', kpiDeltaScoreSampledNote: '(sampled)',
+
+    errorLoading: 'Failed to load data',
 
     kpiReadinessIndex: 'Readiness',
     kpiReadinessIndexDesc: 'desc', kpiReadinessIndexFormula: 'formula', kpiReadinessIndexFooter: 'footer',
@@ -82,10 +84,11 @@ vi.mock('recharts', () => {
 })
 
 let mockData: Record<string, unknown> | null = null
+let mockError: string | null = null
 vi.mock('@/lib/hooks/useApi', () => ({
   useApi: (url: string | null) => {
-    if (url === '/api/auth/access-status') return { data: { hasRolplayAppAccess: true }, loading: false }
-    return { data: mockData, loading: false }
+    if (url === '/api/auth/access-status') return { data: { hasRolplayAppAccess: true }, loading: false, error: null }
+    return { data: mockData, loading: false, error: mockError }
   },
   buildApiUrl: (path: string) => path,
 }))
@@ -168,5 +171,40 @@ describe('KPIs page — period-over-period delta', () => {
     render(<KpisPage />)
     // "40%" appears as the current value; there should be no "+"/"-" delta pill next to it.
     expect(screen.getByText('40')).toBeTruthy()
+  })
+})
+
+describe('KPIs page — error state must not look like empty data', () => {
+  it('shows an error banner instead of silently rendering "No data" when the fetch fails', () => {
+    // Regression: `error` used to be dropped entirely (`const { data, loading }`),
+    // so a backend/tenant-resolution failure rendered identically to a real
+    // "no KPI data" tenant -- indistinguishable to the viewer.
+    mockData = null
+    mockError = 'Failed to load KPIs'
+    render(<KpisPage />)
+    expect(screen.getByText('Failed to load data: Failed to load KPIs')).toBeTruthy()
+  })
+
+  it('renders no error banner on a genuinely successful, empty-data response', () => {
+    mockData = { ...BASE_DATA }
+    mockError = null
+    render(<KpisPage />)
+    expect(screen.queryByText(/^Failed to load data/)).toBeNull()
+  })
+})
+
+describe('KPIs page — Delta Score sampling transparency', () => {
+  it('appends the sampled note to the footer when deltaScoreSampled is true', () => {
+    mockData = { ...BASE_DATA, deltaScoreSampled: true }
+    mockError = null
+    render(<KpisPage />)
+    expect(screen.getByText('footer (sampled)')).toBeTruthy()
+  })
+
+  it('shows the plain footer with no sampled note when deltaScoreSampled is false/absent', () => {
+    mockData = { ...BASE_DATA, deltaScoreSampled: false }
+    mockError = null
+    render(<KpisPage />)
+    expect(screen.queryByText(/\(sampled\)/)).toBeNull()
   })
 })

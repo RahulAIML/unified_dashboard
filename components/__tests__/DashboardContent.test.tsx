@@ -175,6 +175,40 @@ describe('DashboardContent — pass-rate legend / hide behavior', () => {
   })
 })
 
+describe('DashboardContent — null vs. genuine zero (Avg Score / Pass Rate)', () => {
+  it('shows "—" rather than a fabricated "0" when avgScore/passRate are null (no scored sessions)', async () => {
+    mockAccessStatus = coachAccess()
+    mockOverviewData = {
+      totalEvaluations: 5, avgScore: null, passRate: null, passedEvaluations: 0,
+      prevTotalEvaluations: 0, prevAvgScore: null, prevPassRate: null,
+      passRateLegend: 'Pass threshold: score ≥ 70 pts',
+    }
+    await renderPastInitialShimmer()
+    // The old `?? 0` behavior rendered a literal "0" here, indistinguishable
+    // from a real rock-bottom score/rate. Regression: must show "—" instead.
+    const dashes = screen.getAllByText('—')
+    expect(dashes.length).toBeGreaterThanOrEqual(2) // Avg Score tile + Pass Rate tile
+  })
+
+  it('still renders a genuine 0 pass rate as "0", not as missing data', async () => {
+    // A real all-fail period: passRate is 0 (a computed number), not null.
+    // This must NOT be conflated with the no-data case above.
+    mockAccessStatus = coachAccess()
+    mockOverviewData = {
+      totalEvaluations: 10, avgScore: 42, passRate: 0, passedEvaluations: 0,
+      prevTotalEvaluations: 8, prevAvgScore: 50, prevPassRate: 20,
+      passRateLegend: 'Pass threshold: score ≥ 70 pts',
+    }
+    await renderPastInitialShimmer()
+    expect(screen.getByText('42')).toBeTruthy()
+    // A genuine 0 pass rate must render as a real "0" tile, not "—" and not
+    // be silently dropped -- getAllByText tolerates other unrelated "0"s
+    // elsewhere on the page (e.g. a delta pill).
+    expect(screen.getAllByText('0').length).toBeGreaterThanOrEqual(1)
+    expect(screen.queryByText('—')).toBeNull()
+  })
+})
+
 describe('DashboardContent — access routing', () => {
   it('does NOT redirect Banco users (hasBancoAccess=true)', () => {
     mockAccessStatus = {
