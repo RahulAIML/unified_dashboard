@@ -6,12 +6,20 @@
  * STRICT ISOLATION:
  * ✅ Uses ONLY bridge-banco.ts (not bridge-client.ts)
  * ✅ No analytics DB mixing
- * ✅ Auth-protected
+ * ✅ Auth-protected AND banco-org-gated (see below)
  * ✅ Returns empty state safely (no crashes)
+ *
+ * The org gate is load-bearing, not defence in depth. bridge-banco.ts scopes its
+ * SQL by nothing but `WHERE sr.banco_user_id > 0` (bridge-banco.ts:172,218,230,256)
+ * -- there is no per-tenant predicate to fall back on. Before the isBancoOrg check
+ * below, "authenticated" was the ONLY requirement, so any signed-in user of any
+ * tenant could read Banco's user counts, director/regional headcounts, top
+ * performers and 20 recent sessions. Auth-protected is not the same as scoped.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContextFromRequest } from '@/lib/server-auth'
+import { isBancoOrg } from '@/lib/org-type'
 import { bridgeBancoKpis, bridgeBancoSessions } from '@/lib/bridge-banco'
 
 export const dynamic = 'force-dynamic'
@@ -34,6 +42,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       { success: false, data: null, meta: { message: 'Unauthorized' } },
       { status: 401 }
+    )
+  }
+
+  // ── Tenant gate ────────────────────────────────────────────────────────────
+  // 403 (not 404) because the caller IS authenticated -- they simply are not a
+  // banco user. Mirrors how every other org-scoped dashboard route early-returns
+  // on the wrong org type.
+  if (!isBancoOrg(auth.email)) {
+    return NextResponse.json(
+      { success: false, data: null, meta: { message: 'Forbidden' } },
+      { status: 403 }
     )
   }
 

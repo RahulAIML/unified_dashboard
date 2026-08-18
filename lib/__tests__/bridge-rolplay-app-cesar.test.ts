@@ -35,7 +35,8 @@ describe('rolplayAppCesarGroup1', () => {
       .mockResolvedValueOnce(respond([{ n: 20 }]))               // enrolled
       .mockResolvedValueOnce(respond([{ n: 10, sessions: 40, weeks: 4 }])) // active
       .mockResolvedValueOnce(respond([{ n: 5 }]))                // MAU
-      .mockResolvedValueOnce(respond([]))                        // seq rows (empty -> no mastery data)
+      .mockResolvedValueOnce(respond([]))                        // mastery aggregate (empty -> no mastery data)
+      .mockResolvedValueOnce(respond([]))                        // seq rows (empty -> no delta)
 
     const result = await mod.rolplayAppCesarGroup1(29, { fromIso: '2026-06-01T00:00:00.000Z', toIso: '2026-07-01T00:00:00.000Z' })
 
@@ -53,6 +54,13 @@ describe('rolplayAppCesarGroup1', () => {
       .mockResolvedValueOnce(respond([{ n: 10 }])) // enrolled
       .mockResolvedValueOnce(respond([{ n: 5, sessions: 20, weeks: 2 }])) // active
       .mockResolvedValueOnce(respond([{ n: 2 }])) // MAU
+      // Mastery bands + mastered-user count now come from a DB-side aggregate
+      // over EVERY scored session in range, not from the bounded seq scan.
+      // For scores {40, 60, 96, 80}: 2 basic, 1 intermediate, 1 advanced;
+      // user 1 is the single mastered user.
+      .mockResolvedValueOnce(respond([
+        { basic: 2, intermediate: 1, advanced: 1, total_scored: 4, mastered_users: 1 },
+      ]))
       .mockResolvedValueOnce(respond([
         { user_id: 1, sc: '40' }, { user_id: 1, sc: '60' }, { user_id: 1, sc: '96' }, // user 1: mastered on 3rd try, delta +56
         { user_id: 2, sc: '80' }, // user 2: single session, no delta
@@ -66,6 +74,51 @@ describe('rolplayAppCesarGroup1', () => {
     expect(result.readinessIndex).toBe(10)    // 1 mastered / 10 enrolled * 100
     const advanced = result.masteryDistribution.find(b => b.label.startsWith('Advanced'))
     expect(advanced?.value).toBe(1) // only the 96
+    expect(result.deltaScoreSampled).toBe(false) // 4 rows, nowhere near the cap
+  })
+
+  it('counts mastered users over the whole range, not just the bounded delta scan', async () => {
+    // Regression: readinessIndex used to divide a 500-row-capped `mastered`
+    // count by an UNCAPPED `enrolled`, so it silently trended toward 0% as a
+    // tenant grew -- and because the scan is ORDER BY user_id it was always the
+    // same lowest-numbered users, a systematic bias rather than a sample.
+    // The mastery aggregate must be believed even when the seq scan sees less.
+    const mod = await fresh()
+    fetchSpy
+      .mockResolvedValueOnce(respond([{ n: 1000 }]))                        // enrolled: large tenant
+      .mockResolvedValueOnce(respond([{ n: 800, sessions: 4000, weeks: 4 }])) // active
+      .mockResolvedValueOnce(respond([{ n: 600 }]))                         // MAU
+      .mockResolvedValueOnce(respond([                                       // DB-side: 250 real mastered users
+        { basic: 3000, intermediate: 1500, advanced: 500, total_scored: 5000, mastered_users: 250 },
+      ]))
+      .mockResolvedValueOnce(respond([                                       // seq scan sees only 2 of them
+        { user_id: 1, sc: '40' }, { user_id: 1, sc: '96' },
+      ]))
+
+    const result = await mod.rolplayAppCesarGroup1(29, { fromIso: '2026-06-01T00:00:00.000Z', toIso: '2026-07-01T00:00:00.000Z' })
+
+    // 250/1000, from the aggregate -- NOT 1/1000 from the truncated scan.
+    expect(result.readinessIndex).toBe(25)
+    const advanced = result.masteryDistribution.find(b => b.label.startsWith('Advanced'))
+    expect(advanced?.value).toBe(500)
+    expect(advanced?.pct).toBe(10) // 500/5000
+  })
+
+  it('flags deltaScore as sampled when the row cap is actually hit', async () => {
+    const mod = await fresh()
+    // 500 rows == _CLOSING_DATA_SAMPLE_LIMIT, i.e. the scan was truncated.
+    const capped = Array.from({ length: 500 }, (_, i) => ({ user_id: Math.floor(i / 2) + 1, sc: String(50 + (i % 2) * 20) }))
+    fetchSpy
+      .mockResolvedValueOnce(respond([{ n: 400 }]))
+      .mockResolvedValueOnce(respond([{ n: 300, sessions: 900, weeks: 3 }]))
+      .mockResolvedValueOnce(respond([{ n: 200 }]))
+      .mockResolvedValueOnce(respond([{ basic: 250, intermediate: 250, advanced: 0, total_scored: 500, mastered_users: 0 }]))
+      .mockResolvedValueOnce(respond(capped))
+
+    const result = await mod.rolplayAppCesarGroup1(29, { fromIso: '2026-06-01T00:00:00.000Z', toIso: '2026-07-01T00:00:00.000Z' })
+
+    expect(result.deltaScoreSampled).toBe(true)
+    expect(result.deltaScore).not.toBeNull() // still reported -- but flagged, never passed off as complete
   })
 
   it('returns null rates rather than dividing by zero when nothing is enrolled', async () => {
