@@ -1,4 +1,6 @@
+import { NextRequest, NextResponse } from "next/server"
 import { buildApiError, buildSuccess } from "@/lib/api-utils"
+import { requireAdminFromRequest } from "@/lib/server-auth"
 
 export const dynamic = "force-dynamic"
 
@@ -34,7 +36,17 @@ async function fetchJsonWithTimeout(
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  // Liveness stays public so platform/uptime probes keep working without a
+  // credential -- but ONLY as a bare {ok}. Everything below this line is
+  // infrastructure detail: the full BRIDGE_URL, which secrets are configured,
+  // upstream error bodies, and the production database name from
+  // SELECT DATABASE(). That was all being served to anonymous callers.
+  const admin = await requireAdminFromRequest(request)
+  if (!admin) {
+    return NextResponse.json({ ok: true }, { status: 200 })
+  }
+
   try {
     const bridgeUrl = process.env.BRIDGE_URL ?? null
     const bridgeSecret = process.env.BRIDGE_SECRET ?? null

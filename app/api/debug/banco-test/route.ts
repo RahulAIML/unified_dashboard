@@ -4,12 +4,18 @@
  * Diagnostic endpoint — tests every layer of the Banco pipeline and returns
  * exactly what went wrong so errors can be diagnosed without reading server logs.
  *
- * SECURITY: requires valid auth cookie, returns 401 otherwise.
- * Remove or protect behind an admin check once the issue is resolved.
+ * SECURITY: requires an ADMIN session, returns 403 otherwise.
+ *
+ * This previously required only *a* session, which meant any authenticated user
+ * of any tenant could read Banco user counts, 30-day report counts, real report
+ * ids with their extracted scores, and the raw BANCO_EMAIL_DOMAINS value. The
+ * docstring had asked for an admin check "once the issue is resolved"; this is
+ * that check. 403 for both unauthenticated and non-admin, so the endpoint's
+ * existence is not confirmed to a non-admin caller.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthContextFromRequest } from '@/lib/server-auth'
+import { requireAdminFromRequest } from '@/lib/server-auth'
 import { resolveOrgType, isBancoOrg } from '@/lib/org-type'
 
 export const dynamic = 'force-dynamic'
@@ -52,9 +58,9 @@ async function testBridge(label: string, sql: string, params: (string|number|nul
 }
 
 export async function GET(request: NextRequest) {
-  const auth = await getAuthContextFromRequest(request)
+  const auth = await requireAdminFromRequest(request)
   if (!auth) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
   }
 
   const orgType       = await resolveOrgType(auth.email, auth.customerId)

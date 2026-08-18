@@ -679,6 +679,12 @@ export interface CesarGroup1Kpis {
   deltaScore: number | null
   readinessIndex: number | null
   masteryDistribution: { label: string; value: number; pct: number }[]
+  /** True when deltaScore was computed from a truncated per-user scan (the
+   *  _CLOSING_DATA_SAMPLE_LIMIT row cap was actually hit) rather than from
+   *  every scored session in range. Callers MUST surface this -- a sampled
+   *  average presented as a complete one is exactly the "looks complete but
+   *  was truncated" failure this codebase refuses to ship elsewhere. */
+  deltaScoreSampled: boolean
 }
 
 /** KPI-1.1/1.3/1.4/2.2/2.3/3.2/5.3. Per-user sequencing (delta score,
@@ -735,6 +741,37 @@ async function _rolplayAppCesarGroup1Impl(
     mauUsers = Number(mauRows[0]?.n ?? 0)
   }
 
+  // Mastery bands + mastered-user count are computed DB-side over EVERY scored
+  // session in range -- deliberately NOT from the bounded seqRows scan below.
+  //
+  // They used to be derived from that 500-row slice while `enrolled` counted all
+  // users, so readinessIndex (= mastered / enrolled) divided a capped numerator
+  // by an uncapped denominator and silently trended toward 0% as a tenant grew.
+  // Worse, the slice is ordered by user_id, so it was the lowest-numbered users
+  // every time -- a systematic bias, not a sample. Same derived-table shape as
+  // fetchScoreStats above, so SCORE_SQL is still evaluated exactly once per row.
+  const masteryRows = await remoteSelect<{
+    basic: number | string; intermediate: number | string; advanced: number | string
+    total_scored: number | string; mastered_users: number | string
+  }>(
+    `SELECT SUM(CASE WHEN sc < 75 THEN 1 ELSE 0 END) AS basic,
+            SUM(CASE WHEN sc >= 75 AND sc < ${MASTERY_THRESHOLD} THEN 1 ELSE 0 END) AS intermediate,
+            SUM(CASE WHEN sc >= ${MASTERY_THRESHOLD} THEN 1 ELSE 0 END) AS advanced,
+            COUNT(sc) AS total_scored,
+            COUNT(DISTINCT CASE WHEN sc >= ${MASTERY_THRESHOLD} THEN user_id END) AS mastered_users
+       FROM (
+         SELECT s.user_id AS user_id, ${SCORE_SQL} AS sc
+           FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
+          WHERE u.client_id = ${cid}${cat}${dc}
+       ) t
+      WHERE sc IS NOT NULL`,
+  ).catch(() => [])
+
+  // deltaScore still needs per-user first/last ordering, which has no portable
+  // aggregate form on the MySQL version behind this bridge (no window functions
+  // are used anywhere in this file). It therefore keeps the bounded scan -- but
+  // reports whether that bound was actually hit instead of passing a truncated
+  // average off as a complete one.
   const seqRows = await remoteSelect<{ user_id: number | string; sc: string | null }>(
     `SELECT s.user_id, (${SCORE_SQL}) AS sc
        FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
@@ -742,6 +779,7 @@ async function _rolplayAppCesarGroup1Impl(
       ORDER BY s.user_id, s.date_created ASC
       LIMIT ${_CLOSING_DATA_SAMPLE_LIMIT}`,
   ).catch(() => [])
+  const deltaScoreSampled = seqRows.length >= _CLOSING_DATA_SAMPLE_LIMIT
 
   const byUser = new Map<string, number[]>()
   for (const r of seqRows) {
@@ -754,17 +792,16 @@ async function _rolplayAppCesarGroup1Impl(
   }
 
   const deltas: number[] = []
-  let mastered = 0
   for (const scores of byUser.values()) {
     if (scores.length >= 2) deltas.push(scores[scores.length - 1] - scores[0])
-    if (scores.some(s => s >= MASTERY_THRESHOLD)) mastered++
   }
 
-  const allScores = seqRows.map(r => Number(r.sc)).filter(n => Number.isFinite(n))
-  const basic = allScores.filter(s => s < 75).length
-  const intermediate = allScores.filter(s => s >= 75 && s < MASTERY_THRESHOLD).length
-  const advanced = allScores.filter(s => s >= MASTERY_THRESHOLD).length
-  const totalScored = allScores.length
+  const m = masteryRows[0]
+  const basic = Number(m?.basic ?? 0)
+  const intermediate = Number(m?.intermediate ?? 0)
+  const advanced = Number(m?.advanced ?? 0)
+  const totalScored = Number(m?.total_scored ?? 0)
+  const mastered = Number(m?.mastered_users ?? 0)
   const masteryDistribution = totalScored ? [
     { label: 'Basic (<75)', value: basic, pct: round1(100 * basic / totalScored) },
     { label: 'Intermediate (75-94)', value: intermediate, pct: round1(100 * intermediate / totalScored) },
@@ -776,8 +813,11 @@ async function _rolplayAppCesarGroup1Impl(
     weeklyPracticeFrequency: activeWeeks ? round1(periodSessions / activeWeeks) : null,
     mauRate: enrolled ? round1(100 * mauUsers / enrolled) : null,
     deltaScore: deltas.length ? round1(deltas.reduce((a, b) => a + b, 0) / deltas.length) : null,
+    // Both operands now count every scored session/user in range -- no
+    // capped-numerator-over-uncapped-denominator mismatch.
     readinessIndex: enrolled ? round1(100 * mastered / enrolled) : null,
     masteryDistribution,
+    deltaScoreSampled,
   }
 }
 
