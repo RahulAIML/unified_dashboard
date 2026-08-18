@@ -25,6 +25,7 @@ export const translations = {
     phaseLabel:      'v1.0 · Analytics Platform',
     sidebarSubtitle: 'Analytics Dashboard',
     dashboardWord:   'Dashboard',
+    dashboardConfidentiality: 'Confidential — For exclusive use by the Innovation Area',
 
     // ── Global filter bar ────────────────────────────────────
     filterSolutions: 'Solutions',
@@ -940,6 +941,7 @@ export const translations = {
     phaseLabel:      'v1.0 · Plataforma Analytics',
     sidebarSubtitle: 'Panel de Analítica',
     dashboardWord:   'Dashboard',
+    dashboardConfidentiality: 'Confidencial — Uso exclusivo del Área de Innovación',
 
     // ── Global filter bar ────────────────────────────────────
     filterSolutions: 'Soluciones',

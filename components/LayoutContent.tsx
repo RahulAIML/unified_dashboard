@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation'
 import { Sidebar } from '@/components/Sidebar'
 import { AIAssistant } from '@/components/ai-assistant'
+import { DashboardFooter } from '@/components/DashboardFooter'
 import { useAuthContext } from '@/components/AuthProvider'
 import { useSnapDateRange } from '@/lib/hooks/useSnapDateRange'
 
@@ -32,6 +33,7 @@ export function LayoutContent({ children }: { children: React.ReactNode }) {
         <main className="flex-1 pb-6 md:pb-10 w-full">
           {children}
         </main>
+        {showSidebar && <DashboardFooter />}
       </div>
       {showSidebar && <AIAssistant />}
     </div>
