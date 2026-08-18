@@ -57,6 +57,15 @@ not by test failures — 20/20 files that *did* start passed).
 | S5 banco domains merged | OPEN |
 | S6 shared LMS credential fallback | OPEN |
 | Phase 6 / 7 / 8 / 10 / 12 | OPEN |
+| **rolplay_app_sql: Python readiness_index bias** | **FIXED** — mirrored the TS fix: mastered_users now comes from a dedicated unbounded aggregate, not the bounded delta-score scan |
+| **rolplay_app_sql: null-vs-zero collapsing** (`?? 0` on avgScore/passRate) | **FIXED** — Overview tiles, simulator/coach/certification pages, CSV export. Shows "—" for no-data, preserves a genuine 0 |
+| **rolplay_app_sql: error swallowed as empty data** on `/kpis`, `/ranking`, `/activities` | **FIXED** — all three now surface `error` from `useApi` as a distinct banner |
+| **rolplay_app_sql: zero observability on query failure** | **FIXED** — `remoteSelect` (TS) and `_rolplay_app_sql` (Python) now log before the caller's `.catch(() => [])` swallows the error. Silent-degradation behavior is otherwise unchanged (by design — one bad widget must not 500 the whole dashboard) |
+| **rolplay_app_sql: SQL injection in `rolplayAppUserExists`** | **FIXED** — this function decides tenant-membership ACCESS (the S1 check); it escaped a quote via `.replace(/'/g, "''")` rather than whitelisting, and registration's own email regex has no denylist on quote/backslash. Now rejects (denies access) rather than escapes |
+| **rolplay_app_sql: `deltaScoreSampled` silently dropped** at `/kpis` | **FIXED** — the bridge computed and returned it, the API route forwarded it, but the page interface never declared it. Now shown as a footer note when the sampling cap is hit |
+| **rolplay_app_sql: `rolplayAppClosingDataRows` truncation not flagged** (feeds Commercial Domain / Top Strengths / Top Opportunities / Adoption Movement) | **OPEN** — same class of bug as the two fixed above, lower traffic surfaces. Not yet flagged with a `sampled` boolean |
+| **rolplay_app_sql: Reports/Results hard 200-row cap, no "showing N of M" indicator** | OPEN — silent truncation for a &gt;200-session tenant, not a crash |
+| **rolplay_app_sql: no UI/server cap on date-range span** | OPEN — a 10-year range risks a 20s bridge timeout per query, degrading to the same silent-empty behavior above (now at least logged) |
 
 ### Note: membership checks sit on the request path
 

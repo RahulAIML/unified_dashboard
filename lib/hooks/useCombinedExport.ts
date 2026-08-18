@@ -64,8 +64,15 @@ export function useCombinedExport() {
           prevAvgScore: data.prevAvgScore,
           prevPassRate: data.prevPassRate,
           deltaTotalEvaluations: calcDeltaPct(data.totalEvaluations, data.prevTotalEvaluations),
-          deltaAvgScore: calcDeltaPct(data.avgScore ?? 0, data.prevAvgScore ?? 0, 1),
-          deltaPassRate: calcDeltaPct(data.passRate ?? 0, data.prevPassRate ?? 0, 1),
+          // Was `?? 0`: when avgScore/passRate is null (no scored sessions
+          // this period) but the PRIOR period had a real value, coercing the
+          // current side to a literal 0 fabricated a false "-100%" swing --
+          // "score dropped to zero" -- instead of "nothing to compare".
+          // calcDeltaPct already returns 0 (its own no-fabricated-comparison
+          // sentinel) for a null input on either side, so passing the raw
+          // nullable values through is strictly more correct, not less safe.
+          deltaAvgScore: calcDeltaPct(data.avgScore, data.prevAvgScore, 1),
+          deltaPassRate: calcDeltaPct(data.passRate, data.prevPassRate, 1),
           deltaPassedEvaluations: calcDeltaPct(
             data.passedEvaluations,
             estimatePassedSessions(data.prevTotalEvaluations, data.prevPassRate)

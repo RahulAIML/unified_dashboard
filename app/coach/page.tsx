@@ -110,15 +110,26 @@ export default function CoachPage() {
       },
       {
         label: "Pass Rate", labelKey: "passRate" as const,
-        value: overview.passRate ?? 0, unit: "%",
-        delta: calcDeltaPct(overview.passRate ?? 0, overview.prevPassRate ?? 0),
+        // Was `?? 0`: a module with zero SCORED sessions this period showed a
+        // literal "0%" pass-rate tile indistinguishable from a real all-fail
+        // period, and the delta compared two fabricated zeros. passRate is
+        // only ever null when there is nothing to compute a rate from.
+        value: overview.passRate ?? "—",
+        unit: overview.passRate != null ? "%" : undefined,
+        delta: overview.passRate != null && overview.prevPassRate != null
+          ? calcDeltaPct(overview.passRate, overview.prevPassRate) : 0,
+        noComparison: overview.passRate == null || overview.prevPassRate == null,
         tier: "B" as const,
         info: t.passRateInfo,
       },
       {
         label: "Avg Score", labelKey: "avgScore" as const,
-        value: overview.avgScore ?? 0, unit: "pts",
-        delta: calcDeltaPct(overview.avgScore ?? 0, overview.prevAvgScore ?? 0),
+        // Same null-vs-zero fix as Pass Rate above.
+        value: overview.avgScore ?? "—",
+        unit: overview.avgScore != null ? "pts" : undefined,
+        delta: overview.avgScore != null && overview.prevAvgScore != null
+          ? calcDeltaPct(overview.avgScore, overview.prevAvgScore) : 0,
+        noComparison: overview.avgScore == null || overview.prevAvgScore == null,
         tier: "B" as const,
         info: t.avgScoreInfo,
       },

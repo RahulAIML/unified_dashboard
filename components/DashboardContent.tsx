@@ -266,8 +266,17 @@ export function DashboardContent() {
       },
       {
         label: "Avg Session Score", labelKey: "avgSessionScore" as const,
-        value: overview!.avgScore ?? 0, unit: "pts",
-        delta: d(overview!.avgScore ?? 0, overview!.prevAvgScore ?? 0),
+        // Was `?? 0`: a tenant with zero SCORED sessions this period (e.g. a
+        // new tenant, or a period before their first evaluation) showed a
+        // literal "0 pts" tile indistinguishable from a real rock-bottom
+        // average, and the delta below compared two fabricated zeros into a
+        // fabricated "+0%"/"no change" reading. avgScore is only ever null
+        // when there is nothing to average -- never a genuine "0".
+        value: overview!.avgScore ?? "—",
+        unit: overview!.avgScore != null ? "pts" : undefined,
+        delta: overview!.avgScore != null && overview!.prevAvgScore != null
+          ? d(overview!.avgScore, overview!.prevAvgScore) : 0,
+        noComparison: overview!.avgScore == null || overview!.prevAvgScore == null,
         tier: "B" as const,
         info: t.avgSessionScoreInfo,
       },
@@ -278,8 +287,13 @@ export function DashboardContent() {
       // this field (undefined), so the tile renders exactly as before.
       ...(overview!.passRateLegend === null ? [] : [{
         label: "Overall Pass Rate", labelKey: "overallPassRate" as const,
-        value: overview!.passRate ?? 0, unit: "%",
-        delta: d(overview!.passRate ?? 0, overview!.prevPassRate ?? 0),
+        // Same null-vs-zero fix as Avg Session Score above: passRate is null
+        // only when there were no scored sessions to compute a rate from.
+        value: overview!.passRate ?? "—",
+        unit: overview!.passRate != null ? "%" : undefined,
+        delta: overview!.passRate != null && overview!.prevPassRate != null
+          ? d(overview!.passRate, overview!.prevPassRate) : 0,
+        noComparison: overview!.passRate == null || overview!.prevPassRate == null,
         tier: "B" as const,
         legend: overview!.passRateLegend,
         info: t.overallPassRateInfo,
