@@ -436,6 +436,10 @@ export const translations = {
     liveLabel:        'Live',
     askAi:            'Robin AI',
     noDataAvailable:  'No data available',
+    sectionNoDataTitle: 'No data available yet',
+    sectionNoDataMsg: 'This section was requested but has no data to show for the selected period.',
+    noDataInline:     'no data',
+    viewLink:         'View',
 
     // ── Not linked to org ─────────────────────────────────────
     notLinkedToOrg:       "You're not linked to any organization yet",
@@ -1353,6 +1357,10 @@ export const translations = {
     liveLabel:        'En vivo',
     askAi:            'Robin AI',
     noDataAvailable:  'Sin datos disponibles',
+    sectionNoDataTitle: 'Aún no hay datos disponibles',
+    sectionNoDataMsg: 'Esta sección fue solicitada pero no tiene datos para el periodo seleccionado.',
+    noDataInline:     'sin datos',
+    viewLink:         'Ver',
 
     // ── Not linked to org ─────────────────────────────────────
     notLinkedToOrg:       'Aún no estás vinculado a ninguna organización',

@@ -124,6 +124,7 @@ const cardMotion = {
  * for a snapshot metric, never a fabricated 0%.
  */
 function KpiTile({ title, value, deltaPct, index }: { title: string; value: unknown; deltaPct?: number | null; index: number }) {
+  const t = useT()
   const hasDelta = deltaPct !== null && deltaPct !== undefined
   const isPositive = hasDelta && deltaPct! > 0
   const isNegative = hasDelta && deltaPct! < 0
@@ -159,7 +160,7 @@ function KpiTile({ title, value, deltaPct, index }: { title: string; value: unkn
             {!isPositive && !isNegative && <Minus className="w-3 h-3" />}
             <span>{hasDelta ? `${isPositive ? '+' : ''}${deltaPct}%` : '—'}</span>
           </div>
-          <span className="text-xs text-muted-foreground/70">{hasDelta ? 'vs prior period' : 'no comparison'}</span>
+          <span className="text-xs text-muted-foreground/70">{hasDelta ? t.vsPrior : t.noHistoricalComparison}</span>
         </div>
       </div>
     </motion.div>
@@ -269,6 +270,7 @@ function Leaderboard({ rows }: { rows: Record<string, unknown>[] }) {
 }
 
 function DashboardRows({ rows, pv }: { rows: DashRow[]; pv: Map<string, WidgetPreview> }) {
+  const t = useT()
   return (
     <div className="space-y-5 sm:space-y-6">
       {rows.map(row => (
@@ -278,8 +280,8 @@ function DashboardRows({ rows, pv }: { rows: DashRow[]; pv: Map<string, WidgetPr
             // A section the manager explicitly contracted (mandatory), but with
             // no data discovered yet -- shown honestly, never silently omitted.
             <EmptyState
-              title="No data available yet"
-              message="This section was requested but has no data to show for the selected period."
+              title={t.sectionNoDataTitle}
+              message={t.sectionNoDataMsg}
             />
           ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
@@ -311,11 +313,11 @@ function DashboardRows({ rows, pv }: { rows: DashRow[]; pv: Map<string, WidgetPr
                       {w.type === 'table' && !isLeaderboard && (w.paginated
                         ? <ReportsTable rows={p?.rows ?? []} searchable={!!w.searchable} exportable={!!w.exportable} filenamePrefix={w.id} />
                         : <MiniTable rows={p?.rows ?? []} idField={w.id_field} />)}
-                      {failed && <div className="text-xs text-amber-600 dark:text-amber-400 mt-2">no data{p!.error ? `: ${p!.error}` : ''}</div>}
+                      {failed && <div className="text-xs text-amber-600 dark:text-amber-400 mt-2">{t.noDataInline}{p!.error ? `: ${p!.error}` : ''}</div>}
                     </WidgetCard>
                   )}
                   {w.type === 'kpi_tile' && failed && (
-                    <div className="text-xs text-amber-600 dark:text-amber-400 mt-1.5 px-1">no data{p!.error ? `: ${p!.error}` : ''}</div>
+                    <div className="text-xs text-amber-600 dark:text-amber-400 mt-1.5 px-1">{t.noDataInline}{p!.error ? `: ${p!.error}` : ''}</div>
                   )}
                 </div>
               )
@@ -511,13 +513,6 @@ export function MiniChart({ series, bar }: { series: Record<string, unknown>[]; 
   )
 }
 
-const JOURNEY_PHASE_LABELS: Record<string, string> = {
-  cognitive: 'Cognitive',
-  practice: 'Practice',
-  validation: 'Validation',
-  excellence: 'Excellence',
-}
-
 /**
  * Solution Journey widget — the tenant's real modules in fixed progression
  * order (LMS -> Master Coach -> Practice Simulator -> Certification ->
@@ -528,6 +523,13 @@ const JOURNEY_PHASE_LABELS: Record<string, string> = {
  * stage reports its own metric on its own scale" rule, no cross-stage funnel.
  */
 export function MiniJourney({ rows }: { rows: Record<string, unknown>[] }) {
+  const t = useT()
+  const journeyPhaseLabels: Record<string, string> = {
+    cognitive: t.journeyPhaseCognitive,
+    practice: t.journeyPhasePractice,
+    validation: t.journeyPhaseValidation,
+    excellence: t.journeyPhaseExcellence,
+  }
   if (!rows.length) {
     return <div className="h-24 flex items-center justify-center text-sm text-muted-foreground">—</div>
   }
@@ -543,18 +545,18 @@ export function MiniJourney({ rows }: { rows: Record<string, unknown>[] }) {
             <div className="w-36 rounded-lg border border-border/60 bg-background p-3">
               {phase && (
                 <p className="text-[9px] font-semibold uppercase tracking-wide text-primary/70">
-                  {JOURNEY_PHASE_LABELS[phase] ?? phase}
+                  {journeyPhaseLabels[phase] ?? phase}
                 </p>
               )}
               <p className="text-sm font-semibold text-foreground mt-0.5">{label}</p>
               <p className="text-xl font-bold text-foreground mt-1">{total.toLocaleString()}</p>
-              <p className="text-[10px] text-muted-foreground">sessions</p>
+              <p className="text-[10px] text-muted-foreground">{t.sessionsLabel}</p>
               {passRate !== null && (
                 <>
                   <div className="h-1.5 rounded-full bg-muted overflow-hidden mt-2">
                     <div className="h-full bg-primary" style={{ width: `${Math.max(0, Math.min(100, passRate))}%` }} />
                   </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">{passRate}% pass rate</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">{passRate}% {t.passRate}</p>
                 </>
               )}
             </div>
@@ -645,6 +647,7 @@ export function MiniDonut({ rows }: { rows: Record<string, unknown>[] }) {
 }
 
 export function MiniTable({ rows, idField }: { rows: Record<string, unknown>[]; idField?: string | null }) {
+  const t = useT()
   if (!rows.length) return <div className="text-sm text-muted-foreground">—</div>
   // The id itself isn't interesting to show as a column (it's an opaque
   // report id) — it's what the "View" link's href is built from instead.
@@ -668,7 +671,7 @@ export function MiniTable({ rows, idField }: { rows: Record<string, unknown>[]; 
                   <td className="py-1 pr-4">
                     {id !== null && id !== undefined && (
                       <Link href={`/drilldown/${id}`} className="text-primary hover:underline whitespace-nowrap">
-                        View →
+                        {t.viewLink} →
                       </Link>
                     )}
                   </td>

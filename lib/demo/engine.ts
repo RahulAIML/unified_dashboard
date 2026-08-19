@@ -106,22 +106,65 @@ const DEMO_USERS = [
   { name: 'Fernanda Ruiz',     email: 'fruiz@demo.rolplay.ai'     },
 ]
 
+// Solution-specific base rates. Deliberately modest: this is a straight
+// per-day multiplier with no growth curve, so the "All" filter (10 years,
+// see ALL_TIME_DAYS in DashboardHeader.tsx) multiplies it by 3650 days --
+// the previous rates (up to 102/day) produced 400K+ session totals that
+// read as absurd rather than impressive, and made every trend chart plot
+// an unreadable, densely-packed value range.
+const RATE_MAP: Record<string, number> = {
+  'lms': 42, 'coach': 58, 'simulator': 50, 'certification': 36, 'second-brain': 0,
+}
+const REAL_SOLUTIONS = Object.keys(RATE_MAP)
+
+export interface DemoOverview {
+  totalEvaluations: number
+  avgScore: number
+  passRate: number
+  passedEvaluations: number
+  prevTotalEvaluations: number
+  prevAvgScore: number
+  prevPassRate: number
+}
+
 // ── Overview KPIs ─────────────────────────────────────────────────────────────
-export function demoOverview(from: Date, to: Date, solution: string | null = null) {
+// "All" (solution === null) must be a real aggregate of the per-module
+// figures below it, never an independently-drawn number -- a prospect
+// filtering by a single module previously saw MORE sessions than "All"
+// (e.g. Master Coach's flat 58/day rate vs. All's own unrelated flat
+// 52/day fallback), an internally impossible "part > whole" result. This
+// recurses per real module and sums/reweights instead of drawing its own
+// disconnected constant.
+export function demoOverview(from: Date, to: Date, solution: string | null = null): DemoOverview {
+  if (!solution) {
+    const parts = REAL_SOLUTIONS.map(s => demoOverview(from, to, s))
+    const totalEvaluations = parts.reduce((s, p) => s + p.totalEvaluations, 0)
+    const passedEvaluations = parts.reduce((s, p) => s + p.passedEvaluations, 0)
+    const prevTotalEvaluations = parts.reduce((s, p) => s + p.prevTotalEvaluations, 0)
+    const prevPassedEvaluations = parts.reduce(
+      (s, p) => s + Math.round(p.prevTotalEvaluations * (p.prevPassRate / 100)), 0,
+    )
+    const weightedAvg = (key: 'avgScore' | 'prevAvgScore', weightKey: 'totalEvaluations' | 'prevTotalEvaluations') => {
+      const weight = parts.reduce((s, p) => s + p[weightKey], 0)
+      if (!weight) return parts[0][key]
+      return Math.round((parts.reduce((s, p) => s + p[key] * p[weightKey], 0) / weight) * 10) / 10
+    }
+    return {
+      totalEvaluations,
+      avgScore:             weightedAvg('avgScore', 'totalEvaluations'),
+      passRate:             totalEvaluations ? Math.round((100 * passedEvaluations / totalEvaluations) * 10) / 10 : 0,
+      passedEvaluations,
+      prevTotalEvaluations,
+      prevAvgScore:         weightedAvg('prevAvgScore', 'prevTotalEvaluations'),
+      prevPassRate:         prevTotalEvaluations ? Math.round((100 * prevPassedEvaluations / prevTotalEvaluations) * 10) / 10 : 0,
+    }
+  }
+
   const days = daysBetween(from, to)
   const salt = solutionSalt(solution)
   const rng  = seededRng(dateToSeed(from, to, salt))
 
-  // Solution-specific base rates. Deliberately modest: this is a straight
-  // per-day multiplier with no growth curve, so the "All" filter (10 years,
-  // see ALL_TIME_DAYS in DashboardHeader.tsx) multiplies it by 3650 days --
-  // the previous rates (up to 102/day) produced 400K+ session totals that
-  // read as absurd rather than impressive, and made every trend chart plot
-  // an unreadable, densely-packed value range.
-  const rateMap: Record<string, number> = {
-    'lms': 42, 'coach': 58, 'simulator': 50, 'certification': 36, 'second-brain': 0,
-  }
-  const baseRate = rateMap[solution || ''] || 52
+  const baseRate = RATE_MAP[solution] ?? 52
   const dailyRate   = baseRate + rng() * 9
   const totalEvals  = Math.round(dailyRate * days)
 
@@ -129,14 +172,14 @@ export function demoOverview(from: Date, to: Date, solution: string | null = nul
   const scoreMap: Record<string, [number, number]> = {
     'lms': [78, 4], 'coach': [84, 5], 'simulator': [81, 6], 'certification': [82, 4],
   }
-  const [scoreBase, scoreVar] = scoreMap[solution || ''] || [83, 4]
+  const [scoreBase, scoreVar] = scoreMap[solution] || [83, 4]
   const avgScore    = Math.round((scoreBase + rng() * scoreVar) * 10) / 10
 
   // Solution-specific pass rates
   const passMap: Record<string, [number, number]> = {
     'lms': [72, 8], 'coach': [76, 6], 'simulator': [79, 5], 'certification': [81, 4],
   }
-  const [passBase, passVar] = passMap[solution || ''] || [74, 7]
+  const [passBase, passVar] = passMap[solution] || [74, 7]
   const passRate    = Math.round((passBase + rng() * passVar) * 10) / 10
   const passed      = Math.round(totalEvals * (passRate / 100))
 
@@ -221,10 +264,13 @@ export function demoUsecaseBreakdown(from: Date, to: Date, solution: string | nu
   // Distribution weights (must sum to ~1)
   const weights = [0.28, 0.24, 0.22, 0.15, 0.11]
 
+  // One deterministic usecase per real module (not always index 0 -- the old
+  // predicate matched every valid `solution` value, so every module's
+  // breakdown showed the same usecase). REAL_SOLUTIONS order matches
+  // RATE_MAP/demoOverview's own module list.
+  const moduleIdx = solution ? REAL_SOLUTIONS.indexOf(solution) : -1
   const ids = solution
-    ? [DEMO_USECASE_IDS.find(
-        (_, i) => ['lms','coach','simulator','certification',''].includes(solution) || i === 0
-      ) ?? 101]
+    ? [DEMO_USECASE_IDS[moduleIdx >= 0 ? moduleIdx % DEMO_USECASE_IDS.length : 0]]
     : [...DEMO_USECASE_IDS]
 
   const rows = ids.map((ucId, i) => {

@@ -19,7 +19,10 @@ export default defineConfig({
     // app/api/dashboard/__tests__/ and silently excluded 26 real API tests --
     // they had never run, so the suite total looked healthy while the API layer
     // was effectively untested. Keep this anchored; do not re-add the '**/'.
-    exclude: ['**/node_modules/**', '**/.claude/**', '**/dist/**', 'dashboard/**'],
+    // 'e2e/**' is Playwright's own test suite (playwright.config.ts), not
+    // vitest's -- it uses test.describe()/test() from @playwright/test, which
+    // throws when invoked outside Playwright's runner.
+    exclude: ['**/node_modules/**', '**/.claude/**', '**/dist/**', 'dashboard/**', 'e2e/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
