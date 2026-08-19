@@ -198,7 +198,8 @@ describe('MiniJourney', () => {
     )
     expect(getByText('Practice Simulator')).toBeTruthy()
     expect(getByText('144')).toBeTruthy()
-    expect(getByText('36.8% pass rate')).toBeTruthy()
+    // Default test language is Spanish (SSR_LANG='es' — see lib/lang-store.ts).
+    expect(getByText('36.8% Tasa de Aprobación')).toBeTruthy()
     expect(getByText('Certification')).toBeTruthy()
     expect(getByText('3')).toBeTruthy()
   })
@@ -207,7 +208,7 @@ describe('MiniJourney', () => {
     const { queryByText } = render(
       <MiniJourney rows={[{ module: 'lms', label: 'LMS', phase: 'cognitive', total_sessions: 40, pass_rate: null }]} />,
     )
-    expect(queryByText(/pass rate/)).toBeNull()
+    expect(queryByText(/Tasa de Aprobación/)).toBeNull()
   })
 
   it('shows a placeholder rather than an empty journey for no rows', () => {
@@ -237,7 +238,7 @@ describe('MiniTable', () => {
         idField="saved_report_id"
       />,
     )
-    const link = getByText('View →').closest('a')
+    const link = getByText('Ver →').closest('a')
     expect(link?.getAttribute('href')).toBe('/drilldown/501')
   })
 
@@ -252,14 +253,14 @@ describe('MiniTable', () => {
     const { queryByText } = render(
       <MiniTable rows={[{ usecase: 'Objection Handling' }]} idField="saved_report_id" />,
     )
-    expect(queryByText('View →')).toBeNull()
+    expect(queryByText('Ver →')).toBeNull()
   })
 
   it('adds no link column at all when idField is absent', () => {
     const { queryByText } = render(
       <MiniTable rows={[{ simulator: 'Exkruthera', total_sessions: 2 }]} />,
     )
-    expect(queryByText('View →')).toBeNull()
+    expect(queryByText('Ver →')).toBeNull()
   })
 })
 
@@ -335,7 +336,8 @@ describe('DashboardRenderer — end to end with real widget shapes', () => {
 
     const { getByText } = render(<DashboardRenderer config={config} preview={preview} />)
 
-    expect(getByText(/no data/)).toBeTruthy()
+    // Default test language is Spanish (SSR_LANG='es' — see lib/lang-store.ts).
+    expect(getByText(/sin datos/)).toBeTruthy()
   })
 
   it('shows an up arrow with the real delta_pct for a KPI tile that improved', () => {
@@ -375,7 +377,8 @@ describe('DashboardRenderer — end to end with real widget shapes', () => {
     const { getByText, queryByText } = render(<DashboardRenderer config={config} preview={preview} />)
 
     expect(queryByText(/^\+\d|^-\d/)).toBeNull()
-    expect(getByText('no comparison')).toBeTruthy()
+    // Default test language is Spanish (SSR_LANG='es' — see lib/lang-store.ts).
+    expect(getByText('sin comparación histórica')).toBeTruthy()
   })
 
   it('renders the Best Performers leaderboard, ranked, for a table_best_performers widget', () => {
@@ -517,8 +520,9 @@ describe('DashboardRenderer — mandatory sections with no data', () => {
 
     expect(getAllByRole('tab').map(t => t.textContent)).toEqual(['Overview', 'LMS'])
     fireEvent.click(getByText('LMS'))
-    expect(getByText('No data available yet')).toBeTruthy()
-    expect(getByText(/requested but has no data/)).toBeTruthy()
+    // Default test language is Spanish (SSR_LANG='es' — see lib/lang-store.ts).
+    expect(getByText('Aún no hay datos disponibles')).toBeTruthy()
+    expect(getByText(/solicitada pero no tiene datos/)).toBeTruthy()
   })
 })
 
