@@ -10,7 +10,7 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useT, useLangStore } from '@/lib/lang-store'
-import { translateGeneratedText, translateColumnHeader } from '@/lib/generated-content-i18n'
+import { translateGeneratedText, translateColumnHeader, translateResultValue } from '@/lib/generated-content-i18n'
 import { motion } from 'framer-motion'
 import { PlayCircle, Target, TrendingUp, TrendingDown, Minus, BadgeCheck, Trophy, AlertTriangle } from 'lucide-react'
 import {
@@ -671,7 +671,7 @@ export function MiniTable({ rows, idField }: { rows: Record<string, unknown>[]; 
             const id = idField ? r[idField] : null
             return (
               <tr key={i} className="border-t border-border/40">
-                {cols.map(c => <td key={c} className="py-1 pr-4 text-foreground">{fmt(r[c])}</td>)}
+                {cols.map(c => <td key={c} className="py-1 pr-4 text-foreground">{c === 'result' ? translateResultValue(fmt(r[c]), lang) : fmt(r[c])}</td>)}
                 {idField && (
                   <td className="py-1 pr-4">
                     {id !== null && id !== undefined && (
@@ -740,11 +740,14 @@ export function ReportsTable({
           />
         ) : <span />}
         <div className="flex items-center gap-2">
-          <span className="text-[11px] text-muted-foreground">{filtered.length} row{filtered.length === 1 ? '' : 's'}</span>
+          <span className="text-[11px] text-muted-foreground">{t.rowsCountLabel.replace('{count}', String(filtered.length)).replace('{plural}', filtered.length === 1 ? '' : 's')}</span>
           {exportable && (
             <ExportButton
               data={filtered}
-              columns={cols.map(c => ({ header: translateColumnHeader(c, lang), value: (r: Record<string, unknown>) => r[c] }))}
+              columns={cols.map(c => ({
+                header: translateColumnHeader(c, lang),
+                value: (r: Record<string, unknown>) => c === 'result' ? translateResultValue(fmt(r[c]), lang) : r[c],
+              }))}
               filename={csvFilename(filenamePrefix)}
               minWidth="min-w-[90px]"
             />
@@ -761,7 +764,7 @@ export function ReportsTable({
           <tbody>
             {visible.map((r, i) => (
               <tr key={i} className="border-t border-border/40">
-                {cols.map(c => <td key={c} className="py-1 pr-4 text-foreground">{fmt(r[c])}</td>)}
+                {cols.map(c => <td key={c} className="py-1 pr-4 text-foreground">{c === 'result' ? translateResultValue(fmt(r[c]), lang) : fmt(r[c])}</td>)}
               </tr>
             ))}
           </tbody>

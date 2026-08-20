@@ -541,6 +541,18 @@ describe('ReportsTable', () => {
     expect(container.querySelector('table')).toBeNull()
   })
 
+  it('translates the "result" column\'s Passed/Failed data values, not just the column header', () => {
+    // Regression: 'Passed'/'Failed' are SQL CASE-expression literals baked
+    // into the row data itself (ai-service's preview_fetch.py), not app
+    // chrome -- the column HEADER translating was not enough, the cell
+    // VALUES were still raw English even with the toggle on Spanish.
+    render(<ReportsTable rows={rows} searchable exportable filenamePrefix="reports" />)
+    expect(screen.queryByText('Passed')).toBeNull()
+    expect(screen.queryByText('Failed')).toBeNull()
+    expect(screen.getAllByText('Aprobado').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Reprobado').length).toBeGreaterThan(0)
+  })
+
   it('paginates real rows (25 per page)', () => {
     render(<ReportsTable rows={rows} searchable exportable filenamePrefix="reports" />)
     expect(screen.getAllByRole('row')).toHaveLength(1 + 25) // header + 25 body rows
@@ -557,7 +569,8 @@ describe('ReportsTable', () => {
   it('filters rows via the search box, across every column', () => {
     render(<ReportsTable rows={rows} searchable exportable filenamePrefix="reports" />)
     fireEvent.change(screen.getByPlaceholderText('Buscar…'), { target: { value: 'alice' } })
-    expect(screen.getByText('10 rows')).toBeTruthy() // 30/3 rows are alice's
+    // Default test language is Spanish (SSR_LANG='es' — see lib/lang-store.ts).
+    expect(screen.getByText('10 filas')).toBeTruthy() // 30/3 rows are alice's
   })
 
   it('omits the search box when searchable is false', () => {
