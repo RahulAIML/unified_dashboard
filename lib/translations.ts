@@ -401,6 +401,16 @@ export const translations = {
     loading:          'Loading…',
     errorLoading:     'Failed to load data',
     noData:           'No data for this period',
+    publishedDashLoading:      'Loading dashboard…',
+    publishedDashUnavailable: 'Dashboard unavailable',
+    publishedDashNotFound:    'Not found.',
+    publishedDashNotPublished: 'This dashboard has not been published yet.',
+    publishedDashNoAccess:    'You do not have access to this dashboard.',
+    publishedDashLoginRequired: 'Please log in to view this dashboard.',
+    publishedDashFailedToLoad: 'Failed to load ({status})',
+    publishedDashLiveData:    'Live data',
+    publishedDashRefreshed:   'refreshed',
+    publishedDashConfidential: 'CONFIDENTIAL',
     retryLabel:       'Retry',
 
     // ── Real-data column labels ───────────────────────────────
@@ -682,6 +692,10 @@ export const translations = {
     landingFooterSupport:       'Support',
     landingFooterRights:        'All rights reserved.',
     landingLive:                'Live',
+    landingKpiCertified:        'Certified',
+    landingLocationToronto:     'Toronto, Canada',
+    landingLocationMonterrey:   'Monterrey, Mexico',
+    landingLocationMexicoCity:  'Mexico City, Mexico',
 
     // ── Auth — Login ──────────────────────────────────────────
     loginTitle:           'Welcome Back',
@@ -1322,6 +1336,16 @@ export const translations = {
     loading:          'Cargando…',
     errorLoading:     'Error al cargar los datos',
     noData:           'Sin datos para este período',
+    publishedDashLoading:      'Cargando panel…',
+    publishedDashUnavailable: 'Panel no disponible',
+    publishedDashNotFound:    'No encontrado.',
+    publishedDashNotPublished: 'Este panel aún no ha sido publicado.',
+    publishedDashNoAccess:    'No tienes acceso a este panel.',
+    publishedDashLoginRequired: 'Inicia sesión para ver este panel.',
+    publishedDashFailedToLoad: 'Error al cargar ({status})',
+    publishedDashLiveData:    'Datos en vivo',
+    publishedDashRefreshed:   'actualizado',
+    publishedDashConfidential: 'CONFIDENCIAL',
     retryLabel:       'Reintentar',
 
     // ── Real-data column labels ───────────────────────────────
@@ -1603,6 +1627,10 @@ export const translations = {
     landingFooterSupport:       'Soporte',
     landingFooterRights:        'Todos los derechos reservados.',
     landingLive:                'En vivo',
+    landingKpiCertified:        'Certificados',
+    landingLocationToronto:     'Toronto, Canadá',
+    landingLocationMonterrey:   'Monterrey, México',
+    landingLocationMexicoCity:  'Ciudad de México, México',
 
     // ── Auth — Login ──────────────────────────────────────────
     loginTitle:           'Bienvenido de nuevo',

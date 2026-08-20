@@ -2,9 +2,11 @@ import Link from 'next/link'
 import { ShieldCheck } from 'lucide-react'
 import { APP_NAME } from '@/lib/constants'
 
+// Static metadata can't react to the client language toggle -- matches
+// SSR_LANG (lib/lang-store.ts's default, 'es'), same as app/layout.tsx.
 export const metadata = {
-  title: `Privacy Policy · ${APP_NAME} Analytics`,
-  description: `How ${APP_NAME} Analytics collects, uses, and protects your data.`,
+  title: `Política de Privacidad · ${APP_NAME} Analytics`,
+  description: `Cómo ${APP_NAME} Analytics recopila, usa y protege tus datos.`,
 }
 
 export default function PrivacyPage() {
