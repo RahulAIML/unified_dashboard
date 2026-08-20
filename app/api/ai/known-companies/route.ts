@@ -10,24 +10,33 @@
  *      reading r_client on the remote game DB) — real session/user counts,
  *      but that table has no creation-date column, so these can never be
  *      flagged "new".
- *   2. Self-service pharma tenants (lib/db-tenants.ts's pharma_tenants
- *      table, THIS app's own Postgres) — created via the admin "invite a
- *      client" flow (app/api/admin/tenants/route.ts's upsertTenant), which
- *      the picker never surfaced at all before this fix. A tenant invited
- *      here (e.g. a newly onboarded pharma_kpi/exceltis_rest client) has no
- *      real session data yet by definition — that's the whole reported bug:
- *      "Heineken was invited but never showed up in the list, so the name
- *      had to be typed manually."
+ *   2. Pharma tenants, merged from TWO places exactly like
+ *      app/api/admin/tenants/route.ts does: lib/db-tenants.ts's
+ *      pharma_tenants table (self-service tenants created via the admin
+ *      "invite a client" flow, app/api/admin/tenants/route.ts's
+ *      upsertTenant) AND lib/pharma-tenant.ts's hardcoded TENANT_CONFIG
+ *      (developer-onboarded tenants that were never written to that table
+ *      at all — e.g. Heineken, which has been a real, already-deployed
+ *      exceltis_rest tenant baked into code since before the self-service
+ *      wizard existed). Missing the hardcoded half was the actual root
+ *      cause of the reported bug: an admin looked for "Heineken" in the
+ *      picker, and since it's a code-level tenant with no pharma_tenants
+ *      row, a first version of this route (DB-only) still couldn't find it
+ *      — verified live by checking /admin/tenants, which lists Heineken as
+ *      a registered client despite an empty pharma_tenants table locally.
  *
- * `isNew` flags a pharma tenant created within the last 14 days, for the
- * builder UI's red "Nuevo" badge. rolplay_app_sql entries are never flagged
- * new (no reliable signal exists for them — see above), which is an honest
+ * `isNew` flags a SELF-SERVICE pharma tenant (a real DB row) created within
+ * the last 14 days, for the builder UI's red "Nuevo" badge. Hardcoded
+ * tenants and rolplay_app_sql entries are never flagged new — neither has a
+ * creation-date signal to derive it from (a hardcoded tenant was "already
+ * deployed" by definition; r_client has no such column) — an honest
  * limitation, not an oversight.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdminFromRequest } from '@/lib/server-auth'
 import { rateLimit, rateLimitHeaders } from '@/lib/rate-limit'
-import { listActiveTenants } from '@/lib/db-tenants'
+import { listAllTenants } from '@/lib/db-tenants'
+import { TENANT_CONFIG } from '@/lib/pharma-tenant'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -54,31 +63,56 @@ async function fetchRolplayAppCompanies(): Promise<KnownCompanyRow[]> {
     const res = await fetch(`${AI_SERVICE_URL.replace(/\/+$/, '')}/ai/known-companies`, {
       headers, cache: 'no-store', signal: AbortSignal.timeout(20_000),
     })
-    if (!res.ok) return []
+    if (!res.ok) {
+      console.error(`[known-companies] ai-service returned ${res.status}`)
+      return []
+    }
     const rows: { id: number; name: string; sessions: number; users: number }[] = await res.json()
     if (!Array.isArray(rows)) return []
     return rows.map(r => ({
       id: `rolplay_app_sql:${r.id}`, name: r.name, sessions: r.sessions, users: r.users,
       source: 'rolplay_app_sql' as const, isNew: false,
     }))
-  } catch {
-    // The picker is a convenience — free-text entry still works if this fails.
+  } catch (err) {
+    // The picker is a convenience — free-text entry still works if this
+    // fails — but a silent catch here made an ai-service outage
+    // indistinguishable from "this tenant genuinely has no rolplay_app_sql
+    // clients," which is exactly the failure mode already fixed elsewhere
+    // in the discovery pipeline (see ai-service/app/agents/schema_discovery.py).
+    console.error('[known-companies] ai-service unreachable:', (err as Error).message)
     return []
   }
 }
 
 async function fetchPharmaTenants(): Promise<KnownCompanyRow[]> {
+  const now = Date.now()
+  let dbTenants: Awaited<ReturnType<typeof listAllTenants>> = []
   try {
-    const tenants = await listActiveTenants()
-    const now = Date.now()
-    return tenants.map(t => ({
+    dbTenants = await listAllTenants()
+  } catch {
+    // The picker is a convenience — free-text entry still works if this fails.
+  }
+  const dbRows: KnownCompanyRow[] = dbTenants
+    .filter(t => t.isActive)
+    .map(t => ({
       id: `pharma:${t.tenantKey}`, name: t.displayName, sessions: 0, users: 0,
       source: 'pharma' as const,
       isNew: now - new Date(t.createdAt).getTime() < NEW_TENANT_WINDOW_MS,
     }))
-  } catch {
-    return []
-  }
+
+  // Hardcoded tenants never have a DB row -- surfaced the same way
+  // app/api/admin/tenants/route.ts does, keyed off the same TENANT_CONFIG,
+  // skipping any key a DB row already covers (a tenant can be migrated from
+  // code to the DB without appearing twice).
+  const dbKeys = new Set(dbTenants.map(t => t.tenantKey))
+  const hardcodedRows: KnownCompanyRow[] = Object.keys(TENANT_CONFIG)
+    .filter(key => !dbKeys.has(key))
+    .map(key => ({
+      id: `pharma:${key}`, name: key, sessions: 0, users: 0,
+      source: 'pharma' as const, isNew: false,
+    }))
+
+  return [...dbRows, ...hardcodedRows]
 }
 
 export async function GET(request: NextRequest) {
