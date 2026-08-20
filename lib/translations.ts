@@ -425,6 +425,9 @@ export const translations = {
     otherLabel:       'Other',
     pageOfLabel:      'Page {current} of {total}',
     noMatchingRows:   'No matching rows',
+    rowsCountLabel:   '{count} row{plural}',
+    resultPassed:     'Passed',
+    resultFailed:     'Failed',
 
     // ── Evaluation results ────────────────────────────────────
     passLabel:        'PASS',
@@ -912,6 +915,9 @@ export const translations = {
     builderStepReady:            'Ready',
     builderValidationPassed:     'Validation passed',
     builderValidationFailed:     'Validation failed',
+    builderViewAsClient:         'Preview as client',
+    builderBackToEditor:         '← Back to editor',
+    builderClientPreviewNote:    'This is exactly what the client will see once published — no admin controls, no editing chrome.',
     builderErrorTitle:           'We couldn\'t find this company\'s data yet',
     builderErrorMsg:             'This usually means the company hasn\'t been connected to any of our systems yet — it\'s not necessarily a problem on your end. Double-check the company name for typos and try again, or reach out to support if you believe this company should already be connected.',
     builderTryAgain:             'Try again',
@@ -1362,6 +1368,9 @@ export const translations = {
     otherLabel:       'Otro',
     pageOfLabel:      'Página {current} de {total}',
     noMatchingRows:   'No hay filas coincidentes',
+    rowsCountLabel:   '{count} fila{plural}',
+    resultPassed:     'Aprobado',
+    resultFailed:     'Reprobado',
 
     // ── Evaluation results ────────────────────────────────────
     passLabel:        'APROBADO',
@@ -1849,6 +1858,9 @@ export const translations = {
     builderStepReady:            'Listo',
     builderValidationPassed:     'Validación superada',
     builderValidationFailed:     'Validación fallida',
+    builderViewAsClient:         'Vista previa como cliente',
+    builderBackToEditor:         '← Volver al editor',
+    builderClientPreviewNote:    'Esto es exactamente lo que verá el cliente una vez publicado — sin controles de administrador, sin elementos de edición.',
     builderErrorTitle:           'Todavía no encontramos los datos de esta empresa',
     builderErrorMsg:             'Esto normalmente significa que la empresa aún no se ha conectado a ninguno de nuestros sistemas — no es necesariamente un problema de tu parte. Verifica que el nombre de la empresa esté bien escrito e inténtalo de nuevo, o contacta a soporte si crees que esta empresa ya debería estar conectada.',
     builderTryAgain:              'Intentar de nuevo',

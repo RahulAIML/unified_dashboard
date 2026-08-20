@@ -188,3 +188,17 @@ export function translateColumnHeader(column: string, lang: Lang): string {
   if (lang === 'es' && COLUMN_HEADER_ES[column]) return COLUMN_HEADER_ES[column]
   return column.replace(/_/g, ' ')
 }
+
+// The Reports table's "result" column value comes straight from a SQL CASE
+// expression's own literal strings ('Passed'/'Failed' -- ai-service's
+// preview_fetch.py), not a translation-aware label -- unlike a column
+// HEADER (always one of a fixed, known set of names), a table CELL value
+// could be anything (a rep's email, a simulator name), so this is only ever
+// applied at the one call site that renders the "result" column
+// specifically, never generically to every cell.
+const RESULT_VALUE_ES: Record<string, string> = { Passed: 'Aprobado', Failed: 'Reprobado' }
+
+export function translateResultValue(value: string, lang: Lang): string {
+  if (lang === 'es' && RESULT_VALUE_ES[value]) return RESULT_VALUE_ES[value]
+  return value
+}

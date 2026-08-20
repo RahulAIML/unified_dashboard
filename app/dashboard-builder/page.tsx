@@ -22,7 +22,7 @@ interface WidgetConfig {
 }
 interface DashRow { id: string; title?: string | null; widgets: WidgetConfig[] }
 interface DashPage { id: string; title: string; rows: DashRow[] }
-interface DashboardConfig { company: string; slug: string; title: string; connector: string; rows: DashRow[]; pages?: DashPage[]; recommendations: string[]; insights?: string[] }
+interface DashboardConfig { company: string; slug: string; title: string; connector: string; rows: DashRow[]; pages?: DashPage[]; recommendations: string[]; insights?: string[]; confidential?: boolean }
 interface ValidationIssue { severity: 'error' | 'warning' | 'info'; code: string; message: string }
 interface ValidationReport { ok: boolean; issues: ValidationIssue[]; summary: string }
 interface JobState {
@@ -304,6 +304,15 @@ function DashboardBuilder() {
     } catch { /* clipboard unavailable — silently ignore */ }
   }
 
+  // Toggles the preview card between the admin's own editing chrome
+  // (validation badge, publish button, empty-state acknowledgment) and a
+  // stripped-down view matching /d/[slug]'s exact wrapper markup -- the
+  // page a real client sees once published. The app's Sidebar/DashboardFooter
+  // shell (components/LayoutContent.tsx) already wraps this page identically
+  // to the published one; the only real difference was the admin-only
+  // controls inside the preview card itself, which this hides.
+  const [endUserPreview, setEndUserPreview] = useState(false)
+
   const PAUSED_PHASES: Phase[] = ['needs_ids', 'review_services']
   const isPaused = !!job && PAUSED_PHASES.includes(job.phase)
   const running = !!job && job.phase !== 'done' && job.phase !== 'error' && !isPaused
@@ -572,18 +581,64 @@ function DashboardBuilder() {
       )}
 
       {/* Preview */}
-      {job?.dashboard && job.preview && (
+      {job?.dashboard && job.preview && endUserPreview && (
         <div className="mt-6 rounded-2xl border border-border bg-card p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between gap-4 mb-2">
+            <p className="text-xs text-muted-foreground italic">{t.builderClientPreviewNote}</p>
+            <button onClick={() => setEndUserPreview(false)}
+              className="shrink-0 text-xs font-semibold text-primary hover:underline whitespace-nowrap">
+              {t.builderBackToEditor}
+            </button>
+          </div>
+          {/* Everything below this line matches app/d/[slug]/page.tsx's own
+              markup exactly (title, confidential badge, connector line,
+              DashboardRenderer, recommendations) -- no validation badge, no
+              publish button, no empty-state acknowledgment checkbox. The
+              Sidebar/DashboardFooter shell around this whole page
+              (components/LayoutContent.tsx) is already identical to what
+              wraps the published page, so this card is the only piece that
+              needed to change to give an honest "what will the client see"
+              preview. */}
+          <header className="mb-6">
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold text-foreground">{translateGeneratedText(job.dashboard.title, lang)}</h1>
+              {job.dashboard.confidential && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold tracking-wide bg-destructive/10 text-destructive border border-destructive/30">
+                  {t.publishedDashConfidential}
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {t.publishedDashLiveData} · {humanizeConnector(job.dashboard.connector, lang)}
+            </p>
+          </header>
+          <DashboardRenderer config={job.dashboard} preview={job.preview} />
+          {job.dashboard.recommendations.length > 0 && (
+            <ul className="mt-6 space-y-1 text-xs text-muted-foreground list-disc pl-5">
+              {job.dashboard.recommendations.map((r, i) => <li key={i}>{r}</li>)}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {job?.dashboard && job.preview && !endUserPreview && (
+        <div className="mt-6 rounded-2xl border border-border bg-card p-6 shadow-sm">
+          <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
             <div>
               <h2 className="text-lg font-bold text-foreground">{translateGeneratedText(job.dashboard.title, lang)}</h2>
               <p className="text-xs text-muted-foreground">{t.builderLivePreviewPre}{humanizeConnector(job.dashboard.connector, lang)}{t.builderLivePreviewPost}</p>
             </div>
-            {job.validation && (
-              <span className={`text-xs font-semibold px-2 py-1 rounded-full ${job.validation.ok ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-destructive/10 text-destructive'}`}>
-                {job.validation.ok ? t.builderValidationPassed : t.builderValidationFailed} · {job.validation.summary}
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              <button onClick={() => setEndUserPreview(true)}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-border bg-muted hover:bg-muted/70 transition-colors whitespace-nowrap">
+                {t.builderViewAsClient}
+              </button>
+              {job.validation && (
+                <span className={`text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap ${job.validation.ok ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-destructive/10 text-destructive'}`}>
+                  {job.validation.ok ? t.builderValidationPassed : t.builderValidationFailed} · {job.validation.summary}
+                </span>
+              )}
+            </div>
           </div>
 
           <DashboardRenderer config={job.dashboard} preview={job.preview} />

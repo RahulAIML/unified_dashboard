@@ -57,7 +57,7 @@ vi.mock('@/lib/lang-store', () => ({
       }),
 }))
 
-const fetchMock = vi.fn(async () => ({ ok: true, json: async () => [] }))
+const fetchMock = vi.fn(async (): Promise<{ ok: boolean; json: () => Promise<unknown[]> }> => ({ ok: true, json: async () => [] }))
 vi.stubGlobal('fetch', fetchMock)
 
 import DashboardBuilderPage from '../page'
