@@ -21,6 +21,7 @@ import { NextRequest } from 'next/server'
 const requireAdminFromRequest = vi.fn()
 const rateLimit = vi.fn()
 const listAllTenants = vi.fn()
+const recordSeenAndGetFirstSeen = vi.fn()
 
 vi.mock('@/lib/server-auth', () => ({
   requireAdminFromRequest: (...args: unknown[]) => requireAdminFromRequest(...args),
@@ -31,6 +32,10 @@ vi.mock('@/lib/rate-limit', () => ({
 }))
 vi.mock('@/lib/db-tenants', () => ({
   listAllTenants: (...args: unknown[]) => listAllTenants(...args),
+}))
+vi.mock('@/lib/rolplay-app-first-seen', () => ({
+  recordSeenAndGetFirstSeen: (...args: unknown[]) => recordSeenAndGetFirstSeen(...args),
+  NEW_TENANT_WINDOW_MS: 14 * 24 * 60 * 60 * 1000,
 }))
 // A small, fixed stand-in for the real (much larger) hardcoded config --
 // exercises the exact same merge logic without depending on the real
@@ -71,6 +76,7 @@ beforeEach(() => {
   requireAdminFromRequest.mockReset().mockResolvedValue(ADMIN)
   rateLimit.mockReset().mockReturnValue({ ok: true, remaining: 59 })
   listAllTenants.mockReset().mockResolvedValue([])
+  recordSeenAndGetFirstSeen.mockReset().mockResolvedValue(new Map())
   fetchSpy.mockReset()
   vi.stubGlobal('fetch', fetchSpy)
 })
@@ -160,11 +166,39 @@ describe('GET /api/ai/known-companies', () => {
     expect(body.find((c: { name: string }) => c.name === 'heineken').isNew).toBe(false)
   })
 
-  it('never flags a rolplay_app_sql entry as isNew (no creation-date signal exists for it)', async () => {
+  it('flags a rolplay_app_sql client we first saw within the last 14 days as isNew', async () => {
     fetchSpy.mockResolvedValue({
       ok: true,
       json: async () => [{ id: 29, name: 'Siigo', sessions: 154, users: 73 }],
     })
+    recordSeenAndGetFirstSeen.mockResolvedValue(new Map([[29, new Date()]]))
+
+    const { GET } = await loadRoute()
+    const body = await (await GET(getReq())).json()
+    expect(body.find((c: { name: string }) => c.name === 'Siigo').isNew).toBe(true)
+    expect(recordSeenAndGetFirstSeen).toHaveBeenCalledWith([{ id: 29, name: 'Siigo', sessions: 154, users: 73 }])
+  })
+
+  it('does not flag a rolplay_app_sql client first seen long ago as isNew', async () => {
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      json: async () => [{ id: 29, name: 'Siigo', sessions: 154, users: 73 }],
+    })
+    const longAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
+    recordSeenAndGetFirstSeen.mockResolvedValue(new Map([[29, longAgo]]))
+
+    const { GET } = await loadRoute()
+    const body = await (await GET(getReq())).json()
+    expect(body.find((c: { name: string }) => c.name === 'Siigo').isNew).toBe(false)
+  })
+
+  it('does not flag a rolplay_app_sql client as isNew when first-seen tracking is unavailable', async () => {
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      json: async () => [{ id: 29, name: 'Siigo', sessions: 154, users: 73 }],
+    })
+    recordSeenAndGetFirstSeen.mockResolvedValue(new Map()) // tracking DB unreachable -- degrades gracefully
+
     const { GET } = await loadRoute()
     const body = await (await GET(getReq())).json()
     expect(body.find((c: { name: string }) => c.name === 'Siigo').isNew).toBe(false)
