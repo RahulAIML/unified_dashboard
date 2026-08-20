@@ -49,20 +49,30 @@ async def known_companies() -> list[dict]:
     r_client, so a manager can select rather than guess spelling. Every other
     connector still only has free-text entry; this connector is the one the
     user asked to make fully self-service.
+
+    r_client DOES carry a real created_on datetime (confirmed live via
+    information_schema — verified sane, distinct, correctly-ordered values,
+    e.g. a client created 3 days before this comment was written) -- an
+    earlier version of this endpoint assumed it didn't and tracked "first
+    seen" separately in our own Postgres as a workaround. That workaround is
+    gone; created_on is the real signal and the Next.js route derives isNew
+    from it directly, the same way it already does for DB-backed pharma
+    tenants.
     """
     from ..connectors.rolplay_app import RolplayAppConnector
 
     conn = RolplayAppConnector()
     rows = await conn._sql(
-        "SELECT c.ID AS id, c.name AS name, COUNT(s.ID) AS sessions, COUNT(DISTINCT u.ID) AS users "
+        "SELECT c.ID AS id, c.name AS name, c.created_on AS created_on, "
+        "COUNT(s.ID) AS sessions, COUNT(DISTINCT u.ID) AS users "
         "FROM r_client c LEFT JOIN r_user u ON u.client_id = c.ID "
         "LEFT JOIN r_user_session s ON s.user_id = u.ID "
-        "GROUP BY c.ID, c.name ORDER BY sessions DESC, c.name ASC"
+        "GROUP BY c.ID, c.name, c.created_on ORDER BY sessions DESC, c.name ASC"
     )
     if not rows:
         return []
     return [
-        {"id": int(r["id"]), "name": r["name"],
+        {"id": int(r["id"]), "name": r["name"], "created_on": r.get("created_on"),
          "sessions": int(r.get("sessions") or 0), "users": int(r.get("users") or 0)}
         for r in rows
     ]
