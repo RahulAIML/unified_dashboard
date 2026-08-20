@@ -33,6 +33,7 @@ const EMPTY = {
   commercialDomain: [] as { domain: string; avgScore: number; sessions: number }[],
   topStrengths: [] as { item: string; count: number }[],
   topOpportunities: [] as { item: string; count: number }[],
+  closingDataSampled: false,
 }
 
 export async function GET(request: NextRequest) {
@@ -63,7 +64,7 @@ export async function GET(request: NextRequest) {
     const prevFrom = new Date(prevTo.getTime() - spanMs)
     const prevRangeIso = { fromIso: prevFrom.toISOString(), toIso: prevTo.toISOString() }
 
-    const [group1, prevGroup1, adoptionMovementRate, prevAdoptionMovementRate, commercialDomain, topStrengths, topOpportunities] = await Promise.all([
+    const [group1, prevGroup1, adoptionMovement, prevAdoptionMovement, commercialDomain, topStrengths, topOpportunities] = await Promise.all([
       rolplayAppCesarGroup1(clientId, rangeIso, solution),
       rolplayAppCesarGroup1(clientId, prevRangeIso, solution),
       rolplayAppAdoptionMovementRate(clientId, rangeIso, solution),
@@ -73,6 +74,11 @@ export async function GET(request: NextRequest) {
       rolplayAppRubricaTags(clientId, false, rangeIso, solution),
     ])
 
+    // All four "closing data" derived sources share the same underlying
+    // bounded scan for this clientId/range/solution -- true if ANY of them
+    // hit the sample cap (they're the same query, so in practice all agree).
+    const closingDataSampled = commercialDomain.sampled || topStrengths.sampled || topOpportunities.sampled
+
     return buildSuccess(
       {
         ...group1,
@@ -81,8 +87,9 @@ export async function GET(request: NextRequest) {
         prevMauRate: prevGroup1.mauRate,
         prevDeltaScore: prevGroup1.deltaScore,
         prevReadinessIndex: prevGroup1.readinessIndex,
-        adoptionMovementRate, prevAdoptionMovementRate,
-        commercialDomain, topStrengths, topOpportunities,
+        adoptionMovementRate: adoptionMovement.value, prevAdoptionMovementRate: prevAdoptionMovement.value,
+        commercialDomain: commercialDomain.data, topStrengths: topStrengths.data, topOpportunities: topOpportunities.data,
+        closingDataSampled,
       },
       { from: range.from.toISOString(), to: range.to.toISOString(), source: `rolplay-app-${clientId}` },
     )

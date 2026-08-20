@@ -56,6 +56,11 @@ interface CesarKpisResponse {
   commercialDomain: { domain: string; avgScore: number; sessions: number }[]
   topStrengths: { item: string; count: number }[]
   topOpportunities: { item: string; count: number }[]
+  // True when Commercial Domain / Top Strengths / Top Opportunities /
+  // Adoption Movement Rate were all computed from a truncated most-recent-N
+  // scan (the bridge's closing-data sampling cap was hit), same class of
+  // truncation as deltaScoreSampled above but for these four KPIs instead.
+  closingDataSampled?: boolean
 }
 
 // Sugerencia_de_KPIs_Cesar.xlsx, KPI-1.1: "<80% indica barreras de acceso,
@@ -259,7 +264,7 @@ export default function KpisPage() {
                 title={t.kpiCommercialDomainTitle}
                 description={t.kpiCommercialDomainDesc}
                 formula={t.kpiCommercialDomainFormula}
-                footer={t.kpiCommercialDomainFooter}
+                footer={data?.closingDataSampled ? `${t.kpiCommercialDomainFooter} ${t.kpiDeltaScoreSampledNote}` : t.kpiCommercialDomainFooter}
                 icon={<Briefcase className="w-4 h-4" />}
               >
                 {!hasCommercialDomainData ? (
@@ -283,7 +288,7 @@ export default function KpisPage() {
                 title={t.kpiTopStrengthsTitle}
                 description={t.kpiTopStrengthsDesc}
                 formula={t.kpiTopStrengthsFormula}
-                footer={t.kpiTopStrengthsFooter}
+                footer={data?.closingDataSampled ? `${t.kpiTopStrengthsFooter} ${t.kpiDeltaScoreSampledNote}` : t.kpiTopStrengthsFooter}
                 icon={<ThumbsUp className="w-4 h-4" />}
               >
                 {!hasStrengthsData ? (
@@ -305,7 +310,7 @@ export default function KpisPage() {
                 title={t.kpiTopOpportunitiesTitle}
                 description={t.kpiTopOpportunitiesDesc}
                 formula={t.kpiTopOpportunitiesFormula}
-                footer={t.kpiTopOpportunitiesFooter}
+                footer={data?.closingDataSampled ? `${t.kpiTopOpportunitiesFooter} ${t.kpiDeltaScoreSampledNote}` : t.kpiTopOpportunitiesFooter}
                 icon={<ThumbsDown className="w-4 h-4" />}
               >
                 {!hasOpportunitiesData ? (
