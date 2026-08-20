@@ -191,7 +191,7 @@ function DashboardBuilder() {
 
   const stopPoll = () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null } }
   useEffect(() => () => stopPoll(), [])
-  useEffect(() => { logEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [job?.logs.length])
+  useEffect(() => { logEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [job?.logs?.length])
 
   const poll = useCallback((jobId: string) => {
     stopPoll()
