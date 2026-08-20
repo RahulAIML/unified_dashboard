@@ -158,9 +158,18 @@ const BUILTIN_DOMAIN_MAP: Record<string, number> = {
   'besins-healthcare.com': 14,
   'rowe.com.do': 25,
   'rowe.com': 25,
-  // M8's real domain (arceralifesciences.com) is intentionally NOT here: it is
-  // also the pharma M8 domain and resolveOrgType checks pharma first — the two
-  // M8 configs must be reconciled before M8 can route to the query endpoint.
+  // M8's rolplay_app_sql client. resolveOrgType checks pharma first, so this
+  // does NOT change which pipeline an M8 user's dashboard is built from (still
+  // 'pharma', tenant 'm8', backed by pharma_exceltis_rest) -- it only lets
+  // app/api/dashboard/overview/route.ts also resolve this SECOND, real data
+  // source for the same person and compose it into the tenant-wide Overview
+  // (see mergeOverviewSources below). Verified live and non-ambiguous: a
+  // direct query of r_user WHERE client_id=24 found 85 of 92 real users on
+  // this exact domain -- distinct from the audioweb.com.mx shared-staff
+  // domain excluded below, which really does span multiple unrelated clients.
+  'arceralifesciences.com': 24,
+  // audioweb.com.mx is deliberately excluded: it's the shared staff domain and
+  // spans several clients (Takeda/M8/Rowe), so it can't map to one.
 }
 
 function domainMap(): Map<string, number> {
@@ -492,6 +501,41 @@ async function _rolplayAppOverviewImpl(
     passRate:             passRate(cur),
     prevPassRate:         prev ? passRate(prev) : null,
     passedEvaluations:    cur.passed,
+  }
+}
+
+/**
+ * Composes a pharma tenant's Overview KPIs with a REAL secondary
+ * rolplay_app_sql source for the same authenticated person (currently only
+ * M8: pharma_exceltis_rest is the tenant's primary sim bridge, but its real
+ * reps also have activity in rolplay_app_sql under a distinct client_id on
+ * the same real domain -- two live systems, the same real people, not a
+ * dead/live pair). Counts sum (both are real, disjoint activity logs); rate
+ * fields are weighted by each source's totalEvaluations and a null rate is
+ * EXCLUDED from the weighted average rather than treated as zero, matching
+ * the null-vs-zero rule used throughout this KPI layer. `passRateLegend`
+ * always comes from the pharma side -- rolplay_app_sql has no configured
+ * passing-criteria legend of its own.
+ */
+export function mergeOverviewSources(primary: OverviewApiResponse, secondary: OverviewApiResponse): OverviewApiResponse {
+  const weightedAvg = (aVal: number | null, aWeight: number, bVal: number | null, bWeight: number): number | null => {
+    if (aVal == null && bVal == null) return null
+    if (aVal == null) return bVal
+    if (bVal == null) return aVal
+    const totalWeight = aWeight + bWeight
+    if (totalWeight <= 0) return null
+    return Math.round(((aVal * aWeight + bVal * bWeight) / totalWeight) * 10) / 10
+  }
+
+  return {
+    totalEvaluations:     primary.totalEvaluations + secondary.totalEvaluations,
+    prevTotalEvaluations: primary.prevTotalEvaluations + secondary.prevTotalEvaluations,
+    avgScore:     weightedAvg(primary.avgScore, primary.totalEvaluations, secondary.avgScore, secondary.totalEvaluations),
+    prevAvgScore: weightedAvg(primary.prevAvgScore, primary.prevTotalEvaluations, secondary.prevAvgScore, secondary.prevTotalEvaluations),
+    passRate:     weightedAvg(primary.passRate, primary.totalEvaluations, secondary.passRate, secondary.totalEvaluations),
+    prevPassRate: weightedAvg(primary.prevPassRate, primary.prevTotalEvaluations, secondary.prevPassRate, secondary.prevTotalEvaluations),
+    passedEvaluations: primary.passedEvaluations + secondary.passedEvaluations,
+    passRateLegend: primary.passRateLegend,
   }
 }
 
