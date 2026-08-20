@@ -237,11 +237,24 @@ async def _rolplay_app_schema(svc, schema, log: LogFn) -> None:
 
     client_id = int((svc.handle or {}).get("client_id") or 0)
     scored = 0
+    discovery_failed = False
     if client_id:
         status, body = await post_json(
             get_settings().rolplay_app_sql_url,
             {"sql": f"SELECT COUNT(sc) AS scored FROM ({score_stats_inner(client_id)}) t"},
         )
+        # post_json never raises -- a network error/timeout comes back as
+        # {"__error": "..."} (app/http.py), which (body or {}).get("data")
+        # silently reduces to None, indistinguishable from "this client
+        # genuinely has zero scored sessions." A transient bridge outage
+        # during discovery must not be reported as "verified: no
+        # capabilities" -- that's the opposite failure mode from fabricating
+        # a capability, but equally dishonest. Log it and flag the schema's
+        # own note so this run is visibly incomplete, not silently empty.
+        if isinstance(body, dict) and "__error" in body:
+            discovery_failed = True
+            await log("schema_discovery", "error",
+                      f"rolplay-app client_id={client_id}: score-count query failed ({body['__error']}) -- scored count may be understated")
         data = (body or {}).get("data") if isinstance(body, dict) else None
         if data:
             scored = int(data[0].get("scored") or 0)
@@ -256,6 +269,10 @@ async def _rolplay_app_schema(svc, schema, log: LogFn) -> None:
                 f"WHERE u.client_id = {client_id} GROUP BY sim.category"
             )},
         )
+        if isinstance(mod_body, dict) and "__error" in mod_body:
+            discovery_failed = True
+            await log("schema_discovery", "error",
+                      f"rolplay-app client_id={client_id}: module-discovery query failed ({mod_body['__error']}) -- modules list may be incomplete or empty")
         mod_rows = (mod_body or {}).get("data") if isinstance(mod_body, dict) else None
         modules: list[str] = []
         mins: list[str] = []
@@ -312,6 +329,12 @@ async def _rolplay_app_schema(svc, schema, log: LogFn) -> None:
     else:
         schema.note = "Rolplay-app platform: sessions recorded, no scores found — counts-only."
         await log("schema_discovery", "info", "No scores in this client's sessions — counts-only dashboard")
+
+    if discovery_failed:
+        # Appended, never replaces the note above -- a manager reviewing this
+        # run must see BOTH what was found and that the finding is incomplete,
+        # not just one or the other.
+        schema.note += " WARNING: one or more discovery queries failed against the bridge -- modules/scores above may be incomplete, not necessarily a true zero. Retry before trusting this as final."
 
     schema.metrics = metrics
 
