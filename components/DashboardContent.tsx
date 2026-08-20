@@ -422,11 +422,17 @@ export function DashboardContent() {
   // from the per-activity breakdown any tenant already returns. Generic: renders
   // only when there is at least one activity with sessions.
   const insights = useMemo(() => {
-    const rows = (ucBreakdown?.data ?? []).filter(r => Number(r.totalEvaluations) > 0)
+    // r.passRate is already the correct passed/SCORED ratio computed
+    // server-side (lib/bridge-rolplay-app.ts) -- re-deriving it here from
+    // passed/totalEvaluations divides by every session including unscoreable
+    // ones, understating the true rate and risking a wrong "weakest activity"
+    // pick. A usecase with no real pass rate (passRate === null, nothing
+    // scored yet) is excluded rather than assigned a fabricated rate.
+    const rows = (ucBreakdown?.data ?? []).filter(r => Number(r.totalEvaluations) > 0 && r.passRate != null)
     if (!rows.length) return null
     const withRate = rows.map(r => ({
       name: r.usecase_name?.trim() || `UC-${r.usecaseId}`,
-      rate: (Number(r.passed) / Number(r.totalEvaluations)) * 100,
+      rate: Number(r.passRate),
     }))
     const sorted    = [...withRate].sort((a, b) => a.rate - b.rate)
     const weakest   = sorted.filter(r => r.rate < 60).slice(0, 3)
@@ -469,7 +475,9 @@ export function DashboardContent() {
     {
       key: "passed",
       header: t.colResult,
-      render: r => (
+      render: r => r.passed == null ? (
+        <span className="text-muted-foreground">—</span>
+      ) : (
         <span className={cn(
           "inline-flex px-2 py-0.5 rounded-full text-xs font-semibold",
           r.passed

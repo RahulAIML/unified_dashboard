@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from . import journey as journey_lib
@@ -161,7 +161,17 @@ def _prev_period(frm: str, to: str) -> tuple[str, str] | None:
     rolplayAppOverview's prevRange computation exactly (same "period
     immediately preceding the current one" definition), so a period-over-
     period KPI delta compares against the same baseline the hand-built app
-    would show for this same range."""
+    would show for this same range.
+
+    prev_to is `frm` minus one day, NOT `frm` itself: _sql_date_clause pads
+    both ends of a date-only bound to a full day (00:00:00..23:59:59), so a
+    previous window ending exactly on `frm` would count the ENTIRE calendar
+    day `frm` in both the current period (which starts at `frm 00:00:00`)
+    and the previous one (which would end at `frm 23:59:59`) -- a real,
+    material double-count for any typical 7-30 day dashboard window, not a
+    one-instant edge case. Matches the -1 adjustment
+    app/api/dashboard/cesar-kpis/route.ts already uses for the same reason.
+    """
     try:
         f = datetime.combine(date.fromisoformat(frm), datetime.min.time())
         t = datetime.combine(date.fromisoformat(to), datetime.min.time())
@@ -170,7 +180,9 @@ def _prev_period(frm: str, to: str) -> tuple[str, str] | None:
     if t <= f:
         return None
     span = t - f
-    return (f - span).date().isoformat(), frm
+    prev_to = f - timedelta(days=1)
+    prev_from = prev_to - span
+    return prev_from.date().isoformat(), prev_to.date().isoformat()
 
 
 def _calc_delta_pct(current: float | None, prev: float | None) -> float | None:

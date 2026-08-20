@@ -57,10 +57,17 @@ vi.mock('@/lib/lang-store', () => ({
     usecase:            'Use case',
     passed:             'Passed',
     failed:             'Failed',
+    insightsTitle:        'AI Insights',
+    insightsSub:          'Auto-derived from your data',
+    insightsFocusAreas:   'Focus areas',
+    insightsAllStrong:    'All activities are performing well',
+    insightsStrongest:    'Strongest activity',
+    insightsRecommendation: 'Recommendation',
+    insightsRecoText:     'Keep up the momentum. Average score:',
   }),
 }))
 vi.mock('@/lib/hooks/useClientBrand', () => ({
-  useClientBrand: () => ({ name: 'TestBrand', primaryColor: '#ff0000' }),
+  useClientBrand: () => ({ name: 'TestBrand', primaryColor: '#ff0000', chartColors: ['#ff0000', '#00ff00', '#0000ff'] }),
 }))
 vi.mock('@/components/AuthProvider', () => ({
   useAuthContext: () => ({ user: { id: 1, email: 'u@test.com' }, isLoading: false }),
@@ -99,6 +106,7 @@ vi.mock('@/components/charts/DonutChart',        () => ({ DonutChart:        () 
 let mockAccessStatus: Record<string, unknown> | null = null
 let mockAccessLoading = false
 let mockOverviewData: Record<string, unknown> | null = null
+let mockUcBreakdown: Record<string, unknown> | null = null
 
 vi.mock('@/lib/hooks/useApi', () => ({
   useApi: (url: string | null) => {
@@ -107,6 +115,9 @@ vi.mock('@/lib/hooks/useApi', () => ({
     }
     if (url?.includes('/api/dashboard/overview') && !url.includes('solution=certification')) {
       return { data: mockOverviewData, loading: false, error: null }
+    }
+    if (url?.includes('usecase-breakdown')) {
+      return { data: mockUcBreakdown, loading: false, error: null }
     }
     return { data: null, loading: false, error: null }
   },
@@ -123,6 +134,7 @@ beforeEach(() => {
   mockAccessStatus  = null
   mockAccessLoading = false
   mockOverviewData  = null
+  mockUcBreakdown   = null
   mockRouterReplace.mockClear()
 })
 
@@ -206,6 +218,49 @@ describe('DashboardContent — null vs. genuine zero (Avg Score / Pass Rate)', (
     // elsewhere on the page (e.g. a delta pill).
     expect(screen.getAllByText('0').length).toBeGreaterThanOrEqual(1)
     expect(screen.queryByText('—')).toBeNull()
+  })
+})
+
+describe('DashboardContent — insights (weakest/strongest use case)', () => {
+  it('uses the server-computed passRate, not a re-derived passed/totalEvaluations ratio', async () => {
+    mockAccessStatus = coachAccess()
+    mockOverviewData = {
+      totalEvaluations: 100, avgScore: 82, passRate: 65, passedEvaluations: 65,
+      prevTotalEvaluations: 90, prevAvgScore: 80, prevPassRate: 60,
+      passRateLegend: null,
+    }
+    // `passed` (a raw count of only the SCORED-and-passed rows) intentionally
+    // disagrees with `totalEvaluations` here -- if insights recomputed
+    // passed/totalEvaluations it would derive 20%; the real, server-computed
+    // passRate (scoped to scored sessions only) is 80%. Regression: the UI
+    // must reflect the real 80%, not a fabricated 20%.
+    mockUcBreakdown = {
+      data: [
+        { usecaseId: 1, usecase_name: 'Objection Handling', totalEvaluations: 10, avgScore: 88, passRate: 80, passed: 2 },
+      ],
+    }
+    await renderPastInitialShimmer()
+    expect(screen.getByText('Objection Handling')).toBeTruthy()
+    expect(screen.getByText('80%')).toBeTruthy()
+    expect(screen.queryByText('20%')).toBeNull()
+  })
+
+  it('excludes a use case with no real pass rate (passRate null) instead of assigning it a fabricated rate', async () => {
+    mockAccessStatus = coachAccess()
+    mockOverviewData = {
+      totalEvaluations: 100, avgScore: 82, passRate: 65, passedEvaluations: 65,
+      prevTotalEvaluations: 90, prevAvgScore: 60, prevPassRate: 60,
+      passRateLegend: null,
+    }
+    mockUcBreakdown = {
+      data: [
+        { usecaseId: 1, usecase_name: 'Unscored Activity', totalEvaluations: 5, avgScore: null, passRate: null, passed: 0 },
+        { usecaseId: 2, usecase_name: 'Strong Activity', totalEvaluations: 8, avgScore: 90, passRate: 90, passed: 8 },
+      ],
+    }
+    await renderPastInitialShimmer()
+    expect(screen.queryByText('Unscored Activity')).toBeNull()
+    expect(screen.getByText('Strong Activity')).toBeTruthy()
   })
 })
 
