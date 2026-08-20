@@ -354,6 +354,32 @@ describe('DashboardRenderer — end to end with real widget shapes', () => {
     expect(getByText('+50%')).toBeTruthy()
   })
 
+  it('shows the passing-threshold legend under a pass_rate KPI tile', () => {
+    const config = {
+      company: 'Siigo', slug: 'siigo', title: 'Siigo Analytics', connector: 'rolplay_app_sql',
+      rows: [{ id: 'r1', widgets: [{ id: 'tile_pass_rate', type: 'kpi_tile', title: 'Pass Rate', metric_key: 'pass_rate' }] }],
+      recommendations: [],
+    }
+    const preview = { widgets: [{ widget_id: 'tile_pass_rate', ok: true, value: 62.5, legend: 'Passing threshold: 90 pts' }] }
+
+    const { getByText } = render(<DashboardRenderer config={config} preview={preview} />)
+
+    expect(getByText('Passing threshold: 90 pts')).toBeTruthy()
+  })
+
+  it('shows an honest no-data state, no legend, for a tenant with no passing criteria', () => {
+    const config = {
+      company: 'Sanfer', slug: 'sanfer', title: 'Sanfer Analytics', connector: 'rolplay_app_sql',
+      rows: [{ id: 'r1', widgets: [{ id: 'tile_pass_rate', type: 'kpi_tile', title: 'Pass Rate', metric_key: 'pass_rate' }] }],
+      recommendations: [],
+    }
+    const preview = { widgets: [{ widget_id: 'tile_pass_rate', ok: false, value: null, error: 'This tenant has no score-based passing criteria configured' }] }
+
+    const { queryByText } = render(<DashboardRenderer config={config} preview={preview} />)
+
+    expect(queryByText(/Passing threshold/)).toBeNull()
+  })
+
   it('shows a down arrow for a KPI tile that regressed', () => {
     const config = {
       company: 'Siigo', slug: 'siigo', title: 'Siigo Analytics', connector: 'rolplay_app_sql',
