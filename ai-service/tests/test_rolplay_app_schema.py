@@ -108,6 +108,51 @@ class RolplayAppSchemaTests(unittest.TestCase):
         self.assertEqual(schema.modules, [])
         self.assertIsNone(schema.date_range)
 
+    def test_bridge_failure_during_discovery_is_flagged_not_silently_empty(self) -> None:
+        """Regression: post_json never raises -- a network error/timeout comes
+        back as {"__error": "..."} (app/http.py), which the old code reduced
+        straight to scored=0/modules=[] with no distinction from a client that
+        genuinely has zero data. A real client with real modules must never
+        be reported as "verified: no capabilities" just because the bridge
+        was briefly unreachable during discovery -- that must show up as an
+        explicit warning in schema.note, not a clean empty result."""
+        async def failing_post_json(_url, _payload):
+            return 0, {"__error": "TimeoutError: rolplay-app SQL timed out after 20 seconds"}
+
+        schema = NormalizedSchema(company="Test Co", slug="test-co")
+        with patch("app.agents.schema_discovery.post_json", new=AsyncMock(side_effect=failing_post_json)):
+            asyncio.run(schema_discovery._rolplay_app_schema(_svc(13), schema, _noop_log))
+
+        self.assertEqual(schema.modules, [])
+        self.assertIn("WARNING", schema.note)
+        self.assertIn("failed", schema.note.lower())
+
+    def test_one_query_failing_still_flags_the_warning(self) -> None:
+        """Only the module/date-range query fails; the score-count query
+        succeeds. The warning must still surface -- a partial failure is
+        still a failure, not a clean result with one gap silently absorbed."""
+        async def fake_post_json(_url, payload):
+            if "GROUP BY sim.category" in payload["sql"]:
+                return 0, {"__error": "connection reset"}
+            return 200, {"result": "success", "data": [{"scored": 5}]}
+
+        schema = NormalizedSchema(company="Test Co", slug="test-co")
+        with patch("app.agents.schema_discovery.post_json", new=AsyncMock(side_effect=fake_post_json)):
+            asyncio.run(schema_discovery._rolplay_app_schema(_svc(13), schema, _noop_log))
+
+        self.assertEqual(schema.modules, [])
+        self.assertIn("WARNING", schema.note)
+        # The score-derived metrics must still be added -- that query genuinely succeeded.
+        keys = {m.key for m in schema.metrics}
+        self.assertIn("avg_score", keys)
+
+    def test_successful_discovery_never_carries_the_warning(self) -> None:
+        schema = self._run(
+            13, [{"category": "COACH", "min_d": "2026-05-09 00:00:00", "max_d": "2026-05-11 00:00:00"}],
+            scored_count=5,
+        )
+        self.assertNotIn("WARNING", schema.note)
+
 
 class CapabilityAndBusinessQuestionTests(unittest.TestCase):
     """Semantic-layer additions: each rolplay_app_sql module becomes a typed
