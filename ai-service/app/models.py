@@ -283,6 +283,14 @@ class DashboardConfig(BaseModel):
     # edit (POST /ai/dashboard/{slug}/required-sections) can add/remove a
     # required section without re-running discovery/planning from scratch.
     required_sections: list[str] = Field(default_factory=list)
+    # See GenerateRequest.pass_threshold / has_no_passing_criteria -- copied
+    # in at build time, and editable afterward via
+    # PATCH /ai/dashboard/{slug}/pass-threshold (dashboard_versions.
+    # set_pass_threshold) without a full regenerate. preview_fetch.py reads
+    # these two fields fresh on every render, so a change here updates every
+    # affected KPI/chart the next time the dashboard is viewed -- no rebuild.
+    pass_threshold: int = Field(default=80, ge=1, le=100)
+    has_no_passing_criteria: bool = False
 
 
 # ── Validation ──────────────────────────────────────────────────────────────────
@@ -327,6 +335,11 @@ class WidgetPreview(BaseModel):
     # None for every widget that doesn't compute a previous-period baseline.
     prev_value: Any | None = None
     delta_pct: float | None = None
+    # Short caption shown under a kpi_tile, e.g. "Passing threshold: 80 pts"
+    # on a pass_rate tile -- so the number is never left for the viewer to
+    # interpret against an assumed bar. None for every widget that isn't a
+    # pass-rate tile.
+    legend: str | None = None
 
 
 class DashboardPreview(BaseModel):
@@ -403,6 +416,20 @@ class GenerateRequest(BaseModel):
     # /d/[slug] view -- for a link shared before the client's own login is
     # set up, or shared outside the platform entirely.
     confidential: bool = False
+    # Score >= pass_threshold counts as a pass, everywhere a pass/fail
+    # verdict is computed for this dashboard (KPI tiles, journey, daily
+    # pass/fail chart, best performers, reports, per-simulator breakdown).
+    # Different real customers pass at different bars (70/80/90); 80 is only
+    # the default for a tenant that never configured one, not a universal
+    # truth. See DashboardConfig.pass_threshold for the persisted value this
+    # is copied into, and dashboard_versions.set_pass_threshold for changing
+    # it after publish without a rebuild.
+    pass_threshold: int = Field(default=80, ge=1, le=100)
+    # True for a tenant with no score-based passing criteria at all (e.g.
+    # certified by completing all assigned simulations, not by a score bar).
+    # Every pass-rate widget must show an honest "no data" state for such a
+    # tenant, never a number computed against a threshold that doesn't apply.
+    has_no_passing_criteria: bool = False
 
 
 class JobState(BaseModel):

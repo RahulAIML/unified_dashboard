@@ -222,6 +222,8 @@ async def _continue_from_planning(job: JobState, knowledge, primary: ServiceDesc
                                          secondary=secondary, required_services=required_services)
         cfg.connector_handle["base_url"] = primary.base_url
         cfg.confidential = req.confidential
+        cfg.pass_threshold = req.pass_threshold
+        cfg.has_no_passing_criteria = req.has_no_passing_criteria
         job.dashboard = cfg; job.percent = 76; await update(job)
 
         job.phase = JobPhase.validation; await update(job)

@@ -286,3 +286,26 @@ async def update_required_sections(slug: str, body: RequiredSectionsIn) -> Dashb
     if not cfg:
         raise HTTPException(status_code=404, detail=f"dashboard '{slug}' not found")
     return cfg
+
+
+class PassThresholdIn(BaseModel):
+    pass_threshold: int = 80
+    has_no_passing_criteria: bool = False
+
+
+@router.patch("/dashboard/{slug}/pass-threshold")
+async def update_pass_threshold(slug: str, body: PassThresholdIn) -> DashboardConfig:
+    """Change the pass/fail bar on an ALREADY-PUBLISHED dashboard -- e.g. a
+    manager correcting 80 to 70 for a tenant, or marking a tenant as having
+    no score-based criteria at all. Deliberately lightweight, same contract
+    as required-sections above: no schema re-discovery, no re-planning, no
+    version bump. /ai/render/{slug} re-fetches every widget fresh (30s
+    cache), so this takes effect on every affected KPI/chart the next time
+    the dashboard is viewed -- see dashboard_versions.set_pass_threshold."""
+    if not (1 <= body.pass_threshold <= 100):
+        raise HTTPException(status_code=422, detail="pass_threshold must be between 1 and 100")
+    from .. import dashboard_versions
+    cfg = await dashboard_versions.set_pass_threshold(slug, body.pass_threshold, body.has_no_passing_criteria)
+    if not cfg:
+        raise HTTPException(status_code=404, detail=f"dashboard '{slug}' not found")
+    return cfg

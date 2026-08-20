@@ -14,7 +14,7 @@ type Phase =
   | 'validation' | 'preview' | 'publish' | 'done' | 'error'
 
 interface JobLog { ts: string; phase: Phase; level: 'info' | 'warn' | 'error' | 'success'; message: string }
-interface WidgetPreview { widget_id: string; ok: boolean; value?: number | string | null; series?: Record<string, unknown>[]; rows?: Record<string, unknown>[]; error?: string | null }
+interface WidgetPreview { widget_id: string; ok: boolean; value?: number | string | null; series?: Record<string, unknown>[]; rows?: Record<string, unknown>[]; error?: string | null; legend?: string | null }
 interface WidgetConfig {
   id: string; type: string; title: string; metric_key?: string | null; span?: number
   id_field?: string | null; business_question?: string | null
@@ -22,7 +22,7 @@ interface WidgetConfig {
 }
 interface DashRow { id: string; title?: string | null; widgets: WidgetConfig[] }
 interface DashPage { id: string; title: string; rows: DashRow[] }
-interface DashboardConfig { company: string; slug: string; title: string; connector: string; rows: DashRow[]; pages?: DashPage[]; recommendations: string[]; insights?: string[]; confidential?: boolean }
+interface DashboardConfig { company: string; slug: string; title: string; connector: string; rows: DashRow[]; pages?: DashPage[]; recommendations: string[]; insights?: string[]; confidential?: boolean; pass_threshold?: number; has_no_passing_criteria?: boolean }
 interface ValidationIssue { severity: 'error' | 'warning' | 'info'; code: string; message: string }
 interface ValidationReport { ok: boolean; issues: ValidationIssue[]; summary: string }
 interface JobState {
@@ -66,10 +66,62 @@ function getServiceOptions(t: T): { id: string; label: string }[] {
 interface KnownCompany {
   id: string; name: string; sessions: number; users: number
   source: 'rolplay_app_sql' | 'pharma'
-  // True for a self-service-invited (pharma_tenants) client created in the
-  // last 14 days -- rolplay_app_sql entries never carry this (that table
-  // has no creation-date column to derive it from).
+  // True for a client created in the last 14 days -- a self-service-invited
+  // (pharma_tenants) tenant, or a rolplay_app_sql client (real r_client.created_on).
+  // A hardcoded pharma tenant (TENANT_CONFIG) never carries this: it predates
+  // the self-service wizard by definition and has no creation date at all.
   isNew: boolean
+}
+
+/**
+ * Compact post-publish editor for the pass/fail bar -- lets a manager
+ * correct 80 to 70 (or mark "no criteria") on an ALREADY-PUBLISHED
+ * dashboard without rebuilding it. Its own local draft state, separate from
+ * the build-time passThresholdText/hasNoPassingCriteria in the parent,
+ * because this edits a DIFFERENT, already-live value (job.dashboard's own
+ * pass_threshold) rather than what a not-yet-generated dashboard will use.
+ */
+function ThresholdEditor({
+  dashboard, onSave, saving, saveMsg, t,
+}: {
+  dashboard: DashboardConfig
+  onSave: (threshold: number, noCriteria: boolean) => void
+  saving: boolean
+  saveMsg: string | null
+  t: T
+}) {
+  const [draftThreshold, setDraftThreshold] = useState(String(dashboard.pass_threshold ?? 80))
+  const [draftNoCriteria, setDraftNoCriteria] = useState(!!dashboard.has_no_passing_criteria)
+  const liveThreshold = dashboard.pass_threshold ?? 80
+  const liveNoCriteria = !!dashboard.has_no_passing_criteria
+  const dirty = draftNoCriteria !== liveNoCriteria || (!draftNoCriteria && Number(draftThreshold) !== liveThreshold)
+
+  return (
+    <div className="mb-4 rounded-xl border border-border bg-muted/30 p-4">
+      <p className="text-xs font-semibold text-foreground mb-2">{t.builderPassThresholdLabel}</p>
+      <div className="flex flex-wrap items-center gap-3">
+        <input type="number" min={1} max={100} value={draftThreshold}
+          onChange={e => setDraftThreshold(e.target.value)} disabled={draftNoCriteria}
+          className="w-24 rounded-lg border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50" />
+        <label className="flex items-center gap-2 text-xs text-foreground">
+          <input type="checkbox" checked={draftNoCriteria} onChange={e => setDraftNoCriteria(e.target.checked)}
+            className="rounded border-border" />
+          {t.builderNoPassingCriteriaLabel}
+        </label>
+        <button
+          onClick={() => {
+            const n = parseInt(draftThreshold, 10)
+            onSave(draftNoCriteria ? liveThreshold : (Number.isFinite(n) ? n : 80), draftNoCriteria)
+          }}
+          disabled={saving || !dirty || (!draftNoCriteria && (!Number.isFinite(parseInt(draftThreshold, 10)) || Number(draftThreshold) < 1 || Number(draftThreshold) > 100))}
+          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50">
+          {saving ? t.builderSaving : t.builderSaveThreshold}
+        </button>
+        {saveMsg && <span className="text-xs text-muted-foreground">{saveMsg}</span>}
+      </div>
+      <p className="text-xs text-muted-foreground mt-2">{t.builderPassThresholdLiveHint}</p>
+    </div>
+  )
 }
 
 /**
@@ -175,6 +227,19 @@ function DashboardBuilder() {
   const [idsText, setIdsText] = useState('')
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [confidential, setConfidential] = useState(false)
+  // Pass/fail bar this dashboard's score-based KPIs are computed against.
+  // Default 80 (see ai-service/app/models.py's GenerateRequest.pass_threshold)
+  // -- a text field, not a number input, so the box can be briefly empty
+  // while the manager retypes it rather than snapping to 0.
+  const [passThresholdText, setPassThresholdText] = useState('80')
+  const [hasNoPassingCriteria, setHasNoPassingCriteria] = useState(false)
+  // Post-publish threshold editor: lets a manager correct 80 to 70 (or mark
+  // "no criteria") on an ALREADY-PUBLISHED dashboard without rebuilding it
+  // -- PATCH /ai/dashboard/{slug}/pass-threshold, then a live re-fetch of
+  // /ai/render/{slug} so the change is visible immediately in this same
+  // preview, not just "next time someone opens the published link."
+  const [thresholdSaving, setThresholdSaving] = useState(false)
+  const [thresholdSaveMsg, setThresholdSaveMsg] = useState<string | null>(null)
   const [job, setJob] = useState<JobState | null>(null)
   const [starting, setStarting] = useState(false)
   const [publishing, setPublishing] = useState(false)
@@ -261,9 +326,14 @@ function DashboardBuilder() {
     const exercise_ids = idsText.split(/[,\s]+/).map(s => parseInt(s, 10)).filter(n => !isNaN(n))
     const domains = domainText.split(/[,\s]+/).map(s => s.trim()).filter(Boolean)
     try {
+      const parsedThreshold = parseInt(passThresholdText, 10)
       const res = await fetch('/api/ai/generate-dashboard', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ company: company.trim(), exercise_ids, domains, services: Array.from(services), confidential }),
+        body: JSON.stringify({
+          company: company.trim(), exercise_ids, domains, services: Array.from(services), confidential,
+          pass_threshold: Number.isFinite(parsedThreshold) ? parsedThreshold : 80,
+          has_no_passing_criteria: hasNoPassingCriteria,
+        }),
       })
       const j: JobState = await res.json()
       setJob(j); poll(j.job_id)
@@ -291,6 +361,36 @@ function DashboardBuilder() {
     } catch (err) {
       setPublishError(err instanceof Error ? err.message : 'Publish failed')
     } finally { setPublishing(false) }
+  }
+
+  async function saveThreshold(threshold: number, noCriteria: boolean) {
+    const slug = job?.dashboard?.slug
+    if (!slug) return
+    setThresholdSaving(true); setThresholdSaveMsg(null)
+    try {
+      const res = await fetch(`/api/ai/dashboard/${encodeURIComponent(slug)}/pass-threshold`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pass_threshold: threshold, has_no_passing_criteria: noCriteria }),
+      })
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({ detail: 'Save failed' }))
+        throw new Error(payload.detail || payload.error || 'Save failed')
+      }
+      const updatedConfig: DashboardConfig = await res.json()
+      // Re-fetch live widget data so every affected KPI/chart reflects the
+      // new threshold in THIS preview immediately -- no rebuild, no
+      // republish, and the page/widget layout is exactly what it was.
+      const renderRes = await fetch(`/api/ai/render/${encodeURIComponent(slug)}`, { cache: 'no-store' })
+      const rendered = renderRes.ok ? await renderRes.json() : null
+      setJob(prev => prev ? {
+        ...prev,
+        dashboard: rendered?.config ?? updatedConfig,
+        preview: rendered?.preview ?? prev.preview,
+      } : prev)
+      setThresholdSaveMsg(t.builderThresholdSaved)
+    } catch (err) {
+      setThresholdSaveMsg(err instanceof Error ? err.message : 'Save failed')
+    } finally { setThresholdSaving(false) }
   }
 
   function requestTemplate(): string {
@@ -458,6 +558,22 @@ function DashboardBuilder() {
             <p className="text-xs text-muted-foreground -mt-2">
               {t.builderConfidentialHint}
             </p>
+            <div>
+              <label className="text-xs font-medium text-foreground mb-1 block">{t.builderPassThresholdLabel}</label>
+              <div className="flex items-center gap-3">
+                <input type="number" min={1} max={100} value={passThresholdText}
+                  onChange={e => setPassThresholdText(e.target.value)}
+                  disabled={running || hasNoPassingCriteria}
+                  className="w-24 rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50" />
+                <label className="flex items-center gap-2 text-xs text-foreground">
+                  <input type="checkbox" checked={hasNoPassingCriteria}
+                    onChange={e => setHasNoPassingCriteria(e.target.checked)} disabled={running}
+                    className="rounded border-border" />
+                  {t.builderNoPassingCriteriaLabel}
+                </label>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">{t.builderPassThresholdHint}</p>
+            </div>
           </div>
         )}
       </div>
@@ -640,6 +756,8 @@ function DashboardBuilder() {
               )}
             </div>
           </div>
+
+          <ThresholdEditor dashboard={job.dashboard} onSave={saveThreshold} saving={thresholdSaving} saveMsg={thresholdSaveMsg} t={t} />
 
           <DashboardRenderer config={job.dashboard} preview={job.preview} />
 

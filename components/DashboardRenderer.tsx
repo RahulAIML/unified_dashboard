@@ -27,7 +27,7 @@ import { cn } from '@/lib/utils'
 // mirrors the hand-built Overview's "vs previous period" arrows exactly
 // (lib/kpi-builder.ts's calcDeltaPct). Absent/null for every widget with no
 // real previous-period baseline to compare against (never fabricated).
-export interface WidgetPreview { widget_id: string; ok: boolean; value?: number | string | null; series?: Record<string, unknown>[]; rows?: Record<string, unknown>[]; error?: string | null; prev_value?: number | string | null; delta_pct?: number | null }
+export interface WidgetPreview { widget_id: string; ok: boolean; value?: number | string | null; series?: Record<string, unknown>[]; rows?: Record<string, unknown>[]; error?: string | null; prev_value?: number | string | null; delta_pct?: number | null; legend?: string | null }
 // id_field: which key in each row of a `table` widget is a real, click-
 // through-able report id (see ai-service's WidgetConfig.id_field) — set only
 // for connectors with a verified matching /drilldown/[id] backend. Absent
@@ -125,7 +125,7 @@ const cardMotion = {
  * baseline) renders the same neutral "no comparison" pill SummaryCard shows
  * for a snapshot metric, never a fabricated 0%.
  */
-function KpiTile({ title, value, deltaPct, index }: { title: string; value: unknown; deltaPct?: number | null; index: number }) {
+function KpiTile({ title, value, deltaPct, legend, index }: { title: string; value: unknown; deltaPct?: number | null; legend?: string | null; index: number }) {
   const t = useT()
   const hasDelta = deltaPct !== null && deltaPct !== undefined
   const isPositive = hasDelta && deltaPct! > 0
@@ -164,6 +164,9 @@ function KpiTile({ title, value, deltaPct, index }: { title: string; value: unkn
           </div>
           <span className="text-xs text-muted-foreground/70">{hasDelta ? t.vsPrior : t.noHistoricalComparison}</span>
         </div>
+        {legend && (
+          <p className="text-[11px] text-muted-foreground/80 mt-2.5 pt-2.5 border-t border-border/50">{legend}</p>
+        )}
       </div>
     </motion.div>
   )
@@ -296,7 +299,7 @@ function DashboardRows({ rows, pv }: { rows: DashRow[]; pv: Map<string, WidgetPr
               return (
                 <div key={w.id} className={wide ? 'sm:col-span-2 lg:col-span-4' : ''}>
                   {w.type === 'kpi_tile' ? (
-                    <KpiTile title={translateGeneratedText(w.title, lang)} value={p?.value} deltaPct={p?.delta_pct} index={i} />
+                    <KpiTile title={translateGeneratedText(w.title, lang)} value={p?.value} deltaPct={p?.delta_pct} legend={p?.legend} index={i} />
                   ) : (
                     <WidgetCard
                       title={translateGeneratedText(w.title, lang)}
