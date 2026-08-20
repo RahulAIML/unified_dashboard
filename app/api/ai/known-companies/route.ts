@@ -7,11 +7,11 @@
  * forward to ai-service:
  *
  *   1. rolplay_app_sql clients (ai-service's own /ai/known-companies,
- *      reading r_client on the remote game DB) — real session/user counts.
- *      r_client has no creation-date column (it's a third-party table we
- *      don't own), so "new" for this source is tracked ourselves: see
- *      lib/rolplay-app-first-seen.ts, which records the first time we ever
- *      observed each client_id in our own Postgres.
+ *      reading r_client on the remote game DB) — real session/user counts,
+ *      plus r_client.created_on (confirmed real and sane via a direct
+ *      information_schema query, e.g. a client created 3 days before this
+ *      was written) — used for "new" the same way a DB-backed pharma
+ *      tenant's createdAt is.
  *   2. Pharma tenants, merged from TWO places exactly like
  *      app/api/admin/tenants/route.ts does: lib/db-tenants.ts's
  *      pharma_tenants table (self-service tenants created via the admin
@@ -27,9 +27,9 @@
  *      — verified live by checking /admin/tenants, which lists Heineken as
  *      a registered client despite an empty pharma_tenants table locally.
  *
- * `isNew` flags, for the builder UI's red "Nuevo" badge, either a SELF-
- * SERVICE pharma tenant (a real DB row) created within the last 14 days, or
- * a rolplay_app_sql client_id we ourselves first observed within the last 14
+ * `isNew` flags, for the builder UI's red "Nuevo" badge, either a rolplay_app_sql
+ * client created within the last 14 days (real r_client.created_on) or a
+ * SELF-SERVICE pharma tenant (a real DB row) created within the last 14
  * days. Hardcoded pharma tenants (TENANT_CONFIG) are never flagged new --
  * a tenant baked into source code was "already deployed" by definition, and
  * has no creation timestamp of any kind to derive it from. That's an honest
@@ -40,7 +40,6 @@ import { requireAdminFromRequest } from '@/lib/server-auth'
 import { rateLimit, rateLimitHeaders } from '@/lib/rate-limit'
 import { listAllTenants } from '@/lib/db-tenants'
 import { TENANT_CONFIG } from '@/lib/pharma-tenant'
-import { recordSeenAndGetFirstSeen, NEW_TENANT_WINDOW_MS as ROLPLAY_APP_NEW_WINDOW_MS } from '@/lib/rolplay-app-first-seen'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -71,23 +70,19 @@ async function fetchRolplayAppCompanies(): Promise<KnownCompanyRow[]> {
       console.error(`[known-companies] ai-service returned ${res.status}`)
       return []
     }
-    const rows: { id: number; name: string; sessions: number; users: number }[] = await res.json()
+    const rows: { id: number; name: string; created_on: string | null; sessions: number; users: number }[] = await res.json()
     if (!Array.isArray(rows)) return []
 
-    // r_client (rolplay.app's own table) has no creation-date column -- we
-    // track "first seen" ourselves so a genuinely new client_id still gets
-    // the "Nuevo" badge automatically, with no code change, the same way a
-    // self-service pharma tenant does. Never blocks the picker: an empty map
-    // just means every row below falls back to isNew=false.
     const now = Date.now()
-    const firstSeen = await recordSeenAndGetFirstSeen(rows)
-
     return rows.map(r => {
-      const seenAt = firstSeen.get(r.id)
+      // created_on can be missing/unparseable for an old row predating the
+      // column, or if ai-service's SQL bridge returns it in a shape Date()
+      // can't parse -- never let that crash the picker, just isNew=false.
+      const createdAt = r.created_on ? new Date(r.created_on) : null
+      const isNew = createdAt != null && !isNaN(createdAt.getTime()) && now - createdAt.getTime() < NEW_TENANT_WINDOW_MS
       return {
         id: `rolplay_app_sql:${r.id}`, name: r.name, sessions: r.sessions, users: r.users,
-        source: 'rolplay_app_sql' as const,
-        isNew: seenAt != null && now - seenAt.getTime() < ROLPLAY_APP_NEW_WINDOW_MS,
+        source: 'rolplay_app_sql' as const, isNew,
       }
     })
   } catch (err) {
