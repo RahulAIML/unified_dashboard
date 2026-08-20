@@ -147,23 +147,33 @@ describe('rolplayAppCommercialDomain', () => {
       { d: sessionJson({ bloque_crear_conexion_score: '70', bloque_obtener_si_score: '90' }) },
     ]))
 
-    const rows = await mod.rolplayAppCommercialDomain(29)
+    const { data: rows, sampled } = await mod.rolplayAppCommercialDomain(29)
     expect(rows[0]).toEqual({ domain: 'Obtener Si', avgScore: 85, sessions: 2 })
     expect(rows[1]).toEqual({ domain: 'Crear Conexion', avgScore: 65, sessions: 2 })
+    expect(sampled).toBe(false)
   })
 
   it('returns empty for sessions with no bloque_* keys (matches Takeda: no raw_closing_data structure)', async () => {
     const mod = await fresh()
     fetchSpy.mockResolvedValueOnce(respond([{ d: JSON.stringify({ overall_score: '80' }) }]))
-    const rows = await mod.rolplayAppCommercialDomain(29)
+    const { data: rows } = await mod.rolplayAppCommercialDomain(29)
     expect(rows).toEqual([])
   })
 
   it('skips rows with unparseable JSON rather than throwing', async () => {
     const mod = await fresh()
     fetchSpy.mockResolvedValueOnce(respond([{ d: 'not json' }, { d: JSON.stringify({ bloque_x_score: '50' }) }]))
-    const rows = await mod.rolplayAppCommercialDomain(29)
+    const { data: rows } = await mod.rolplayAppCommercialDomain(29)
     expect(rows).toEqual([{ domain: 'X', avgScore: 50, sessions: 1 }])
+  })
+
+  it('flags sampled=true when the closing-data scan hits its row cap (bias risk, same class as the fixed deltaScore bug)', async () => {
+    const mod = await fresh()
+    const cap = 500 // matches _CLOSING_DATA_SAMPLE_LIMIT in lib/bridge-rolplay-app.ts
+    const rows = Array.from({ length: cap }, () => ({ d: JSON.stringify({ bloque_x_score: '50' }) }))
+    fetchSpy.mockResolvedValueOnce(respond(rows))
+    const { sampled } = await mod.rolplayAppCommercialDomain(29)
+    expect(sampled).toBe(true)
   })
 })
 
@@ -175,7 +185,7 @@ describe('rolplayAppRubricaTags', () => {
       { d: JSON.stringify({ rubrica_p1_nombre: 'Saluda cordialmente', rubrica_p1_cumplido: 'true' }) },
       { d: JSON.stringify({ rubrica_p1_nombre: 'Saluda cordialmente', rubrica_p1_cumplido: 'false' }) },
     ]))
-    const rows = await mod.rolplayAppRubricaTags(29, true)
+    const { data: rows } = await mod.rolplayAppRubricaTags(29, true)
     expect(rows).toEqual([{ item: 'Saluda cordialmente', count: 2 }])
   })
 
@@ -185,7 +195,7 @@ describe('rolplayAppRubricaTags', () => {
       { d: JSON.stringify({ rubrica_p1_nombre: 'Cierra la venta', rubrica_p1_cumplido: 'false' }) },
       { d: JSON.stringify({ rubrica_p1_nombre: 'Cierra la venta', rubrica_p1_cumplido: 'false' }) },
     ]))
-    const rows = await mod.rolplayAppRubricaTags(29, false)
+    const { data: rows } = await mod.rolplayAppRubricaTags(29, false)
     expect(rows).toEqual([{ item: 'Cierra la venta', count: 2 }])
   })
 
@@ -197,14 +207,23 @@ describe('rolplayAppRubricaTags', () => {
       obj[`rubrica_p${i}_cumplido`] = 'true'
     }
     fetchSpy.mockResolvedValueOnce(respond([{ d: JSON.stringify(obj) }]))
-    const rows = await mod.rolplayAppRubricaTags(29, true)
+    const { data: rows } = await mod.rolplayAppRubricaTags(29, true)
     expect(rows.length).toBe(10) // capped at top 10, all 30 discovered/counted
   })
 
   it('ignores N/A cumplido values', async () => {
     const mod = await fresh()
     fetchSpy.mockResolvedValueOnce(respond([{ d: JSON.stringify({ rubrica_p1_nombre: 'Item', rubrica_p1_cumplido: 'N/A' }) }]))
-    const rows = await mod.rolplayAppRubricaTags(29, true)
+    const { data: rows } = await mod.rolplayAppRubricaTags(29, true)
+    expect(rows).toEqual([])
+  })
+
+  it('skips a non-string rubrica label instead of stringifying it into a garbage row', async () => {
+    const mod = await fresh()
+    fetchSpy.mockResolvedValueOnce(respond([
+      { d: JSON.stringify({ rubrica_p1_nombre: { nested: 'object' }, rubrica_p1_cumplido: 'true' }) },
+    ]))
+    const { data: rows } = await mod.rolplayAppRubricaTags(29, true)
     expect(rows).toEqual([])
   })
 })
@@ -217,21 +236,21 @@ describe('rolplayAppAdoptionMovementRate', () => {
       { d: JSON.stringify({ intencion_movement: 'Subió' }) },
       { d: JSON.stringify({ intencion_movement: 'Bajó' }) },
     ]))
-    const rate = await mod.rolplayAppAdoptionMovementRate(29)
+    const { value: rate } = await mod.rolplayAppAdoptionMovementRate(29)
     expect(rate).toBe(66.7)
   })
 
   it('returns null (not a fabricated 0) when no session carries the field', async () => {
     const mod = await fresh()
     fetchSpy.mockResolvedValueOnce(respond([{ d: JSON.stringify({ overall_score: '80' }) }]))
-    const rate = await mod.rolplayAppAdoptionMovementRate(29)
+    const { value: rate } = await mod.rolplayAppAdoptionMovementRate(29)
     expect(rate).toBeNull()
   })
 
   it('returns null for no sessions at all', async () => {
     const mod = await fresh()
     fetchSpy.mockResolvedValueOnce(respond([]))
-    const rate = await mod.rolplayAppAdoptionMovementRate(29)
+    const { value: rate } = await mod.rolplayAppAdoptionMovementRate(29)
     expect(rate).toBeNull()
   })
 })

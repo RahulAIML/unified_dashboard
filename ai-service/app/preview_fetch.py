@@ -489,6 +489,7 @@ async def _rolplay_app_kpi_metrics(cid: int, module: str | None, dc: str) -> dic
     computed by the exact same aggregation."""
     data = await _rolplay_app_sql(
         "SELECT COUNT(s.ID) AS sessions, COUNT(DISTINCT u.ID) AS users, "
+        f"COUNT({SCORE_SQL}) AS scored, "
         f"ROUND(AVG({SCORE_SQL}),2) AS avg_score, "
         f"SUM(CASE WHEN ({SCORE_SQL})>={PASS_THRESHOLD} THEN 1 ELSE 0 END) AS passed "
         f"FROM r_user u LEFT JOIN r_user_session s ON s.user_id=u.ID "
@@ -496,12 +497,19 @@ async def _rolplay_app_kpi_metrics(cid: int, module: str | None, dc: str) -> dic
     )
     row = data[0] if data else {}
     sessions = int(row.get("sessions") or 0)
+    # pass_rate's denominator must be SCORED sessions (COUNT(SCORE_SQL)), not
+    # total sessions -- a session with no matching score-extraction pattern
+    # returns NULL, not 0, and must be excluded, never diluting the rate. This
+    # previously divided by `sessions`, understating pass_rate versus the
+    # TS bridge (lib/bridge-rolplay-app.ts's fetchScoreStats) for any tenant
+    # with genuinely unscoreable sessions -- matches lib/bridge-rolplay-app.ts.
+    scored = int(row.get("scored") or 0)
     passed = int(row.get("passed") or 0)
     return {
         "total_sessions": sessions,
         "total_users": int(row.get("users") or 0),
         "avg_score": float(row["avg_score"]) if row.get("avg_score") is not None else None,
-        "pass_rate": round(100 * passed / sessions, 1) if sessions else None,
+        "pass_rate": round(100 * passed / scored, 1) if scored else None,
         "passed": passed,
     }
 
@@ -687,13 +695,16 @@ def _rubrica_tag_counts(parsed: list[dict], want_pass: bool) -> list[dict]:
     for d in parsed:
         for k, v in d.items():
             m = _RUBRICA_ITEM_RE.match(k)
-            if not m or not v:
+            # A non-string label (e.g. a nested object from a non-conforming
+            # evaluator payload) must be skipped, not blindly stringified
+            # into a garbage row in Top Strengths/Opportunities.
+            if not m or not isinstance(v, str) or not v:
                 continue
             cumplido = str(d.get(f"rubrica_p{m.group(1)}_cumplido", "")).strip().lower()
             if cumplido not in ("true", "false"):
                 continue
             if (cumplido == "true") == want_pass:
-                counts[str(v)] = counts.get(str(v), 0) + 1
+                counts[v] = counts.get(v, 0) + 1
     ranked = sorted(counts.items(), key=lambda kv: -kv[1])[:10]
     return [{"item": name, "count": n} for name, n in ranked]
 
@@ -727,8 +738,8 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
     if w.type == WidgetType.journey:
         rows = await _rolplay_app_sql(
             "SELECT sim.category AS category, COUNT(*) total_sessions, "
-            f"SUM(CASE WHEN ({SCORE_SQL})>={PASS_THRESHOLD} THEN 1 ELSE 0 END) passed_sessions, "
-            f"ROUND(100*SUM(CASE WHEN ({SCORE_SQL})>={PASS_THRESHOLD} THEN 1 ELSE 0 END)/COUNT(*),1) pass_rate "
+            f"COUNT({SCORE_SQL}) scored, "
+            f"SUM(CASE WHEN ({SCORE_SQL})>={PASS_THRESHOLD} THEN 1 ELSE 0 END) passed_sessions "
             "FROM r_user_session s JOIN r_user u ON u.ID=s.user_id "
             f"JOIN r_simulator sim ON sim.ID=s.simulator_id WHERE u.client_id={cid} "
             "GROUP BY sim.category"
@@ -738,12 +749,20 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
             for r in rows if str(r.get("category") or "").upper() in journey_lib.CATEGORY_TO_MODULE
         }
         stages = journey_lib.ordered_stages(list(by_module.keys()))
-        out = [{
-            "module": m, "label": journey_lib.LABEL[m], "phase": journey_lib.PHASE[m],
-            "total_sessions": int(by_module[m].get("total_sessions") or 0),
-            "passed_sessions": int(by_module[m].get("passed_sessions") or 0),
-            "pass_rate": by_module[m].get("pass_rate"),
-        } for m in stages]
+        out = []
+        for m in stages:
+            r = by_module[m]
+            scored = int(r.get("scored") or 0)
+            passed_sessions = int(r.get("passed_sessions") or 0)
+            out.append({
+                "module": m, "label": journey_lib.LABEL[m], "phase": journey_lib.PHASE[m],
+                "total_sessions": int(r.get("total_sessions") or 0),
+                "passed_sessions": passed_sessions,
+                # Denominator is SCORED sessions, not total -- a session with
+                # no matching score-extraction pattern is excluded, never
+                # counted as failing (matches _rolplay_app_kpi_metrics above).
+                "pass_rate": round(100 * passed_sessions / scored, 1) if scored else None,
+            })
         return WidgetPreview(widget_id=w.id, ok=len(out) >= 2, rows=out,
                              error=None if len(out) >= 2 else "fewer than 2 real modules for a journey")
 
@@ -767,17 +786,23 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
     if w.id.endswith(BEST_PERFORMERS_ID):
         rows = await _rolplay_app_sql(
             "SELECT u.email email, u.name name, COUNT(*) sessions, "
+            f"COUNT({SCORE_SQL}) scored, "
             f"ROUND(AVG({SCORE_SQL}),2) avg_score, "
             f"SUM(CASE WHEN ({SCORE_SQL})>={PASS_THRESHOLD} THEN 1 ELSE 0 END) passed "
             f"{base} GROUP BY u.ID, u.email, u.name "
             f"HAVING COUNT({SCORE_SQL}) > 0 "
             f"ORDER BY avg_score DESC, sessions DESC LIMIT {_BEST_PERFORMERS_LIMIT}"
         )
+        # HAVING COUNT(SCORE_SQL) > 0 guarantees scored > 0 for every returned
+        # row today, but the pass_rate denominator is scored sessions, not
+        # total sessions, matching lib/bridge-rolplay-app.ts's
+        # rolplayAppBestPerformers -- never dilute by unscored sessions if
+        # that guard is ever relaxed.
         out = [{
             "user_email": r.get("email"), "user_name": (r.get("name") or "").strip() or None,
             "sessions": int(r.get("sessions") or 0),
             "avg_score": float(r["avg_score"]) if r.get("avg_score") is not None else 0.0,
-            "pass_rate": round(100 * int(r.get("passed") or 0) / int(r["sessions"]), 1) if r.get("sessions") else 0.0,
+            "pass_rate": round(100 * int(r.get("passed") or 0) / int(r["scored"]), 1) if r.get("scored") else 0.0,
         } for r in rows]
         return WidgetPreview(widget_id=w.id, ok=bool(out), rows=out)
 
@@ -806,10 +831,16 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
 
     # ── Trend line: monthly avg score ──
     if w.type == WidgetType.line_chart:
+        # `sessions` must count every real session that period, scored or not
+        # -- a WHERE sc IS NOT NULL on the outer query (previous version) also
+        # dropped unscored sessions from the session-volume count itself,
+        # undercounting relative to lib/bridge-rolplay-app.ts's equivalent
+        # trend (which counts all sessions unconditionally). AVG(sc) already
+        # ignores NULLs on its own, so `value` doesn't need the filter either.
         rows = await _rolplay_app_sql(
             "SELECT period, ROUND(AVG(sc),2) value, COUNT(*) sessions FROM ("
             f"SELECT DATE_FORMAT(s.date_created,'%Y-%m') period, {SCORE_SQL} sc {base}) t "
-            "WHERE sc IS NOT NULL GROUP BY period ORDER BY period"
+            "GROUP BY period ORDER BY period"
         )
         series = [{"date": r.get("period"), "value": r.get("value"), "sessions": r.get("sessions")} for r in rows]
         return WidgetPreview(widget_id=w.id, ok=bool(series), series=series)
@@ -837,7 +868,14 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
             "SELECT s.date_created AS date, u.email AS rep, "
             "COALESCE(sim.name, CONCAT('Simulator ', s.simulator_id)) AS simulator, "
             f"ROUND({SCORE_SQL},1) AS score, "
-            f"CASE WHEN ({SCORE_SQL})>={PASS_THRESHOLD} THEN 'Passed' ELSE 'Failed' END AS result "
+            # NULL >= threshold is NULL (unknown) in SQL, not false, so a plain
+            # CASE/ELSE here would fall through to 'Failed' for a session with
+            # no extractable score at all -- a fabricated verdict next to a
+            # blank score. Emit NULL (unknown), matching
+            # lib/bridge-rolplay-app.ts's _rolplayAppResultsImpl
+            # (`score != null ? (passed ? 'pass' : 'fail') : null`).
+            f"CASE WHEN {SCORE_SQL} IS NULL THEN NULL "
+            f"WHEN ({SCORE_SQL})>={PASS_THRESHOLD} THEN 'Passed' ELSE 'Failed' END AS result "
             "FROM r_user_session s JOIN r_user u ON u.ID=s.user_id "
             f"LEFT JOIN r_simulator sim ON sim.ID=s.simulator_id WHERE u.client_id={cid}{_category_clause(w.module)}{dc} "
             f"ORDER BY s.date_created DESC LIMIT {_REPORTS_ROW_LIMIT}"
@@ -848,13 +886,18 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
     if w.type in (WidgetType.bar_chart, WidgetType.donut, WidgetType.table) or w.id.endswith(APPROVAL_DONUT_ID):
         rows = await _rolplay_app_sql(
             "SELECT COALESCE(sim.name, CONCAT('Simulator ', s.simulator_id)) simulator, "
-            f"COUNT(*) total_sessions, ROUND(AVG({SCORE_SQL}),2) avg_score, "
-            f"SUM(CASE WHEN ({SCORE_SQL})>={PASS_THRESHOLD} THEN 1 ELSE 0 END) passed_sessions, "
-            f"ROUND(100*SUM(CASE WHEN ({SCORE_SQL})>={PASS_THRESHOLD} THEN 1 ELSE 0 END)/COUNT(*),1) pass_rate "
+            f"COUNT(*) total_sessions, COUNT({SCORE_SQL}) scored, ROUND(AVG({SCORE_SQL}),2) avg_score, "
+            f"SUM(CASE WHEN ({SCORE_SQL})>={PASS_THRESHOLD} THEN 1 ELSE 0 END) passed_sessions "
             "FROM r_user_session s JOIN r_user u ON u.ID=s.user_id "
             f"LEFT JOIN r_simulator sim ON sim.ID=s.simulator_id WHERE u.client_id={cid}{_category_clause(w.module)}{dc} "
             "GROUP BY s.simulator_id, sim.name ORDER BY total_sessions DESC"
         )
+        # pass_rate denominator is SCORED sessions, not total_sessions -- an
+        # unscoreable session must be excluded, never dilute the rate
+        # (matches lib/bridge-rolplay-app.ts's rolplayAppUsecaseBreakdown).
+        for r in rows:
+            scored = int(r.get("scored") or 0)
+            r["pass_rate"] = round(100 * int(r.get("passed_sessions") or 0) / scored, 1) if scored else None
         if w.id.endswith(APPROVAL_DONUT_ID):
             return _approval_donut((int(r.get("total_sessions") or 0) for r in rows),
                                     (int(r.get("passed_sessions") or 0) for r in rows), w.id)

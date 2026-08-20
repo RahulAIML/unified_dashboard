@@ -17,6 +17,7 @@ from app.models import DashboardConfig, ServiceKind, WidgetConfig, WidgetType
 from app.preview_fetch import (
     BEST_PERFORMERS_ID,
     DAILY_PASSFAIL_ID,
+    REPORTS_TABLE_ID,
     fetch_widget,
 )
 
@@ -182,8 +183,8 @@ class BestPerformersTests(unittest.TestCase):
 
     def test_returns_ranked_rows_with_expected_shape(self):
         rows_in = [
-            {"email": "a@x.com", "name": " Alice ", "sessions": 20, "avg_score": 91.2, "passed": 18},
-            {"email": "b@x.com", "name": None, "sessions": 15, "avg_score": 85.0, "passed": 10},
+            {"email": "a@x.com", "name": " Alice ", "sessions": 20, "scored": 20, "avg_score": 91.2, "passed": 18},
+            {"email": "b@x.com", "name": None, "sessions": 15, "scored": 15, "avg_score": 85.0, "passed": 10},
         ]
 
         async def fake_sql(_url, payload):
@@ -200,6 +201,25 @@ class BestPerformersTests(unittest.TestCase):
         self.assertEqual(pv.rows[0]["user_name"], "Alice")
         self.assertEqual(pv.rows[0]["pass_rate"], 90.0)
         self.assertIsNone(pv.rows[1]["user_name"])
+
+    def test_pass_rate_divides_by_scored_sessions_not_total(self):
+        """Regression: pass_rate used to divide `passed` by `sessions` (every
+        session, scored or not), diverging from lib/bridge-rolplay-app.ts's
+        rolplayAppBestPerformers (which correctly divides by `scored`) and
+        understating pass_rate for any user with unscored sessions mixed in."""
+        rows_in = [
+            # 20 total sessions, only 18 scored, all 18 scored ones passed --
+            # correct pass_rate is 100% (18/18), not the old buggy 90% (18/20).
+            {"email": "a@x.com", "name": "Alice", "sessions": 20, "scored": 18, "avg_score": 95.0, "passed": 18},
+        ]
+
+        async def fake_sql(_url, _payload):
+            return 200, {"data": rows_in}
+
+        with patch("app.preview_fetch.post_json", new=AsyncMock(side_effect=fake_sql)):
+            pv = _run(fetch_widget(_cfg(), _widget(WidgetType.table, BEST_PERFORMERS_ID)))
+
+        self.assertEqual(pv.rows[0]["pass_rate"], 100.0)
 
     def test_no_data_reports_empty_not_crash(self):
         async def fake_sql(_url, _payload):
@@ -233,6 +253,59 @@ class DailyPassFailTests(unittest.TestCase):
             {"date": "2025-11-01", "sessions": 12, "passed": 9},
             {"date": "2025-11-02", "sessions": 5, "passed": 2},
         ])
+
+
+class ReportsTableResultLabelTests(unittest.TestCase):
+    """Regression: a session with no extractable score at all (SCORE_SQL
+    NULL) used to fall through a plain CASE/ELSE to 'Failed' -- NULL >= 70 is
+    unknown, not false, in SQL. Fixed to emit NULL/unknown for that case,
+    matching lib/bridge-rolplay-app.ts's _rolplayAppResultsImpl
+    (`score != null ? (passed ? 'pass' : 'fail') : null`)."""
+
+    def test_sql_emits_null_result_for_a_null_score_instead_of_failed(self):
+        calls: list[str] = []
+
+        async def fake_sql(_url, payload):
+            calls.append(payload["sql"])
+            return 200, {"data": []}
+
+        with patch("app.preview_fetch.post_json", new=AsyncMock(side_effect=fake_sql)):
+            _run(fetch_widget(_cfg(), _widget(WidgetType.table, REPORTS_TABLE_ID)))
+
+        sql = calls[0]
+        self.assertIn("WHEN", sql)
+        self.assertIn("IS NULL THEN NULL", sql)
+        # The NULL-check branch must come before the pass/fail branches so it
+        # actually wins for a NULL score (CASE takes the first matching WHEN).
+        null_branch_idx = sql.index("IS NULL THEN NULL")
+        passed_branch_idx = sql.index("THEN 'Passed'")
+        self.assertLess(null_branch_idx, passed_branch_idx)
+
+
+class TrendSessionCountTests(unittest.TestCase):
+    """Regression: the monthly trend line's `sessions` count used to come
+    from a query with `WHERE sc IS NOT NULL` on the OUTER aggregate, which
+    dropped unscored sessions from the session-volume count itself, not just
+    from the average-score calculation -- undercounting relative to
+    lib/bridge-rolplay-app.ts's trend (which counts every real session
+    unconditionally). AVG(sc) already ignores NULLs on its own."""
+
+    def test_session_count_query_has_no_outer_not_null_score_filter(self):
+        calls: list[str] = []
+
+        async def fake_sql(_url, payload):
+            calls.append(payload["sql"])
+            return 200, {"data": []}
+
+        with patch("app.preview_fetch.post_json", new=AsyncMock(side_effect=fake_sql)):
+            _run(fetch_widget(_cfg(), _widget(WidgetType.line_chart, "chart_trend")))
+
+        sql = calls[0]
+        # The outer aggregate (GROUP BY period) must not filter by sc at all --
+        # only the inner subquery computes sc; the outer query should count
+        # every row from it unconditionally.
+        outer_query = sql.split(") t ", 1)[1]
+        self.assertNotIn("sc IS NOT NULL", outer_query)
 
 
 if __name__ == "__main__":

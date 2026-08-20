@@ -783,8 +783,12 @@ async function _rolplayAppCesarGroup1Impl(
   const activeWeeks = Number(activeRows[0]?.weeks ?? 0)
 
   // MAU: a real 30-day recency window, independent of whatever wider range
-  // the dashboard's own date filter currently shows.
-  let mauUsers = 0
+  // the dashboard's own date filter currently shows. `range` is optional on
+  // this function's own signature, so mauUsers must stay null (not 0) when
+  // it's omitted -- mauRate below is enrolled ? mauUsers/enrolled : null,
+  // and enrolled is truthy for any real tenant, so a bare 0 here would
+  // render as a fabricated "0% MAU" instead of "not computed for this call".
+  let mauUsers: number | null = null
   if (range?.toIso) {
     const toDate = range.toIso.slice(0, 10)
     const mauRows = await remoteSelect<{ n: number | string }>(
@@ -865,7 +869,7 @@ async function _rolplayAppCesarGroup1Impl(
   return {
     activationRate: enrolled ? round1(100 * activeUsers / enrolled) : null,
     weeklyPracticeFrequency: activeWeeks ? round1(periodSessions / activeWeeks) : null,
-    mauRate: enrolled ? round1(100 * mauUsers / enrolled) : null,
+    mauRate: enrolled && mauUsers != null ? round1(100 * mauUsers / enrolled) : null,
     deltaScore: deltas.length ? round1(deltas.reduce((a, b) => a + b, 0) / deltas.length) : null,
     // Both operands now count every scored session/user in range -- no
     // capped-numerator-over-uncapped-denominator mismatch.
@@ -875,11 +879,13 @@ async function _rolplayAppCesarGroup1Impl(
   }
 }
 
+interface ClosingDataRows { rows: Record<string, unknown>[]; sampled: boolean }
+
 async function rolplayAppClosingDataRows(
   clientId: number,
   range?: { fromIso: string; toIso: string },
   solution?: string | null,
-): Promise<Record<string, unknown>[]> {
+): Promise<ClosingDataRows> {
   // Shared by rolplayAppCommercialDomain/RubricaTags(x2 -- pass+fail)/AdoptionMovementRate,
   // which the cesar-kpis route calls together via Promise.all -- caching here
   // (instead of in each of those four callers) collapses what would be four
@@ -891,7 +897,7 @@ async function _rolplayAppClosingDataRowsImpl(
   clientId: number,
   range?: { fromIso: string; toIso: string },
   solution?: string | null,
-): Promise<Record<string, unknown>[]> {
+): Promise<ClosingDataRows> {
   const cid = tenantId(clientId)
   const dc = dateClause(range?.fromIso, range?.toIso)
   const cat = categoryClause(solution)
@@ -905,12 +911,21 @@ async function _rolplayAppClosingDataRowsImpl(
     if (!r.d) continue
     try {
       const parsed: unknown = JSON.parse(r.d)
-      if (parsed && typeof parsed === 'object') out.push(parsed as Record<string, unknown>)
+      // Array.isArray excluded: typeof [] === 'object' too, and an array has
+      // no bloque_*/rubrica_p* keys to match -- keep the type the same as
+      // ai-service/app/preview_fetch.py's isinstance(parsed, dict) guard.
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) out.push(parsed as Record<string, unknown>)
     } catch {
       // invalid JSON -- skip, never fabricate a row for it
     }
   }
-  return out
+  // Same bias class already fixed for deltaScore/readinessIndex: this is a
+  // bounded (LIMIT _CLOSING_DATA_SAMPLE_LIMIT), most-recent-first scan, so a
+  // tenant with more qualifying sessions than the cap silently had Commercial
+  // Domain/Top Strengths/Top Opportunities/Adoption Movement Rate computed
+  // from only the most recent slice with no indication to the caller. Flag
+  // it exactly like deltaScoreSampled does, rather than fixing it silently.
+  return { rows: out, sampled: rows.length >= _CLOSING_DATA_SAMPLE_LIMIT }
 }
 
 export interface CommercialDomainRow { domain: string; avgScore: number; sessions: number }
@@ -920,8 +935,8 @@ export interface CommercialDomainRow { domain: string; avgScore: number; session
  *  block list or count. */
 export async function rolplayAppCommercialDomain(
   clientId: number, range?: { fromIso: string; toIso: string }, solution?: string | null,
-): Promise<CommercialDomainRow[]> {
-  const parsed = await rolplayAppClosingDataRows(clientId, range, solution)
+): Promise<{ data: CommercialDomainRow[]; sampled: boolean }> {
+  const { rows: parsed, sampled } = await rolplayAppClosingDataRows(clientId, range, solution)
   const scores = new Map<string, number[]>()
   const re = /^bloque_(.+)_score$/
   for (const d of parsed) {
@@ -940,7 +955,7 @@ export async function rolplayAppCommercialDomain(
     avgScore: Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10,
     sessions: vals.length,
   }))
-  return out.sort((a, b) => b.avgScore - a.avgScore)
+  return { data: out.sort((a, b) => b.avgScore - a.avgScore), sampled }
 }
 
 export interface RubricaTagRow { item: string; count: number }
@@ -951,26 +966,29 @@ export interface RubricaTagRow { item: string; count: number }
  *  numbered items each session's evaluator actually produced. */
 export async function rolplayAppRubricaTags(
   clientId: number, wantPass: boolean, range?: { fromIso: string; toIso: string }, solution?: string | null,
-): Promise<RubricaTagRow[]> {
-  const parsed = await rolplayAppClosingDataRows(clientId, range, solution)
+): Promise<{ data: RubricaTagRow[]; sampled: boolean }> {
+  const { rows: parsed, sampled } = await rolplayAppClosingDataRows(clientId, range, solution)
   const counts = new Map<string, number>()
   const re = /^rubrica_p(\d+)_nombre$/
   for (const d of parsed) {
     for (const [k, v] of Object.entries(d)) {
       const m = re.exec(k)
-      if (!m || !v) continue
+      // A non-string label (e.g. a nested object from a non-conforming
+      // evaluator payload) must be skipped, not blindly stringified into a
+      // garbage "[object Object]" row in Top Strengths/Opportunities.
+      if (!m || typeof v !== 'string' || !v) continue
       const cumplido = String(d[`rubrica_p${m[1]}_cumplido`] ?? '').trim().toLowerCase()
       if (cumplido !== 'true' && cumplido !== 'false') continue
       if ((cumplido === 'true') === wantPass) {
-        const name = String(v)
-        counts.set(name, (counts.get(name) ?? 0) + 1)
+        counts.set(v, (counts.get(v) ?? 0) + 1)
       }
     }
   }
-  return Array.from(counts.entries())
+  const data = Array.from(counts.entries())
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10)
     .map(([item, count]) => ({ item, count }))
+  return { data, sampled }
 }
 
 /** KPI-5.1: % of sessions where the evaluator's own 'intencion_movement'
@@ -979,10 +997,10 @@ export async function rolplayAppRubricaTags(
  *  widget can report "no data" rather than a fabricated 0%. */
 export async function rolplayAppAdoptionMovementRate(
   clientId: number, range?: { fromIso: string; toIso: string }, solution?: string | null,
-): Promise<number | null> {
-  const parsed = await rolplayAppClosingDataRows(clientId, range, solution)
+): Promise<{ value: number | null; sampled: boolean }> {
+  const { rows: parsed, sampled } = await rolplayAppClosingDataRows(clientId, range, solution)
   const movements = parsed.map(d => String(d.intencion_movement ?? '').trim()).filter(Boolean)
-  if (!movements.length) return null
+  if (!movements.length) return { value: null, sampled }
   const positive = movements.filter(m => /^(sub|up|increas|avanz)/i.test(m)).length
-  return Math.round((100 * positive / movements.length) * 10) / 10
+  return { value: Math.round((100 * positive / movements.length) * 10) / 10, sampled }
 }
