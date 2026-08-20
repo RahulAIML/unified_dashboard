@@ -73,3 +73,52 @@ describe('rolplayAppOverview — previous-period boundary', () => {
     expect(prevSql).toContain("BETWEEN '2026-05-25 00:00:00' AND '2026-05-31 23:59:59'")
   })
 })
+
+describe('mergeOverviewSources — M8 pharma + rolplay_app_sql composition', () => {
+  it('sums counts and weight-averages rates by each source\'s totalEvaluations', async () => {
+    const mod = await fresh()
+    const merged = mod.mergeOverviewSources(
+      { totalEvaluations: 100, prevTotalEvaluations: 90, avgScore: 80, prevAvgScore: 78, passRate: 70, prevPassRate: 65, passedEvaluations: 70 },
+      { totalEvaluations: 50,  prevTotalEvaluations: 10, avgScore: 90, prevAvgScore: 85, passRate: 90, prevPassRate: 80, passedEvaluations: 45 },
+    )
+    expect(merged.totalEvaluations).toBe(150)
+    expect(merged.prevTotalEvaluations).toBe(100)
+    expect(merged.passedEvaluations).toBe(115)
+    // (80*100 + 90*50) / 150 = 83.33... -> 83.3
+    expect(merged.avgScore).toBeCloseTo(83.3, 1)
+    // (70*100 + 90*50) / 150 = 76.66... -> 76.7
+    expect(merged.passRate).toBeCloseTo(76.7, 1)
+  })
+
+  it('excludes a null rate from the source rather than treating it as zero', async () => {
+    const mod = await fresh()
+    // Secondary source has real sessions but none scored yet (avgScore/passRate
+    // null) -- must not drag the merged rate toward zero.
+    const merged = mod.mergeOverviewSources(
+      { totalEvaluations: 100, prevTotalEvaluations: 90, avgScore: 80, prevAvgScore: 78, passRate: 70, prevPassRate: 65, passedEvaluations: 70 },
+      { totalEvaluations: 20,  prevTotalEvaluations: 0,  avgScore: null, prevAvgScore: null, passRate: null, prevPassRate: null, passedEvaluations: 0 },
+    )
+    expect(merged.totalEvaluations).toBe(120)
+    expect(merged.avgScore).toBe(80)
+    expect(merged.passRate).toBe(70)
+  })
+
+  it('returns null when both sources have no scored sessions at all', async () => {
+    const mod = await fresh()
+    const merged = mod.mergeOverviewSources(
+      { totalEvaluations: 5, prevTotalEvaluations: 0, avgScore: null, prevAvgScore: null, passRate: null, prevPassRate: null, passedEvaluations: 0 },
+      { totalEvaluations: 3, prevTotalEvaluations: 0, avgScore: null, prevAvgScore: null, passRate: null, prevPassRate: null, passedEvaluations: 0 },
+    )
+    expect(merged.avgScore).toBeNull()
+    expect(merged.passRate).toBeNull()
+  })
+
+  it('always takes passRateLegend from the primary (pharma) side', async () => {
+    const mod = await fresh()
+    const merged = mod.mergeOverviewSources(
+      { totalEvaluations: 10, prevTotalEvaluations: 0, avgScore: 80, prevAvgScore: null, passRate: 70, prevPassRate: null, passedEvaluations: 7, passRateLegend: 'Pass threshold: score >= 70 pts' },
+      { totalEvaluations: 5,  prevTotalEvaluations: 0, avgScore: 90, prevAvgScore: null, passRate: 90, prevPassRate: null, passedEvaluations: 4 },
+    )
+    expect(merged.passRateLegend).toBe('Pass threshold: score >= 70 pts')
+  })
+})
