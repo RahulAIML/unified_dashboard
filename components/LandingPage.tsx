@@ -33,6 +33,7 @@ const slideUp = (delay = 0) => ({
 
 // ── Mock dashboard preview ────────────────────────────────────────────────────
 function DashboardPreview() {
+  const t = useT()
   const bars = [65, 80, 55, 90, 72, 88, 60, 95, 70, 85]
   return (
     <div className="relative rounded-2xl border border-slate-200/80 bg-white shadow-2xl overflow-hidden">
@@ -53,10 +54,10 @@ function DashboardPreview() {
       {/* KPI row */}
       <div className="grid grid-cols-4 gap-2 p-3">
         {[
-          { label: 'Sessions',   value: '2,847', color: 'text-red-600'  },
-          { label: 'Pass Rate',  value: '78%',   color: 'text-blue-600' },
-          { label: 'Avg Score',  value: '84 pts', color: 'text-teal-600' },
-          { label: 'Certified',  value: '1,203', color: 'text-violet-600' },
+          { label: t.sessionsLabel,       value: '2,847', color: 'text-red-600'  },
+          { label: t.passRate,            value: '78%',   color: 'text-blue-600' },
+          { label: t.avgScore,            value: '84 pts', color: 'text-teal-600' },
+          { label: t.landingKpiCertified, value: '1,203', color: 'text-violet-600' },
         ].map(({ label, value, color }) => (
           <div key={label} className="rounded-lg border border-slate-100 bg-slate-50 p-2">
             <p className="text-[9px] text-slate-400 mb-1 uppercase tracking-wide">{label}</p>
@@ -107,7 +108,7 @@ function DashboardPreview() {
       {/* Live badge */}
       <div className="absolute top-8 right-4 flex items-center gap-1.5 bg-green-50 border border-green-200 rounded-full px-2.5 py-1 text-[10px] font-semibold text-green-700">
         <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-        Live
+        {t.landingLive}
       </div>
     </div>
   )
@@ -555,9 +556,9 @@ export function LandingPage() {
             <div>
               <h4 className="font-semibold text-slate-900 mb-4 text-sm">{t.landingFooterLocations}</h4>
               <ul className="space-y-2">
-                <li className="text-sm text-slate-500">Toronto, Canada</li>
-                <li className="text-sm text-slate-500">Monterrey, Mexico</li>
-                <li className="text-sm text-slate-500">Mexico City, Mexico</li>
+                <li className="text-sm text-slate-500">{t.landingLocationToronto}</li>
+                <li className="text-sm text-slate-500">{t.landingLocationMonterrey}</li>
+                <li className="text-sm text-slate-500">{t.landingLocationMexicoCity}</li>
               </ul>
             </div>
 

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuthContext } from '@/components/AuthProvider'
 import { DashboardRenderer, humanizeConnector } from '@/components/DashboardRenderer'
 import { useLangStore, useT } from '@/lib/lang-store'
+import { translateGeneratedText } from '@/lib/generated-content-i18n'
 
 // ── Types mirroring the AI service JobState ─────────────────────────────────────
 type Phase =
@@ -473,7 +474,7 @@ function DashboardBuilder() {
             <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
               <p className="text-sm font-semibold text-foreground mb-1">{t.builderNeedsIdsTitle}</p>
               <p className="text-xs text-muted-foreground mb-3">
-                {t.builderNeedsIdsMsgPre}{humanizeConnector(job.pending_connector)}{t.builderNeedsIdsMsgPost}
+                {t.builderNeedsIdsMsgPre}{humanizeConnector(job.pending_connector, lang)}{t.builderNeedsIdsMsgPost}
               </p>
               <div className="mb-3 rounded-lg border border-border bg-background p-3">
                 <p className="text-xs text-muted-foreground whitespace-pre-wrap">{requestTemplate()}</p>
@@ -526,8 +527,8 @@ function DashboardBuilder() {
         <div className="mt-6 rounded-2xl border border-border bg-card p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-lg font-bold text-foreground">{job.dashboard.title}</h2>
-              <p className="text-xs text-muted-foreground">{t.builderLivePreviewPre}{humanizeConnector(job.dashboard.connector)}{t.builderLivePreviewPost}</p>
+              <h2 className="text-lg font-bold text-foreground">{translateGeneratedText(job.dashboard.title, lang)}</h2>
+              <p className="text-xs text-muted-foreground">{t.builderLivePreviewPre}{humanizeConnector(job.dashboard.connector, lang)}{t.builderLivePreviewPost}</p>
             </div>
             {job.validation && (
               <span className={`text-xs font-semibold px-2 py-1 rounded-full ${job.validation.ok ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-destructive/10 text-destructive'}`}>

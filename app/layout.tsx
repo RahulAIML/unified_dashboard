@@ -27,9 +27,14 @@ const fontVars = {
   "--font-geist-mono": FONT_MONO,
 } satisfies Record<string, string>
 
+// Static server-rendered metadata cannot react to the client-side language
+// toggle (it's in <head> before any client store exists), so it's set to
+// match SSR_LANG (lib/lang-store.ts's default, 'es') rather than left in
+// English -- the objective is a Spanish-by-default experience, and this is
+// the one piece of text that can't reactively follow a later toggle anyway.
 export const metadata: Metadata = {
-  title: "Analytics Dashboard",
-  description: "Unified analytics dashboard",
+  title: "Panel de Analítica",
+  description: "Panel de analítica unificado",
 };
 
 export default function RootLayout({
@@ -39,7 +44,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="es"
       suppressHydrationWarning
       className={`h-full ${inter.variable}`}
       style={fontVars as CSSProperties}

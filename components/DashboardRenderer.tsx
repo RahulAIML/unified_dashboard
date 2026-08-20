@@ -9,7 +9,8 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useT } from '@/lib/lang-store'
+import { useT, useLangStore } from '@/lib/lang-store'
+import { translateGeneratedText, translateColumnHeader } from '@/lib/generated-content-i18n'
 import { motion } from 'framer-motion'
 import { PlayCircle, Target, TrendingUp, TrendingDown, Minus, BadgeCheck, Trophy, AlertTriangle } from 'lucide-react'
 import {
@@ -83,18 +84,19 @@ export function fmt(v: unknown): string {
 // industry a company is actually in. Heineken (beverages), Lacoste (apparel),
 // M8, etc. use these exact same connectors. Never show the raw internal name
 // to a manager; always show what it actually is.
-const CONNECTOR_LABELS: Record<string, string> = {
-  pharma_kpi: 'Structured analytics feed',
-  pharma_sale_exercises: 'Practice session log',
-  pharma_exceltis_rest: 'Activity tracking system',
-  coach_app_sql: 'Coaching database',
-  second_brain: 'Second Brain',
-  rolplay_app_sql: 'Session log (counts only)',
+const CONNECTOR_LABELS: Record<string, { en: string; es: string }> = {
+  pharma_kpi: { en: 'Structured analytics feed', es: 'Fuente de analítica estructurada' },
+  pharma_sale_exercises: { en: 'Practice session log', es: 'Registro de sesiones de práctica' },
+  pharma_exceltis_rest: { en: 'Activity tracking system', es: 'Sistema de seguimiento de actividad' },
+  coach_app_sql: { en: 'Coaching database', es: 'Base de datos de coaching' },
+  second_brain: { en: 'Second Brain', es: 'Second Brain' },
+  rolplay_app_sql: { en: 'Session log (counts only)', es: 'Registro de sesiones (solo conteos)' },
 }
 
-export function humanizeConnector(connector: string | null | undefined): string {
-  if (!connector) return 'Unknown'
-  return CONNECTOR_LABELS[connector] ?? connector.replace(/_/g, ' ')
+export function humanizeConnector(connector: string | null | undefined, lang: 'en' | 'es' = 'en'): string {
+  if (!connector) return lang === 'es' ? 'Desconocido' : 'Unknown'
+  const label = CONNECTOR_LABELS[connector]
+  return label ? label[lang] : connector.replace(/_/g, ' ')
 }
 
 // Cycled by KPI position, matching DashboardContent.tsx's own `kpiIcons`
@@ -271,11 +273,12 @@ function Leaderboard({ rows }: { rows: Record<string, unknown>[] }) {
 
 function DashboardRows({ rows, pv }: { rows: DashRow[]; pv: Map<string, WidgetPreview> }) {
   const t = useT()
+  const { lang } = useLangStore()
   return (
     <div className="space-y-5 sm:space-y-6">
       {rows.map(row => (
         <div key={row.id}>
-          {row.title && <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2.5">{row.title}</div>}
+          {row.title && <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2.5">{translateGeneratedText(row.title, lang)}</div>}
           {row.widgets.length === 0 ? (
             // A section the manager explicitly contracted (mandatory), but with
             // no data discovered yet -- shown honestly, never silently omitted.
@@ -293,11 +296,11 @@ function DashboardRows({ rows, pv }: { rows: DashRow[]; pv: Map<string, WidgetPr
               return (
                 <div key={w.id} className={wide ? 'sm:col-span-2 lg:col-span-4' : ''}>
                   {w.type === 'kpi_tile' ? (
-                    <KpiTile title={w.title} value={p?.value} deltaPct={p?.delta_pct} index={i} />
+                    <KpiTile title={translateGeneratedText(w.title, lang)} value={p?.value} deltaPct={p?.delta_pct} index={i} />
                   ) : (
                     <WidgetCard
-                      title={w.title}
-                      subtitle={w.business_question}
+                      title={translateGeneratedText(w.title, lang)}
+                      subtitle={translateGeneratedText(w.business_question, lang)}
                       index={i}
                       headerAction={isLeaderboard ? (
                         <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, hsl(var(--primary)/0.12), hsl(var(--accent)/0.08))' }}>
@@ -360,6 +363,7 @@ function AIInsights({ insights }: { insights: string[] }) {
 }
 
 export function DashboardRenderer({ config, preview }: { config: DashboardConfig; preview: { widgets: WidgetPreview[] } }) {
+  const { lang } = useLangStore()
   const pv = new Map(preview.widgets.map(w => [w.widget_id, w]))
   const pages = config.pages ?? []
   const [activeId, setActiveId] = useState<string | null>(pages[0]?.id ?? null)
@@ -392,7 +396,7 @@ export function DashboardRenderer({ config, preview }: { config: DashboardConfig
                   : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
-              {p.title}
+              {translateGeneratedText(p.title, lang)}
             </button>
           ))}
         </div>
@@ -648,6 +652,7 @@ export function MiniDonut({ rows }: { rows: Record<string, unknown>[] }) {
 
 export function MiniTable({ rows, idField }: { rows: Record<string, unknown>[]; idField?: string | null }) {
   const t = useT()
+  const { lang } = useLangStore()
   if (!rows.length) return <div className="text-sm text-muted-foreground">—</div>
   // The id itself isn't interesting to show as a column (it's an opaque
   // report id) — it's what the "View" link's href is built from instead.
@@ -657,7 +662,7 @@ export function MiniTable({ rows, idField }: { rows: Record<string, unknown>[]; 
       <table className="w-full text-xs">
         <thead>
           <tr className="text-muted-foreground text-left">
-            {cols.map(c => <th key={c} className="py-1 pr-4 font-medium capitalize">{c.replace(/_/g, ' ')}</th>)}
+            {cols.map(c => <th key={c} className="py-1 pr-4 font-medium capitalize">{translateColumnHeader(c, lang)}</th>)}
             {idField && <th className="py-1 pr-4 font-medium" />}
           </tr>
         </thead>
@@ -703,6 +708,7 @@ export function ReportsTable({
   filenamePrefix: string
 }) {
   const t = useT()
+  const { lang } = useLangStore()
   const [query, setQuery] = useState('')
   const [page, setPage] = useState(0)
 
@@ -738,7 +744,7 @@ export function ReportsTable({
           {exportable && (
             <ExportButton
               data={filtered}
-              columns={cols.map(c => ({ header: c.replace(/_/g, ' '), value: (r: Record<string, unknown>) => r[c] }))}
+              columns={cols.map(c => ({ header: translateColumnHeader(c, lang), value: (r: Record<string, unknown>) => r[c] }))}
               filename={csvFilename(filenamePrefix)}
               minWidth="min-w-[90px]"
             />
@@ -749,7 +755,7 @@ export function ReportsTable({
         <table className="w-full text-xs">
           <thead>
             <tr className="text-muted-foreground text-left">
-              {cols.map(c => <th key={c} className="py-1 pr-4 font-medium capitalize">{c.replace(/_/g, ' ')}</th>)}
+              {cols.map(c => <th key={c} className="py-1 pr-4 font-medium capitalize">{translateColumnHeader(c, lang)}</th>)}
             </tr>
           </thead>
           <tbody>
