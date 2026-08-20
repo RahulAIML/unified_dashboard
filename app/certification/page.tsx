@@ -164,7 +164,9 @@ export default function CertificationPage() {
     {
       key: "passed",
       header: t.colResult,
-      render: r => (
+      render: r => r.passed == null ? (
+        <span className="text-muted-foreground">—</span>
+      ) : (
         <span className={cn(
           "inline-flex px-2 py-0.5 rounded-full text-xs font-semibold",
           r.passed
@@ -289,7 +291,7 @@ export default function CertificationPage() {
                 { header: "Exercise Name", value: r => r.usecaseName ?? "" },
                 { header: "Use Case ID",   value: r => r.usecaseId },
                 { header: "Score (pts)",   value: r => r.score },
-                { header: "Result",        value: r => r.passed ? "PASS" : "FAIL" },
+                { header: "Result",        value: r => r.passed == null ? "" : r.passed ? "PASS" : "FAIL" },
                 { header: "Segment",       value: r => r.result },
                 { header: "Date",          value: r => r.date },
               ]}

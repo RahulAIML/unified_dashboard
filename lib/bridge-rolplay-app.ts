@@ -463,12 +463,17 @@ async function _rolplayAppOverviewImpl(
   const cid = tenantId(clientId)
 
   // Previous period = the equal-length window immediately before `from`.
+  // toIso ends 1ms before `from`, not AT `from` -- dateClause()'s BETWEEN is
+  // inclusive on both ends, so a previous window ending exactly on `from`
+  // would double-count any session at that exact instant in both periods.
+  // Matches the same -1 adjustment app/api/dashboard/cesar-kpis/route.ts
+  // already uses for its own prevRange, for consistency.
   let prevRange: { fromIso: string; toIso: string } | undefined
   if (range) {
     const from = new Date(range.fromIso).getTime()
     const to   = new Date(range.toIso).getTime()
     if (Number.isFinite(from) && Number.isFinite(to) && to > from) {
-      prevRange = { fromIso: new Date(from - (to - from)).toISOString(), toIso: range.fromIso }
+      prevRange = { fromIso: new Date(from - (to - from)).toISOString(), toIso: new Date(from - 1).toISOString() }
     }
   }
 
@@ -545,7 +550,10 @@ async function _rolplayAppResultsImpl(
 
   const data: EvaluationApiRow[] = rows.map((r) => {
     const score = r.sc != null ? Number(r.sc) : null
-    const passed = score != null && score >= PASS_THRESHOLD
+    // null (not false) for an unscoreable session -- see EvaluationApiRow's
+    // own doc comment. Previously `false`, which every consumer rendered as
+    // a fabricated "FAIL" badge (and CSV value) next to a blank score.
+    const passed = score != null ? score >= PASS_THRESHOLD : null
     return {
       savedReportId: Number(r.id),
       usecaseId: r.simulator_id != null ? Number(r.simulator_id) : null,

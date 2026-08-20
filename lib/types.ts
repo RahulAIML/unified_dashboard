@@ -237,7 +237,11 @@ export interface EvaluationApiRow {
   usecaseName:   string | null
   score:         number | null
   result:        string | null
-  passed:        boolean
+  // null (not false) when score is null -- a session with no extractable
+  // score at all has no real pass/fail verdict, and `false` would render as
+  // a fabricated "FAIL" badge next to a blank score. Mirrors `result`, which
+  // already carries this same null-for-unscoreable rule.
+  passed:        boolean | null
   date:          string
 }
 

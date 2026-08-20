@@ -18,6 +18,7 @@ from app.preview_fetch import (
     BEST_PERFORMERS_ID,
     DAILY_PASSFAIL_ID,
     REPORTS_TABLE_ID,
+    _prev_period,
     fetch_widget,
 )
 
@@ -306,6 +307,32 @@ class TrendSessionCountTests(unittest.TestCase):
         # every row from it unconditionally.
         outer_query = sql.split(") t ", 1)[1]
         self.assertNotIn("sc IS NOT NULL", outer_query)
+
+
+class PrevPeriodBoundaryTests(unittest.TestCase):
+    """Regression: _prev_period used to return prev_to == frm exactly, and
+    _sql_date_clause pads a date-only bound to a full day (00:00:00..
+    23:59:59) on both ends -- so the ENTIRE calendar day `frm` was counted
+    in both the current period (which starts at `frm 00:00:00`) and the
+    "previous" period (which ended at `frm 23:59:59`). For a typical 7-30
+    day dashboard window this is a real, material double-count (e.g. 1 of 7
+    days for a weekly range), not a one-instant edge case."""
+
+    def test_previous_period_ends_the_day_before_the_current_period_starts(self):
+        prev_from, prev_to = _prev_period("2026-06-08", "2026-06-14")
+        self.assertEqual(prev_to, "2026-06-07")
+
+    def test_previous_period_is_the_same_length_as_the_current_one(self):
+        # Current period: 2026-06-08 .. 2026-06-14, a 7-day inclusive span
+        # (8,9,10,11,12,13,14). The previous period must be the same 7-day
+        # length, ending the day before: 2026-06-01 .. 2026-06-07
+        # (1,2,3,4,5,6,7).
+        prev_from, prev_to = _prev_period("2026-06-08", "2026-06-14")
+        self.assertEqual((prev_from, prev_to), ("2026-06-01", "2026-06-07"))
+
+    def test_none_for_an_invalid_or_inverted_range(self):
+        self.assertIsNone(_prev_period("not-a-date", "2026-06-14"))
+        self.assertIsNone(_prev_period("2026-06-14", "2026-06-08"))  # to before from
 
 
 if __name__ == "__main__":
