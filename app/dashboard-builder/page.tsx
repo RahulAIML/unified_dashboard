@@ -63,7 +63,14 @@ function getServiceOptions(t: T): { id: string; label: string }[] {
   ]
 }
 
-interface KnownCompany { id: number; name: string; sessions: number; users: number }
+interface KnownCompany {
+  id: string; name: string; sessions: number; users: number
+  source: 'rolplay_app_sql' | 'pharma'
+  // True for a self-service-invited (pharma_tenants) client created in the
+  // last 14 days -- rolplay_app_sql entries never carry this (that table
+  // has no creation-date column to derive it from).
+  isNew: boolean
+}
 
 /**
  * Client-side admin gate. Defence-in-depth only — layout.tsx is the real
@@ -117,17 +124,38 @@ function DashboardBuilder() {
   const t = useT()
   const { lang, toggle: toggleLang } = useLangStore()
   const [company, setCompany] = useState('')
-  // Populates a <datalist> so a manager can pick an existing rolplay_app_sql
-  // client instead of retyping/misspelling its name — free-text entry still
-  // works for anything not in this list (a brand-new client, or any other
-  // connector). rolplay_app_sql only, per the user's own request.
+  // Populates a custom dropdown (not a native <datalist> -- that can't render
+  // a colored "Nuevo" badge, browser-native option styling has no CSS hook)
+  // so a manager can pick an existing client instead of retyping/misspelling
+  // its name. Merges TWO sources (see app/api/ai/known-companies/route.ts):
+  // real rolplay_app_sql clients (session/user counts) AND self-service
+  // pharma_tenants invited via /admin/tenants, which used to be entirely
+  // invisible here -- a newly-invited client had to be typed by hand,
+  // defeating the point of the picker. Free-text entry still works for
+  // anything not in this list (a brand-new client neither source knows about
+  // yet).
   const [knownCompanies, setKnownCompanies] = useState<KnownCompany[]>([])
+  const [companyDropdownOpen, setCompanyDropdownOpen] = useState(false)
+  const companyFieldRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
     fetch('/api/ai/known-companies', { cache: 'no-store' })
       .then(res => res.ok ? res.json() : [])
       .then((rows: KnownCompany[]) => setKnownCompanies(Array.isArray(rows) ? rows : []))
       .catch(() => { /* picker is a convenience — free text still works */ })
   }, [])
+  useEffect(() => {
+    if (!companyDropdownOpen) return
+    const onClickOutside = (e: MouseEvent) => {
+      if (companyFieldRef.current && !companyFieldRef.current.contains(e.target as Node)) {
+        setCompanyDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onClickOutside)
+    return () => document.removeEventListener('mousedown', onClickOutside)
+  }, [companyDropdownOpen])
+  const filteredCompanies = company.trim()
+    ? knownCompanies.filter(c => c.name.toLowerCase().includes(company.trim().toLowerCase()))
+    : knownCompanies
   const [domainText, setDomainText] = useState('')
   // Step 1 — services the manager knows for CERTAIN this client is
   // contracted for. Defaults to none selected: checking a box is now an
@@ -342,18 +370,39 @@ function DashboardBuilder() {
 
         <label className="text-sm font-semibold text-foreground mb-2 block">{t.builderCompanyLabel}</label>
         <div className="flex flex-col sm:flex-row gap-3">
-          <input value={company} onChange={e => setCompany(e.target.value)}
-            placeholder={t.builderCompanyPlaceholder} disabled={running}
-            list="known-companies-list"
-            onKeyDown={e => { if (e.key === 'Enter' && company.trim() && !running) generate() }}
-            className="flex-1 rounded-lg border border-border bg-background px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-primary" />
-          <datalist id="known-companies-list">
-            {knownCompanies.map(c => (
-              <option key={c.id} value={c.name}>
-                {c.sessions > 0 ? `${c.sessions} ${t.builderSessionsUsers}, ${c.users} ${t.builderUsersWord}` : t.builderNoActivityYet}
-              </option>
-            ))}
-          </datalist>
+          <div ref={companyFieldRef} className="relative flex-1">
+            <input value={company}
+              onChange={e => { setCompany(e.target.value); setCompanyDropdownOpen(true) }}
+              onFocus={() => setCompanyDropdownOpen(true)}
+              placeholder={t.builderCompanyPlaceholder} disabled={running}
+              onKeyDown={e => { if (e.key === 'Enter' && company.trim() && !running) { setCompanyDropdownOpen(false); generate() } }}
+              className="w-full rounded-lg border border-border bg-background px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-primary" />
+            {companyDropdownOpen && knownCompanies.length > 0 && (
+              <div className="absolute z-20 mt-1 w-full max-h-72 overflow-y-auto rounded-lg border border-border bg-card shadow-lg">
+                {filteredCompanies.length === 0 ? (
+                  <p className="px-4 py-3 text-xs text-muted-foreground">{t.builderNoMatchingCompanies}</p>
+                ) : (
+                  filteredCompanies.map(c => (
+                    <button key={c.id} type="button"
+                      onClick={() => { setCompany(c.name); setCompanyDropdownOpen(false) }}
+                      className="w-full text-left px-4 py-2.5 hover:bg-muted/60 transition-colors border-b border-border/40 last:border-b-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-foreground">{c.name}</span>
+                        {c.isNew && (
+                          <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-destructive text-destructive-foreground">
+                            {t.builderNewBadge}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {c.sessions > 0 ? `${c.sessions} ${t.builderSessionsUsers}, ${c.users} ${t.builderUsersWord}` : t.builderNoActivityYet}
+                      </p>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
           <button onClick={generate} disabled={running || starting || !company.trim()}
             className="px-6 py-3 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 disabled:opacity-50 whitespace-nowrap">
             {running ? t.builderGenerating : t.builderGenerateBtn}
