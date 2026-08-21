@@ -94,6 +94,13 @@ const GENERATED_ES: Record<string, string> = {
   'LMS Completions': 'Finalizaciones de LMS',
   'Courses': 'Cursos',
 
+  // ── Donut/breakdown slice labels (preview_fetch.py) ─────────────────────
+  'Passed': 'Aprobado',
+  'Failed': 'Reprobado',
+  'Basic (<75)': 'Básico (<75)',
+  'Intermediate (75-94)': 'Intermedio (75-94)',
+  'Advanced (>=95)': 'Avanzado (>=95)',
+
   // ── Business questions (subtitles) — schema_discovery.py, rolplay_app_sql ─
   'How many practice sessions have reps completed?': '¿Cuántas sesiones de práctica han completado los representantes?',
   'How many reps are actively using the platform?': '¿Cuántos representantes usan la plataforma activamente?',
@@ -201,4 +208,26 @@ const RESULT_VALUE_ES: Record<string, string> = { Passed: 'Aprobado', Failed: 'R
 export function translateResultValue(value: string, lang: Lang): string {
   if (lang === 'es' && RESULT_VALUE_ES[value]) return RESULT_VALUE_ES[value]
   return value
+}
+
+// Pass-rate KPI tile legends -- generated server-side with the actual
+// configured threshold baked in as a number (lib/kpi-builder.ts::
+// passRateLegend for the hand-built dashboard, ai-service/app/
+// preview_fetch.py::_pass_rate_legend for the AI Dashboard Builder), so they
+// can't be an exact-string lookup like GENERATED_ES above -- the number
+// varies per tenant. Pattern-matched instead, same "translate a closed,
+// backend-generated vocabulary at render time" approach as the rest of this
+// file.
+const PASS_THRESHOLD_LEGEND_RE = /^(?:Pass threshold: score ≥ |Passing threshold: )(\d+(?:\.\d+)?) pts$/
+const OTHER_LEGEND_ES: Record<string, string> = {
+  'Pass rate as reported by the source system': 'Tasa de aprobación según la reporta el sistema de origen',
+  'Certified: % of users who completed every assigned simulation': 'Certificado: % de usuarios que completaron todas las simulaciones asignadas',
+}
+
+export function translateLegend(legend: string | null | undefined, lang: Lang): string {
+  if (!legend) return ''
+  if (lang !== 'es') return legend
+  const m = PASS_THRESHOLD_LEGEND_RE.exec(legend)
+  if (m) return `Umbral de aprobación: puntuación ≥ ${m[1]} pts`
+  return OTHER_LEGEND_ES[legend] ?? legend
 }

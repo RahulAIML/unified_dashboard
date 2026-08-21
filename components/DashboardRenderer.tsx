@@ -10,7 +10,7 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useT, useLangStore } from '@/lib/lang-store'
-import { translateGeneratedText, translateColumnHeader, translateResultValue } from '@/lib/generated-content-i18n'
+import { translateGeneratedText, translateColumnHeader, translateResultValue, translateLegend } from '@/lib/generated-content-i18n'
 import { motion } from 'framer-motion'
 import { PlayCircle, Target, TrendingUp, TrendingDown, Minus, BadgeCheck, Trophy, AlertTriangle } from 'lucide-react'
 import {
@@ -254,7 +254,7 @@ function Leaderboard({ rows }: { rows: Record<string, unknown>[] }) {
               </div>
               <div>
                 <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">{t.colAvgScoreShort}</p>
-                <p className="text-sm font-bold text-foreground tabular-nums">{fmt(r.avg_score)} <span className="text-xs font-normal text-muted-foreground">pts</span></p>
+                <p className="text-sm font-bold text-foreground tabular-nums">{fmt(r.avg_score)} <span className="text-xs font-normal text-muted-foreground">{t.unitPts}</span></p>
               </div>
               <div>
                 <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">{t.passRate}</p>
@@ -299,7 +299,7 @@ function DashboardRows({ rows, pv }: { rows: DashRow[]; pv: Map<string, WidgetPr
               return (
                 <div key={w.id} className={wide ? 'sm:col-span-2 lg:col-span-4' : ''}>
                   {w.type === 'kpi_tile' ? (
-                    <KpiTile title={translateGeneratedText(w.title, lang)} value={p?.value} deltaPct={p?.delta_pct} legend={p?.legend} index={i} />
+                    <KpiTile title={translateGeneratedText(w.title, lang)} value={p?.value} deltaPct={p?.delta_pct} legend={translateLegend(p?.legend, lang)} index={i} />
                   ) : (
                     <WidgetCard
                       title={translateGeneratedText(w.title, lang)}
@@ -531,6 +531,7 @@ export function MiniChart({ series, bar }: { series: Record<string, unknown>[]; 
  */
 export function MiniJourney({ rows }: { rows: Record<string, unknown>[] }) {
   const t = useT()
+  const { lang } = useLangStore()
   const journeyPhaseLabels: Record<string, string> = {
     cognitive: t.journeyPhaseCognitive,
     practice: t.journeyPhasePractice,
@@ -543,7 +544,7 @@ export function MiniJourney({ rows }: { rows: Record<string, unknown>[] }) {
   return (
     <div className="flex items-stretch gap-2 mt-2 overflow-x-auto pb-1">
       {rows.map((r, i) => {
-        const label = String(r.label ?? r.module ?? '—')
+        const label = translateGeneratedText(String(r.label ?? r.module ?? '—'), lang)
         const phase = String(r.phase ?? '')
         const total = Number(r.total_sessions ?? 0)
         const passRate = r.pass_rate === null || r.pass_rate === undefined ? null : Number(r.pass_rate)
@@ -608,6 +609,7 @@ function DonutTooltip({ active, payload }: { active?: boolean; payload?: { name?
  */
 export function MiniDonut({ rows }: { rows: Record<string, unknown>[] }) {
   const t = useT()
+  const { lang } = useLangStore()
   const points = rows.slice(0, 30).map(normalizeChartRow)
   if (!points.length) {
     return <div className="h-40 flex items-center justify-center text-sm text-muted-foreground">—</div>
@@ -622,14 +624,18 @@ export function MiniDonut({ rows }: { rows: Record<string, unknown>[] }) {
   const restTotal = sorted.slice(MAX_SLICES).reduce((s, r) => s + r.value, 0)
   const data = restTotal > 0 ? [...top, { label: t.otherLabel, value: restTotal, passedValue: null }] : top
   const total = data.reduce((s, d) => s + d.value, 0)
+  // Labels here are backend-generated enum strings (e.g. "Passed"/"Failed",
+  // "Basic (<75)") from a closed vocabulary -- translate the same way widget
+  // titles are, via the exact-match dictionary, never a raw pass-through.
+  const displayData = data.map(d => ({ ...d, label: translateGeneratedText(d.label, lang) }))
 
   return (
     <div className="flex flex-col items-center gap-2 mt-2">
       <div className="relative w-40 h-40 shrink-0">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
-            <Pie data={data} dataKey="value" nameKey="label" cx="50%" cy="50%" innerRadius="55%" outerRadius="90%" paddingAngle={2} strokeWidth={0}>
-              {data.map((_, i) => <Cell key={i} fill={DONUT_PALETTE[i % DONUT_PALETTE.length]} />)}
+            <Pie data={displayData} dataKey="value" nameKey="label" cx="50%" cy="50%" innerRadius="55%" outerRadius="90%" paddingAngle={2} strokeWidth={0}>
+              {displayData.map((_, i) => <Cell key={i} fill={DONUT_PALETTE[i % DONUT_PALETTE.length]} />)}
             </Pie>
             <Tooltip content={<DonutTooltip />} />
           </PieChart>
@@ -642,7 +648,7 @@ export function MiniDonut({ rows }: { rows: Record<string, unknown>[] }) {
         </div>
       </div>
       <div className="flex flex-wrap gap-x-3 gap-y-1 justify-center max-w-full">
-        {data.map((d, i) => (
+        {displayData.map((d, i) => (
           <div key={i} className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: DONUT_PALETTE[i % DONUT_PALETTE.length] }} />
             <span className="text-[11px] text-muted-foreground truncate max-w-[100px]" title={d.label}>{d.label}</span>

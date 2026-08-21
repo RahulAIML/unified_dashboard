@@ -16,18 +16,19 @@
 
 import { useState } from 'react'
 import { DashboardHeader } from '@/components/DashboardHeader'
+import { useT } from '@/lib/lang-store'
 
 type Module = 'coach' | 'simulator' | 'certification' | 'other' | 'lms'
 
-const MODULES: { value: Module; label: string; needsClientId: boolean; needsTenant: boolean }[] = [
-  { value: 'lms',           label: 'LMS (LearnWorlds)',        needsClientId: false, needsTenant: true },
-  { value: 'coach',         label: 'Master Coach',             needsClientId: true,  needsTenant: false },
-  { value: 'simulator',     label: 'Simulator',                needsClientId: true,  needsTenant: false },
-  { value: 'certification', label: 'Certification Coach',      needsClientId: true,  needsTenant: false },
-  { value: 'other',         label: 'Other / unclassified',     needsClientId: true,  needsTenant: false },
-]
-
 export default function AdminExportPage() {
+  const t = useT()
+  const MODULES: { value: Module; label: string; needsClientId: boolean; needsTenant: boolean }[] = [
+    { value: 'lms',           label: t.adminExportModuleLms,           needsClientId: false, needsTenant: true },
+    { value: 'coach',         label: t.adminExportModuleCoach,         needsClientId: true,  needsTenant: false },
+    { value: 'simulator',     label: t.adminExportModuleSimulator,     needsClientId: true,  needsTenant: false },
+    { value: 'certification', label: t.adminExportModuleCertification, needsClientId: true,  needsTenant: false },
+    { value: 'other',         label: t.adminExportModuleOther,         needsClientId: true,  needsTenant: false },
+  ]
   const [module, setModule] = useState<Module>('lms')
   const [clientId, setClientId] = useState('')
   const [tenant, setTenant] = useState('')
@@ -50,19 +51,15 @@ export default function AdminExportPage() {
 
   return (
     <div className="min-h-screen w-full">
-      <DashboardHeader title="Data Export" subtitle="Internal/admin only — raw per-interaction CSV export" />
+      <DashboardHeader title={t.adminExportTitle} subtitle={t.adminExportSubtitle} />
       <div className="max-w-2xl mx-auto px-6 py-8">
         <div className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-5">
           <p className="text-xs text-muted-foreground">
-            Exports the real underlying rows behind the dashboard's KPIs — one row per session
-            (or per LMS course-progress entry), including user identity, timestamps, scores, and the
-            exact field the score was extracted from. Rolplay App SQL is the source for Master Coach,
-            Simulator, Certification Coach, and unclassified activity; LMS uses LearnWorlds, since
-            Rolplay App SQL has no LMS data of its own.
+            {t.adminExportDesc}
           </p>
 
           <div>
-            <label className="text-sm font-semibold text-foreground mb-2 block">Module</label>
+            <label className="text-sm font-semibold text-foreground mb-2 block">{t.adminExportModuleLabel}</label>
             <select value={module} onChange={e => setModule(e.target.value as Module)}
               className="w-full rounded-lg border border-border bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
               {MODULES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
@@ -72,26 +69,25 @@ export default function AdminExportPage() {
           {cfg.needsClientId && (
             <div>
               <label className="text-sm font-semibold text-foreground mb-2 block">
-                rolplay_app_sql client ID
+                {t.adminExportClientIdLabel}
               </label>
               <input value={clientId} onChange={e => setClientId(e.target.value)}
                 placeholder="e.g. 24"
                 className="w-full rounded-lg border border-border bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
               <p className="text-xs text-muted-foreground mt-1">
-                The numeric r_client.ID — the same id shown in the Dashboard Builder's company picker.
+                {t.adminExportClientIdHint}
               </p>
             </div>
           )}
 
           {cfg.needsTenant && (
             <div>
-              <label className="text-sm font-semibold text-foreground mb-2 block">Pharma tenant key</label>
+              <label className="text-sm font-semibold text-foreground mb-2 block">{t.adminExportTenantLabel}</label>
               <input value={tenant} onChange={e => setTenant(e.target.value)}
                 placeholder="e.g. apotex"
                 className="w-full rounded-lg border border-border bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
               <p className="text-xs text-muted-foreground mt-1">
-                LMS is a current-state roster export (not date-filtered) — only tenants with a
-                configured LearnWorlds school return real rows; others return an empty file.
+                {t.adminExportTenantHint}
               </p>
             </div>
           )}
@@ -99,12 +95,12 @@ export default function AdminExportPage() {
           {!cfg.needsTenant && (
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-semibold text-foreground mb-2 block">From (optional)</label>
+                <label className="text-sm font-semibold text-foreground mb-2 block">{t.adminExportFromLabel}</label>
                 <input type="date" value={from} onChange={e => setFrom(e.target.value)}
                   className="w-full rounded-lg border border-border bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
               </div>
               <div>
-                <label className="text-sm font-semibold text-foreground mb-2 block">To (optional)</label>
+                <label className="text-sm font-semibold text-foreground mb-2 block">{t.adminExportToLabel}</label>
                 <input type="date" value={to} onChange={e => setTo(e.target.value)}
                   className="w-full rounded-lg border border-border bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
               </div>
@@ -118,7 +114,7 @@ export default function AdminExportPage() {
               canBuild ? 'bg-primary text-primary-foreground hover:opacity-90' : 'bg-muted text-muted-foreground cursor-not-allowed pointer-events-none'
             }`}
           >
-            Download CSV
+            {t.adminExportDownloadBtn}
           </a>
         </div>
       </div>

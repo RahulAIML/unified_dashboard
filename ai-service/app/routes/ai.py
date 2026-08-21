@@ -179,20 +179,29 @@ class PublishIn(BaseModel):
 
 @router.post("/publish")
 async def do_publish(body: PublishIn) -> dict:
+    """Returns enough for the caller to build a real "you're live, here's how
+    to reach it" confirmation -- not just a bare success flag. `access_status`
+    is a stable code (never localized server-side) so the frontend can render
+    it in whatever language the admin has selected; see
+    app/dashboard-builder/page.tsx's PUBLISH_STATUS_KEY map for the strings."""
     job = jobs.get_job(body.job_id)
     if not job or not job.dashboard:
         raise HTTPException(status_code=404, detail="job/dashboard not found")
     if job.validation and not job.validation.ok:
         raise HTTPException(status_code=400, detail="validation failed; cannot publish")
     domains = job.knowledge.domains if job.knowledge else []
-    ok = await publish.run(job.dashboard, domains, _noop_log, force=body.force_republish)
+    details: dict = {}
+    ok = await publish.run(job.dashboard, domains, _noop_log, force=body.force_republish, details=details)
     job.published = ok
-    if not ok:
-        return {
-            "published": False, "slug": job.dashboard.slug,
-            "reason": "layout_frozen -- this dashboard is already live; pass force_republish=true to override",
-        }
-    return {"published": ok, "slug": job.dashboard.slug}
+    cfg = job.dashboard
+    return {
+        "published": ok,
+        "slug": cfg.slug,
+        "company": cfg.company,
+        "url": f"/d/{cfg.slug}",
+        "domain": details.get("domain"),
+        "access_status": details.get("status") or ("frozen" if not ok else "unknown"),
+    }
 
 
 async def _load_config(slug: str) -> DashboardConfig | None:

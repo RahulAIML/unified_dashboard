@@ -33,7 +33,38 @@ interface JobState {
   available_modules?: string[]
 }
 
+interface PublishResult {
+  published: boolean
+  slug: string
+  company: string
+  url: string
+  domain: string | null
+  access_status: string
+}
+
 type T = ReturnType<typeof useT>
+
+/** Who-can-access-it copy for the publish result panel, keyed by the stable
+ * (never-localized) access_status code /ai/publish returns -- see
+ * ai-service/app/routes/ai.py's do_publish docstring. */
+function accessStatusMessage(result: PublishResult, t: T): string {
+  switch (result.access_status) {
+    case 'domain_routed':
+      return `${t.builderAccessDomainRoutedPre}${result.domain}${t.builderAccessDomainRoutedPost}`
+    case 'no_client_id':      return t.builderAccessNoClientId
+    case 'no_domain':         return t.builderAccessNoDomain
+    case 'routing_failed':    return t.builderAccessRoutingFailed
+    case 'no_database':       return t.builderAccessNoDatabase
+    default:                  return t.builderAccessUnsupportedConnector
+  }
+}
+
+function testInstructionsMessage(result: PublishResult, t: T): string {
+  if (result.access_status === 'domain_routed' && result.domain) {
+    return `${t.builderTestInstructionsDomainPre}${result.domain}${t.builderTestInstructionsDomainPost}`
+  }
+  return t.builderTestInstructionsNoDomain
+}
 
 function getPhaseSteps(t: T): { key: Phase; label: string }[] {
   return [
@@ -249,7 +280,9 @@ function DashboardBuilder() {
   const [copied, setCopied] = useState(false)
   const [acknowledgedEmpty, setAcknowledgedEmpty] = useState(false)
   const [publishError, setPublishError] = useState<string | null>(null)
-  const [publishedSlug, setPublishedSlug] = useState<string | null>(null)
+  const [publishResult, setPublishResult] = useState<PublishResult | null>(null)
+  const [forceRepublishAck, setForceRepublishAck] = useState(false)
+  const [copiedLink, setCopiedLink] = useState(false)
   const seededModulesFor = useRef<string | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const logEndRef = useRef<HTMLDivElement | null>(null)
@@ -323,6 +356,12 @@ function DashboardBuilder() {
   async function generate() {
     if (!company.trim()) return
     setStarting(true); setJob(null)
+    // A fresh build must never inherit the previous company's publish
+    // state -- found live: publishResult/publishError/acknowledgedEmpty
+    // stayed set across builds, so a second, still-unpublished dashboard
+    // could show the first company's "published" link/access info, and an
+    // empty-data acknowledgment for company A silently carried over to B.
+    setPublishResult(null); setPublishError(null); setAcknowledgedEmpty(false); setForceRepublishAck(false)
     const exercise_ids = idsText.split(/[,\s]+/).map(s => parseInt(s, 10)).filter(n => !isNaN(n))
     const domains = domainText.split(/[,\s]+/).map(s => s.trim()).filter(Boolean)
     try {
@@ -340,27 +379,38 @@ function DashboardBuilder() {
     } finally { setStarting(false) }
   }
 
-  async function publish() {
+  async function publish(force = false) {
     if (!job) return
     setPublishing(true)
     setPublishError(null)
     try {
       const res = await fetch('/api/ai/publish', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ job_id: job.job_id }),
+        body: JSON.stringify({ job_id: job.job_id, force_republish: force }),
       })
-      if (!res.ok) {
-        const payload = await res.json().catch(() => ({ error: 'Publish failed' }))
-        throw new Error(payload.error || 'Publish failed')
-      }
-      const r = await res.json()
-      setJob(prev => prev ? { ...prev, published: !!r.published } : prev)
-      if (r.published && r.slug) {
-        setPublishedSlug(r.slug)
-      }
-    } catch (err) {
-      setPublishError(err instanceof Error ? err.message : 'Publish failed')
+      // A blocked (layout-frozen) publish is a normal HTTP 200 with
+      // published:false, not an error response -- it must still reach the
+      // result panel below so the admin sees *why*, instead of the button
+      // just silently failing to flip to "Published".
+      const payload: PublishResult | null = res.ok ? await res.json().catch(() => null) : null
+      if (!res.ok || !payload) throw new Error(t.builderPublishFailed)
+      setJob(prev => prev ? { ...prev, published: !!payload.published } : prev)
+      setPublishResult(payload)
+      if (payload.published) setForceRepublishAck(false)
+    } catch {
+      // Never surface the raw server/exception text here -- this app's
+      // language toggle must not leak untranslated English (or Spanish)
+      // fragments into the other language's UI.
+      setPublishError(t.builderPublishFailed)
     } finally { setPublishing(false) }
+  }
+
+  async function copyPublishedLink(url: string) {
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}${url}`)
+      setCopiedLink(true)
+      setTimeout(() => setCopiedLink(false), 2000)
+    } catch { /* clipboard not available -- non-critical */ }
   }
 
   async function saveThreshold(threshold: number, noCriteria: boolean) {
@@ -372,10 +422,7 @@ function DashboardBuilder() {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pass_threshold: threshold, has_no_passing_criteria: noCriteria }),
       })
-      if (!res.ok) {
-        const payload = await res.json().catch(() => ({ detail: 'Save failed' }))
-        throw new Error(payload.detail || payload.error || 'Save failed')
-      }
+      if (!res.ok) throw new Error(t.builderThresholdSaveFailed)
       const updatedConfig: DashboardConfig = await res.json()
       // Re-fetch live widget data so every affected KPI/chart reflects the
       // new threshold in THIS preview immediately -- no rebuild, no
@@ -388,8 +435,8 @@ function DashboardBuilder() {
         preview: rendered?.preview ?? prev.preview,
       } : prev)
       setThresholdSaveMsg(t.builderThresholdSaved)
-    } catch (err) {
-      setThresholdSaveMsg(err instanceof Error ? err.message : 'Save failed')
+    } catch {
+      setThresholdSaveMsg(t.builderThresholdSaveFailed)
     } finally { setThresholdSaving(false) }
   }
 
@@ -438,7 +485,7 @@ function DashboardBuilder() {
         <button
           onClick={toggleLang}
           className="shrink-0 px-3 py-2 rounded-lg text-xs font-semibold border border-border bg-muted hover:bg-muted/70 transition-colors tabular-nums min-h-[36px]"
-          aria-label="Toggle language"
+          aria-label={t.ariaToggleLanguage}
         >
           {lang === "en" ? "ES" : "EN"}
         </button>
@@ -629,7 +676,7 @@ function DashboardBuilder() {
                 {t.builderErrorMsg}
               </p>
               <div className="flex flex-wrap items-center gap-3">
-                <button onClick={() => { setJob(null); setCompany('') }}
+                <button onClick={() => { setJob(null); setCompany(''); setPublishResult(null); setPublishError(null); setAcknowledgedEmpty(false); setForceRepublishAck(false) }}
                   className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:opacity-90">
                   {t.builderTryAgain}
                 </button>
@@ -787,7 +834,7 @@ function DashboardBuilder() {
 
           <div className="mt-6 flex items-center gap-3">
             <button
-              onClick={publish}
+              onClick={() => publish(false)}
               disabled={
                 publishing || job.published ||
                 (job.validation ? !job.validation.ok : false) ||
@@ -796,15 +843,61 @@ function DashboardBuilder() {
               className="px-5 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50">
               {job.published ? t.builderPublished : publishing ? t.builderPublishing : t.builderPublishBtn}
             </button>
-            {job.published && <span className="text-xs text-muted-foreground">{t.builderLiveNote}</span>}
             {publishError && <span className="text-xs text-destructive">{publishError}</span>}
-            {publishedSlug && (
-              <a href={`/d/${publishedSlug}`} target="_blank" rel="noreferrer"
-                className="text-xs font-semibold text-primary hover:underline">
+          </div>
+
+          {/* Publication result — everything an admin needs to know where a
+              published dashboard actually lives and who can reach it, not
+              just a checkmark. Also covers the layout-freeze case: a
+              blocked republish is a normal 200 response (published:false),
+              so it must render here too, with an explicit,
+              opt-in-required override — never an automatic retry. */}
+          {publishResult && publishResult.published && (
+            <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 space-y-3">
+              <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">{t.builderPublishResultTitle}</p>
+              <div className="text-xs text-muted-foreground space-y-1">
+                <p><span className="font-semibold text-foreground">{t.builderPublishResultCompanyLabel}</span> {publishResult.company}</p>
+                <p className="flex items-center gap-2 flex-wrap">
+                  <span className="font-semibold text-foreground">{t.builderPublishResultUrlLabel}</span>
+                  <a href={publishResult.url} target="_blank" rel="noreferrer" className="text-primary hover:underline break-all">
+                    {typeof window !== 'undefined' ? window.location.origin : ''}{publishResult.url}
+                  </a>
+                  <button onClick={() => copyPublishedLink(publishResult.url)} type="button"
+                    className="text-xs font-semibold text-primary hover:underline whitespace-nowrap">
+                    {copiedLink ? t.builderPublishResultCopied : t.builderPublishResultCopyLink}
+                  </button>
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-foreground mb-1">{t.builderAccessInfoTitle}</p>
+                <p className="text-xs text-muted-foreground">{accessStatusMessage(publishResult, t)}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-foreground mb-1">{t.builderTestInstructionsTitle}</p>
+                <p className="text-xs text-muted-foreground">{testInstructionsMessage(publishResult, t)}</p>
+              </div>
+              <a href={publishResult.url} target="_blank" rel="noreferrer"
+                className="inline-block text-xs font-semibold text-primary hover:underline">
                 {t.builderOpenPublished}
               </a>
-            )}
-          </div>
+            </div>
+          )}
+
+          {publishResult && !publishResult.published && (
+            <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+              <p className="text-sm font-semibold text-foreground mb-1">{t.builderFrozenTitle}</p>
+              <p className="text-xs text-muted-foreground mb-3">{t.builderFrozenMsg}</p>
+              <label className="flex items-center gap-2 text-xs font-medium text-foreground cursor-pointer mb-3">
+                <input type="checkbox" checked={forceRepublishAck} onChange={e => setForceRepublishAck(e.target.checked)}
+                  className="rounded border-border" />
+                {t.builderForceRepublishAck}
+              </label>
+              <button onClick={() => publish(true)} disabled={!forceRepublishAck || publishing}
+                className="px-4 py-2 rounded-lg bg-amber-600 text-white text-xs font-semibold hover:opacity-90 disabled:opacity-50">
+                {publishing ? t.builderPublishing : t.builderForceRepublishBtn}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

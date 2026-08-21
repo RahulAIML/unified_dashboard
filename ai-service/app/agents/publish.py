@@ -19,11 +19,26 @@ _KIND_MAP = {
 }
 
 
-async def run(cfg: DashboardConfig, domains: list[str], log: LogFn, force: bool = False) -> bool:
+async def run(
+    cfg: DashboardConfig, domains: list[str], log: LogFn, force: bool = False,
+    details: dict | None = None,
+) -> bool:
+    """`details`, when passed, is filled in place with the concrete outcome of
+    login-routing registration -- `{"status": ..., "domain": str|None}` (plus
+    `"client_id"` for rolplay_app_sql). Purely additive: existing callers that
+    don't pass it are unaffected, and the bool return value keeps its exact
+    original meaning/contract (still checked by test_publish_layout_freeze.py
+    etc). This exists because the routes that call publish.run need to tell an
+    admin WHERE a dashboard is reachable and WHO can log in, not just whether
+    the call "succeeded" -- see /ai/publish's response shape."""
+    if details is None:
+        details = {}
     pool = await get_pool()
     if not pool:
         await log("publish", "warn",
                   "No database configured — publishing is available from the in-memory job only")
+        details["status"] = "no_database"
+        details["domain"] = None
         return True
 
     # Post-launch layout freeze: once a slug is live, a second publish call
@@ -36,6 +51,8 @@ async def run(cfg: DashboardConfig, domains: list[str], log: LogFn, force: bool 
         await log("publish", "warn",
                   f"'{cfg.slug}' is already published — its layout is frozen. This call was blocked to protect "
                   "what the client already sees. Pass force_republish=True to intentionally rebuild it.")
+        details["status"] = "frozen"
+        details["domain"] = None
         return False
 
     # 1) store the metadata-driven config (source of truth for dynamic rendering)
@@ -96,8 +113,12 @@ async def run(cfg: DashboardConfig, domains: list[str], log: LogFn, force: bool 
             )
             await log("publish", "success",
                       f"Live: tenant '{cfg.slug}' ({kind}) + domain '{domain}' — dashboard active within ~30s")
+            details["status"] = "domain_routed"
+            details["domain"] = domain
         except Exception as exc:
             await log("publish", "warn", f"Metadata stored; pharma_tenants upsert skipped: {str(exc)[:120]}")
+            details["status"] = "routing_failed"
+            details["domain"] = None
     elif cfg.connector == ServiceKind.rolplay_app_sql:
         # BUG FIXED: only pharma connectors were ever registered above, so
         # publishing a query-endpoint client (Siigo, Rowe, M8, Takeda…) stored
@@ -118,10 +139,15 @@ async def run(cfg: DashboardConfig, domains: list[str], log: LogFn, force: bool 
                 await log("publish", "info", f"Domain not provided — derived '{domain}' from the client's users")
         if not client_id:
             await log("publish", "warn", "Config stored, but no client_id on the connector — logins cannot be routed")
+            details["status"] = "no_client_id"
+            details["domain"] = None
         elif not domain:
             await log("publish", "warn",
                       f"Config stored for client_id={client_id}, but no company domain could be determined "
                       "(client has no users with a company email yet) — logins cannot be routed.")
+            details["status"] = "no_domain"
+            details["domain"] = None
+            details["client_id"] = client_id
         else:
             try:
                 # Idempotent so publishing works even if migration 005 hasn't been
@@ -145,12 +171,20 @@ async def run(cfg: DashboardConfig, domains: list[str], log: LogFn, force: bool 
                 await log("publish", "success",
                           f"Live: '{cfg.company}' (client_id={client_id}) + domain '{domain}' — "
                           "logins route to this dashboard within ~60s")
+                details["status"] = "domain_routed"
+                details["domain"] = domain
+                details["client_id"] = client_id
             except Exception as exc:
                 await log("publish", "warn",
                           f"Config stored; login routing NOT registered: {str(exc)[:120]} "
                           "(run migration 005_rolplay_app_domains.sql)")
+                details["status"] = "routing_failed"
+                details["domain"] = None
+                details["client_id"] = client_id
     else:
         await log("publish", "success", f"Config published for '{cfg.slug}' (rendered from metadata)")
+        details["status"] = "unsupported_connector"
+        details["domain"] = None
     return True
 
 

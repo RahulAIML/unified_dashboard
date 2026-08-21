@@ -55,7 +55,7 @@ export function ExportButton<T>({
     <button
       onClick={handleClick}
       disabled={busy}
-      title={isEmpty ? `Download empty export (${filename})` : `Download ${filename}`}
+      title={isEmpty ? `${t.exportTooltipEmptyPre}${filename}${t.exportTooltipEmptyPost}` : `${t.exportTooltipDownloadPre}${filename}`}
       className={cn(
         "inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold",
         "border transition-all select-none whitespace-nowrap",
