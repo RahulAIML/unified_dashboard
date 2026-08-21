@@ -331,6 +331,28 @@ export default function LmsPage() {
                     { header: "Avg Score (%)",    value: r => r.avgScore },
                   ]}
                 />
+                {/* Internal/temporary, evaluation only (see LmsApiResponse
+                    .enrollments's docstring): exports the raw per-learner
+                    rows a completion rate is actually built from. Only
+                    present in demo mode -- absent entirely for a real
+                    tenant, so this button self-hides for real data. */}
+                {!!data?.enrollments?.length && (
+                  <ExportButton
+                    data={data.enrollments}
+                    filename={csvFilename("lms-raw-enrollments")}
+                    label={t.lmsExportRawLabel}
+                    columns={[
+                      { header: "User ID",       value: r => r.userId },
+                      { header: "User Name",     value: r => r.userName },
+                      { header: "User Email",    value: r => r.userEmail },
+                      { header: "Course ID",     value: r => r.courseId },
+                      { header: "Course Name",   value: r => r.courseName },
+                      { header: "Status",        value: r => r.status },
+                      { header: "Score",         value: r => r.score },
+                      { header: "Completed At",  value: r => r.completedAt },
+                    ]}
+                  />
+                )}
               </div>
               <div className="p-5">
                 {loading

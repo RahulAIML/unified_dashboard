@@ -417,4 +417,13 @@ export interface LmsApiResponse {
   /** Completions per day, filtered to the selected range. */
   completionTrend:  ApiTrendPoint[]
   courses:          LmsCourseRow[]
+  /** Internal/temporary: one row per (learner, course) enrollment, demo-mode
+   *  only (lib/demo/engine.ts's demoLms) -- lets an admin export the raw data
+   *  a completion rate is actually built from, for KPI-design evaluation.
+   *  Real LearnWorlds responses never set this field. To be removed once
+   *  that evaluation is done. */
+  enrollments?: {
+    userId: string; userName: string; userEmail: string; courseId: string; courseName: string
+    status: 'completed' | 'in_progress' | 'not_started'; score: number | null; completedAt: string | null
+  }[]
 }
