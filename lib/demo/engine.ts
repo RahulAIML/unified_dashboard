@@ -62,6 +62,28 @@ function addDays(d: Date, n: number): Date {
   return r
 }
 
+// Real production benchmark, verified live against M8 (a genuinely
+// well-established rolplay_app_sql client): ~900 sessions total across its
+// ENTIRE history, spanning multiple modules. Demo data used a flat per-day
+// rate multiplied by raw calendar days, so the default "All" view (10
+// years -- ALL_TIME_DAYS in DashboardHeader.tsx) produced 130K-245K
+// evaluations per module: 100-200x larger than a real established client,
+// which made every KPI impossible to sanity-check by hand and every trend
+// chart plot an unreadable value range (reported directly in the Aug 20/21
+// sprint reviews). `activityDays` scales exactly linearly with the
+// requested range up to 90 days (so a normal week/month/quarter demo view
+// is completely unchanged from before), then grows sublinearly beyond that
+// -- an established synthetic company's pace of NEW activity plateaus over
+// years the same way a real one's does, without going so flat that "all
+// time" and "last 30 days" read as roughly the same total (a first version
+// of this curve over-corrected into exactly that -- days=30 and
+// days=3650 landed within ~4.5x of each other, which looks like the
+// company went dormant, not established).
+function activityDays(days: number): number {
+  if (days <= 90) return days
+  return 90 + Math.pow(days - 90, 0.6) * 3
+}
+
 // ── Demo constants ────────────────────────────────────────────────────────────
 export const DEMO_USECASE_IDS = [101, 102, 103, 104, 105] as const
 
@@ -166,7 +188,7 @@ export function demoOverview(from: Date, to: Date, solution: string | null = nul
 
   const baseRate = RATE_MAP[solution] ?? 52
   const dailyRate   = baseRate + rng() * 9
-  const totalEvals  = Math.round(dailyRate * days)
+  const totalEvals  = Math.round(dailyRate * activityDays(days))
 
   // Solution-specific score ranges
   const scoreMap: Record<string, [number, number]> = {
@@ -219,6 +241,21 @@ export function demoTrends(from: Date, to: Date, solution: string | null = null)
   const rng    = seededRng(dateToSeed(from, to, salt) + 7)
   const bucket = bucketSizeDays(days)
 
+  // Anchored to demoOverview's REAL totalEvaluations for this (solution,
+  // from, to) -- previously this trend's day-of-week volume model (46-70/day
+  // weekday, 12-24/day weekend) was a completely separate RNG stream from
+  // Overview's flat daily rate, so summing this chart's points never matched
+  // the Overview tile shown right above it for the same module/range. Each
+  // day's expected share is its weekday/weekend weight over the range's total
+  // weight, times the real total -- the weekday/weekend shape is preserved,
+  // but the sum now tracks the actual Overview number instead of drifting
+  // from an unrelated model.
+  const overview = demoOverview(from, to, solution)
+  const dayWeight = (d: Date) => { const dow = d.getDay(); return dow > 0 && dow < 6 ? 1 : 0.35 }
+  let weightSum = 0
+  for (let i = 0; i < days; i++) weightSum += dayWeight(addDays(from, i))
+  const perWeightUnit = weightSum > 0 ? overview.totalEvaluations / weightSum : 0
+
   const scoreTrend:     { date: string; value: number }[]                   = []
   const passFailTrend:  { date: string; value: number; value2: number }[]   = []
   const evalCountTrend: { date: string; value: number }[]                   = []
@@ -235,13 +272,13 @@ export function demoTrends(from: Date, to: Date, solution: string | null = null)
     const jitter    = (rng() - 0.5) * 4
     scoreTrend.push({ date: ymd, value: Math.round((baseScore + jitter) * 10) / 10 })
 
-    // Eval count and pass/fail are per-day volumes summed across the bucket's
-    // real day span, so the totals still scale correctly with bucket size.
+    // Eval count is each real day's share of the range's true total,
+    // weighted by weekday/weekend and jittered (centered at 1x, so the
+    // bucket sum stays close to its fair share of the real Overview total).
     let evals = 0
     for (let i = 0; i < span; i++) {
-      const dow    = addDays(d, i).getDay()
-      const isWeek = dow > 0 && dow < 6
-      evals += Math.round(isWeek ? 46 + rng() * 24 : 12 + rng() * 12)
+      const day = addDays(d, i)
+      evals += Math.round(perWeightUnit * dayWeight(day) * (0.85 + rng() * 0.3))
     }
     evalCountTrend.push({ date: ymd, value: evals })
 
@@ -255,13 +292,20 @@ export function demoTrends(from: Date, to: Date, solution: string | null = null)
 }
 
 // ── Usecase Breakdown ─────────────────────────────────────────────────────────
+// Anchored to demoOverview's REAL totalEvaluations/avgScore/passRate for the
+// same (solution, from, to) rather than an independently-rolled total --
+// previously this table and the Overview tile above it were two disconnected
+// RNG streams (different base rate, no shared driver), so a viewer comparing
+// them saw numbers with no relationship to each other. Rows still get their
+// own per-usecase variance (weights, small score/pass jitter), but the sum
+// across rows now equals the real Overview total, matching how a client's
+// actual usecase breakdown always sums back to their actual total sessions.
 export function demoUsecaseBreakdown(from: Date, to: Date, solution: string | null, lang: 'en' | 'es' = 'es') {
-  const days      = daysBetween(from, to)
-  const salt      = solutionSalt(solution)
-  const rng       = seededRng(dateToSeed(from, to, salt) + 13)
-  const totalBase = Math.round(50 * days) // see demoOverview's rateMap comment -- same reasoning
+  const salt     = solutionSalt(solution)
+  const rng      = seededRng(dateToSeed(from, to, salt) + 13)
+  const overview = demoOverview(from, to, solution)
 
-  // Distribution weights (must sum to ~1)
+  // Distribution weights (sum to 1.0) for the "All" case's 5 usecases.
   const weights = [0.28, 0.24, 0.22, 0.15, 0.11]
 
   // One deterministic usecase per real module (not always index 0 -- the old
@@ -274,10 +318,13 @@ export function demoUsecaseBreakdown(from: Date, to: Date, solution: string | nu
     : [...DEMO_USECASE_IDS]
 
   const rows = ids.map((ucId, i) => {
-    const weight = weights[i] ?? 0.2
-    const total  = Math.round(totalBase * weight * (0.9 + rng() * 0.2))
-    const score  = Math.round((78 + rng() * 12) * 10) / 10
-    const pr     = Math.round((70 + rng() * 18) * 10) / 10
+    const weight = solution ? 1 : (weights[i] ?? 0.2)
+    const total  = Math.round(overview.totalEvaluations * weight)
+    // Small jitter around the module's REAL average/pass rate, not an
+    // independent roll -- keeps each usecase plausible on its own while
+    // still visibly related to the Overview tile for the same module.
+    const score  = Math.max(0, Math.min(100, Math.round((overview.avgScore + (rng() - 0.5) * 6) * 10) / 10))
+    const pr     = Math.max(0, Math.min(100, Math.round((overview.passRate + (rng() - 0.5) * 8) * 10) / 10))
     const passed = Math.round(total * (pr / 100))
 
     return {
@@ -328,6 +375,13 @@ export function demoBestPerformers(from: Date, to: Date, limit = 5, solution: st
   const days = daysBetween(from, to)
   const salt = solutionSalt(solution)
   const rng  = seededRng(dateToSeed(from, to, salt) + 23)
+  // Anchored to the module's REAL average -- a top performer is, by
+  // definition, ABOVE the tenant's own average score/pass rate, not an
+  // absolute number independent of it (previously avg_score/pass_rate were
+  // rolled from a completely separate range than Overview's avgScore/
+  // passRate for the same module, so the leaderboard could show a "best
+  // performer" doing worse than the tenant's own reported average).
+  const overview = demoOverview(from, to, solution)
 
   return {
     data: DEMO_USERS.slice(0, limit).map(u => ({
@@ -338,8 +392,8 @@ export function demoBestPerformers(from: Date, to: Date, limit = 5, solution: st
       // "All time" range (that's several sessions every single day for a
       // decade) -- realistic even for a top performer over any range.
       sessions:   Math.round(Math.min(days, 400) * (0.8 + rng() * 1.2)),
-      avg_score:  Math.round((85 + rng() * 12) * 10) / 10,
-      pass_rate:  Math.round((79 + rng() * 17) * 10) / 10,
+      avg_score:  Math.max(0, Math.min(100, Math.round((overview.avgScore + 4 + rng() * 10) * 10) / 10)),
+      pass_rate:  Math.max(0, Math.min(100, Math.round((overview.passRate + 3 + rng() * 15) * 10) / 10)),
     })),
   }
 }
@@ -532,7 +586,20 @@ export function demoLms(from: Date, to: Date, lang: 'en' | 'es' = 'es') {
         'Manejo de Objeciones Avanzado',
       ]
 
-  const learners = 60 + Math.floor(rng() * 40)
+  // A real, shared roster size drives every course below -- reported directly
+  // in the Aug 20/21 sprint reviews: "102 total users, 5 courses each, so
+  // 510 total possible completions... the completion rate should be
+  // compared not to the enrolled, but to the total." Previously each
+  // course's `enrolled` was its own independent 20-64 roll, unconstrained by
+  // any shared user count, so "how many of our N users are in this course"
+  // never made sense across the table. Every course is now a real subset of
+  // the SAME totalUsers roster, and both the per-course and aggregate
+  // completionRate use the exact formula shipped in
+  // lib/lms-learnworlds.ts's real fix (completed / totalUsers, and
+  // completed / (totalUsers x totalCourses)), so the demo actually exercises
+  // the corrected math instead of a shape the real formula never sees.
+  const totalUsers = 40 + Math.floor(rng() * 60) // 40-100, a realistic roster
+  const enrolledUsers = Math.round(totalUsers * (0.7 + rng() * 0.25)) // 70-95% enrolled in at least one course
 
   let totalEnrollments = 0
   let totalCompleted   = 0
@@ -540,10 +607,11 @@ export function demoLms(from: Date, to: Date, lang: 'en' | 'es' = 'es') {
   let scoreN   = 0
 
   const courses = COURSES.map((name, i) => {
-    const enrolled  = 20 + Math.floor(rng() * 45)
-    const rate      = 0.42 + rng() * 0.45
-    const completed = Math.round(enrolled * rate)
-    const avgScore  = Math.round((74 + rng() * 16) * 10) / 10
+    const enrollRate = 0.45 + rng() * 0.5 // 45-95% of the roster took this course
+    const enrolled   = Math.min(totalUsers, Math.round(totalUsers * enrollRate))
+    const rate       = 0.42 + rng() * 0.45
+    const completed  = Math.round(enrolled * rate)
+    const avgScore   = Math.round((74 + rng() * 16) * 10) / 10
 
     totalEnrollments += enrolled
     totalCompleted   += completed
@@ -556,7 +624,10 @@ export function demoLms(from: Date, to: Date, lang: 'en' | 'es' = 'es') {
       enrolled,
       completed,
       inProgress: Math.max(0, enrolled - completed - Math.round(enrolled * 0.2)),
-      completionRate: Math.round((completed / enrolled) * 1000) / 10,
+      totalUsers,
+      // Against the full roster, not just this course's own enrollment --
+      // matches lib/lms-learnworlds.ts's real completionRate formula exactly.
+      completionRate: Math.round((completed / totalUsers) * 1000) / 10,
       avgScore,
     }
   })
@@ -575,14 +646,17 @@ export function demoLms(from: Date, to: Date, lang: 'en' | 'es' = 'es') {
 
   return {
     configured:       true,
-    enrolledUsers:    learners,
-    totalUsers:       learners + 8,
+    enrolledUsers,
+    totalUsers,
     totalEnrollments,
     totalCourses:     courses.length,
     modulesCompleted: totalCompleted,
     inProgress,
     notStarted:       Math.max(0, totalEnrollments - totalCompleted - inProgress),
-    completionRate:   Math.round((totalCompleted / totalEnrollments) * 1000) / 10,
+    // Against the full roster (totalUsers x totalCourses), matching the real
+    // fix in lib/lms-learnworlds.ts -- e.g. 102 users x 5 courses = 510
+    // possible completions, not however many enrollments happened to exist.
+    completionRate:   Math.round((totalCompleted / (totalUsers * courses.length)) * 1000) / 10,
     // Demo shows a graded school so the scored path is exercised too.
     avgQuizScore:     Math.round((scoreSum / scoreN) * 10) / 10,
     hasScoreData:     true,
