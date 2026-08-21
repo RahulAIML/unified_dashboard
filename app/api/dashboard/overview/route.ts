@@ -5,9 +5,9 @@ import { getAuthContextFromRequest } from '@/lib/server-auth'
 import { resolveDynamicUsecaseIds } from '@/lib/dynamic-usecase-resolver'
 import { resolveOrgType } from '@/lib/org-type'
 import { bancoOverviewFromSecondBrain } from '@/lib/banco-second-brain'
-import { resolveRolplayAppAccess, rolplayAppOverview, mergeOverviewSources } from '@/lib/bridge-rolplay-app'
+import { resolveRolplayAppAccess, rolplayAppOverview } from '@/lib/bridge-rolplay-app'
 import { resolvePharmaTenantAccess } from '@/lib/pharma-tenant'
-import { pharmaDashboardOverview } from '@/lib/bridge-pharma-analytics'
+import { resolveDataSources, fetchOverview } from '@/lib/data-sources'
 import { isDemoDataEnabled } from '@/lib/demo'
 import { demoOverview } from '@/lib/demo/engine'
 
@@ -73,40 +73,30 @@ export async function GET(request: NextRequest) {
       const prevTo   = new Date(range.from.getTime() - 1)
       const prevFrom = new Date(prevTo.getTime() - spanMs)
 
-      let data = await pharmaDashboardOverview(tenant, {
+      // Rolplay App SQL is the PRIMARY source wherever it genuinely exists
+      // for this identity (see lib/data-sources.ts) -- a pharma tenant's
+      // real users can ALSO be real users of a distinct rolplay_app_sql
+      // client_id (verified for M8: arceralifesciences.com reps exist in
+      // both pharma_exceltis_rest and rolplay_app_sql client_id=24 -- two
+      // real systems, the same real people). Composed into the tenant-wide
+      // Overview rather than silently hiding one; module tabs stay on the
+      // existing single-source resolvePharmaTenantAccess path below,
+      // untouched. Driven purely by whether a secondary source resolves for
+      // this email, not a tenant-name check, so it applies automatically to
+      // any tenant wired the same way with zero effect on every tenant that
+      // isn't.
+      const sources = await resolveDataSources(ctx.email, tenant, solution)
+      const result = await fetchOverview(sources, {
         fromIso:     range.from.toISOString(),
         toIso:       range.to.toISOString(),
         prevFromIso: prevFrom.toISOString(),
         prevToIso:   prevTo.toISOString(),
-        solution,
-      })
+      }, solution)
+      if (!result) return buildApiError('Pharma tenant could not be resolved', 500)
 
-      // A pharma tenant's real users can ALSO be real users of a distinct
-      // rolplay_app_sql client_id (verified for M8: arceralifesciences.com
-      // reps exist in both pharma_exceltis_rest and rolplay_app_sql
-      // client_id=24 -- two real systems, the same real people). Compose
-      // both into the tenant-wide Overview rather than silently hiding one.
-      // Scoped to solution=null only: module tabs (Coach/Simulador/etc.)
-      // keep their already-verified single-source scope unchanged. This is
-      // driven purely by whether a secondary source resolves for this email
-      // (lib/bridge-rolplay-app.ts's domain map) -- no tenant name check
-      // here, so it applies automatically if another tenant is ever wired
-      // the same way, with zero effect on every tenant that isn't.
-      let source = `pharma-${tenant}`
-      if (!solution) {
-        const secondaryClientId = await resolveRolplayAppAccess(ctx.email)
-        if (secondaryClientId) {
-          const secondaryData = await rolplayAppOverview(secondaryClientId, {
-            fromIso: range.from.toISOString(), toIso: range.to.toISOString(),
-          })
-          data = mergeOverviewSources(data, secondaryData)
-          source = `pharma-${tenant}+rolplay-app-${secondaryClientId}`
-        }
-      }
-
-      return buildSuccess(data, {
+      return buildSuccess(result.data, {
         from: range.from.toISOString(), to: range.to.toISOString(),
-        solution, source,
+        solution, source: result.source,
       })
     }
 

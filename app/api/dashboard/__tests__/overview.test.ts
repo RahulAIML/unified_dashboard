@@ -228,10 +228,10 @@ describe("GET /api/dashboard/overview — orgType 'pharma'", () => {
     // avgScore is a totalEvaluations-weighted blend, not a plain average:
     // (80*100 + 90*50) / 150 = 83.33... -> 83.3
     expect(body.data.avgScore).toBeCloseTo(83.3, 1)
-    expect(body.meta.filters.source).toBe('pharma-m8+rolplay-app-24')
+    expect(body.meta.filters.source).toBe('rolplay-app-24+pharma-m8')
     expect(rolplayAppOverview).toHaveBeenCalledWith(24, {
       fromIso: '2026-04-06T00:00:00.000Z', toIso: '2026-05-06T00:00:00.000Z',
-    })
+    }, null)
   })
 
   it('does NOT attempt secondary-source composition for a module-scoped page (solution set)', async () => {
