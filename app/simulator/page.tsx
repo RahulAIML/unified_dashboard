@@ -20,6 +20,7 @@ import type {
   TrendsApiResponse,
   UsecaseBreakdownApiResponse,
   UsecaseApiRow,
+  ResultsApiResponse,
 } from "@/lib/types"
 
 const icons = [
@@ -79,10 +80,15 @@ export default function SimulatorPage() {
   const overviewUrl = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to, { solution: "simulator", rk: refreshKey })
   const trendsUrl   = buildApiUrl("/api/dashboard/trends",   dateRange.from, dateRange.to, { solution: "simulator", rk: refreshKey })
   const ucUrl       = buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to, { solution: "simulator", rk: refreshKey })
+  // Internal/temporary, KPI-design evaluation only (see the export card
+  // below): raw per-session rows, the same data /api/dashboard/results
+  // already serves for Certification's "Evaluation Results" table.
+  const resultsUrl  = buildApiUrl("/api/dashboard/results", dateRange.from, dateRange.to, { limit: 200, solution: "simulator", rk: refreshKey })
 
   const { data: overview, loading: overviewLoading, error: overviewError } = useApi<OverviewApiResponse>(overviewUrl)
   const { data: trends,   loading: trendsLoading,   error: trendsError }   = useApi<TrendsApiResponse>(trendsUrl)
   const { data: ucBreakdown, loading: ucLoading,    error: ucError }       = useApi<UsecaseBreakdownApiResponse>(ucUrl)
+  const { data: rawResults }                                              = useApi<ResultsApiResponse>(resultsUrl)
 
   const hasData = overview && overview.totalEvaluations > 0
 
@@ -264,6 +270,34 @@ export default function SimulatorPage() {
             }
           </div>
         </div>
+
+        {/* Internal/temporary: raw per-session export for KPI-design
+            evaluation (Aug 20/21 sprint review) -- lets an admin download
+            the exact rows a KPI/chart on this page is computed from. To be
+            removed once that evaluation is done, matching Certification's
+            existing "Evaluation Results" export. */}
+        {!!rawResults?.data?.length && (
+          <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+            <div className="px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
+              <div>
+                <h3 className="text-sm font-semibold">{t.rawExportTitle}</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">{rawResults.data.length} {t.rawExportSub}</p>
+              </div>
+              <ExportButton
+                data={rawResults.data}
+                filename={csvFilename("simulator-raw-sessions")}
+                label={t.rawExportLabel}
+                columns={[
+                  { header: "Report ID",   value: r => r.savedReportId },
+                  { header: "Use Case ID", value: r => r.usecaseId },
+                  { header: "Score",       value: r => r.score },
+                  { header: "Result",      value: r => r.passed == null ? "" : r.passed ? "PASS" : "FAIL" },
+                  { header: "Date",        value: r => r.date },
+                ]}
+              />
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

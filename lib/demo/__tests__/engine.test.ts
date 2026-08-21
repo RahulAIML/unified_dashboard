@@ -154,3 +154,42 @@ describe('demoLms — every course is a real subset of the SAME shared roster', 
     }
   })
 })
+
+/**
+ * Raw per-(learner, course) export, added so an admin can download exactly
+ * the rows a completion rate is computed from -- a temporary evaluation tool
+ * (Aug 21 sprint review), not part of LmsApiResponse's real-data contract.
+ */
+describe('demoLms — raw enrollment export rows are consistent with the aggregate counts', () => {
+  it('emits exactly `enrolled` rows for each course, matching the course\'s own aggregate', () => {
+    const lms = demoLms(FROM, TO, 'en')
+    for (const course of lms.courses) {
+      const rowsForCourse = lms.enrollments.filter(r => r.courseId === course.courseId)
+      expect(rowsForCourse.length).toBe(course.enrolled)
+    }
+  })
+
+  it('the completed/in_progress/not_started row counts match the course\'s own aggregate fields', () => {
+    const lms = demoLms(FROM, TO, 'en')
+    for (const course of lms.courses) {
+      const rowsForCourse = lms.enrollments.filter(r => r.courseId === course.courseId)
+      const completed = rowsForCourse.filter(r => r.status === 'completed').length
+      const inProgress = rowsForCourse.filter(r => r.status === 'in_progress').length
+      expect(completed).toBe(course.completed)
+      expect(inProgress).toBe(course.inProgress)
+    }
+  })
+
+  it('never fabricates a score or completedAt date for a row that is not completed', () => {
+    const lms = demoLms(FROM, TO, 'en')
+    for (const row of lms.enrollments) {
+      if (row.status !== 'completed') {
+        expect(row.score).toBeNull()
+        expect(row.completedAt).toBeNull()
+      } else {
+        expect(row.score).not.toBeNull()
+        expect(row.completedAt).not.toBeNull()
+      }
+    }
+  })
+})

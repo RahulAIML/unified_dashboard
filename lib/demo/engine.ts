@@ -606,11 +606,24 @@ export function demoLms(from: Date, to: Date, lang: 'en' | 'es' = 'es') {
   let scoreSum = 0
   let scoreN   = 0
 
+  // Learner identities for the raw per-enrollment export below -- cycles the
+  // real-sounding DEMO_USERS names, then numbered "Learner N" for the rest of
+  // the roster (this roster, 40-100, is bigger than the 15-name list used
+  // elsewhere for best-performers/objections).
+  const learnerName = (idx: number) => idx < DEMO_USERS.length ? DEMO_USERS[idx].name : `Learner ${idx + 1}`
+  const learnerEmail = (idx: number) => idx < DEMO_USERS.length ? DEMO_USERS[idx].email : `learner${idx + 1}@demo.rolplay.ai`
+
+  const enrollments: {
+    userId: string; userName: string; userEmail: string; courseId: string; courseName: string
+    status: 'completed' | 'in_progress' | 'not_started'; score: number | null; completedAt: string | null
+  }[] = []
+
   const courses = COURSES.map((name, i) => {
     const enrollRate = 0.45 + rng() * 0.5 // 45-95% of the roster took this course
     const enrolled   = Math.min(totalUsers, Math.round(totalUsers * enrollRate))
     const rate       = 0.42 + rng() * 0.45
     const completed  = Math.round(enrolled * rate)
+    const inProgressN = Math.max(0, enrolled - completed - Math.round(enrolled * 0.2))
     const avgScore   = Math.round((74 + rng() * 16) * 10) / 10
 
     totalEnrollments += enrolled
@@ -618,12 +631,33 @@ export function demoLms(from: Date, to: Date, lang: 'en' | 'es' = 'es') {
     scoreSum += avgScore
     scoreN   += 1
 
+    const courseId = `demo-course-${i + 1}`
+    // One real enrollment row per learner in this course -- deterministic
+    // "first N of the roster" rather than a random subset, so a viewer can
+    // cross-check completed+inProgress+notStarted against the course's own
+    // aggregate counts above by counting rows in the exported CSV.
+    for (let u = 0; u < enrolled; u++) {
+      const status: 'completed' | 'in_progress' | 'not_started' =
+        u < completed ? 'completed' : u < completed + inProgressN ? 'in_progress' : 'not_started'
+      const daysAgo = Math.floor(rng() * days)
+      enrollments.push({
+        userId: `demo-learner-${u + 1}`,
+        userName: learnerName(u),
+        userEmail: learnerEmail(u),
+        courseId,
+        courseName: name,
+        status,
+        score: status === 'completed' ? Math.max(0, Math.min(100, Math.round(avgScore + (rng() - 0.5) * 20))) : null,
+        completedAt: status === 'completed' ? toYMD(addDays(to, -daysAgo)) : null,
+      })
+    }
+
     return {
-      courseId: `demo-course-${i + 1}`,
+      courseId,
       name,
       enrolled,
       completed,
-      inProgress: Math.max(0, enrolled - completed - Math.round(enrolled * 0.2)),
+      inProgress: inProgressN,
       totalUsers,
       // Against the full roster, not just this course's own enrollment --
       // matches lib/lms-learnworlds.ts's real completionRate formula exactly.
@@ -662,5 +696,12 @@ export function demoLms(from: Date, to: Date, lang: 'en' | 'es' = 'es') {
     hasScoreData:     true,
     completionTrend,
     courses,
+    // Internal/temporary: one row per (learner, course) enrollment -- lets an
+    // admin export the raw data an LMS completion rate is actually built
+    // from, the same way the other 3 modules' "Evaluation Results" export
+    // does. Not part of LmsApiResponse's real-data contract (optional field,
+    // real LearnWorlds responses never set it) -- to be removed once the
+    // KPI-design evaluation this was requested for is done.
+    enrollments,
   }
 }

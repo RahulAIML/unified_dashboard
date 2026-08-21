@@ -22,6 +22,7 @@ import type {
   BestPerformersApiResponse,
   ObjectionsApiResponse,
   ObjectionRow,
+  ResultsApiResponse,
 } from "@/lib/types"
 
 const kpiIcons = [
@@ -73,12 +74,17 @@ export default function CoachPage() {
   const ucUrl          = buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to, { solution: "coach", rk: refreshKey })
   const bestUrl        = buildApiUrl("/api/dashboard/best-performers",   dateRange.from, dateRange.to, { limit: 50, solution: "coach", rk: refreshKey })
   const objectionsUrl  = buildApiUrl("/api/dashboard/objections", dateRange.from, dateRange.to, { rk: refreshKey })
+  // Internal/temporary, KPI-design evaluation only (see the export card
+  // below): raw per-session rows, the same data /api/dashboard/results
+  // already serves for Certification's "Evaluation Results" table.
+  const resultsUrl     = buildApiUrl("/api/dashboard/results", dateRange.from, dateRange.to, { limit: 200, solution: "coach", rk: refreshKey })
 
   const { data: overview, loading: overviewLoading, error: overviewError } = useApi<OverviewApiResponse>(overviewUrl)
   const { data: trends,   loading: trendsLoading }           = useApi<TrendsApiResponse>(trendsUrl)
   const { data: ucBreakdown,    loading: ucLoading }         = useApi<UsecaseBreakdownApiResponse>(ucUrl)
   const { data: bestPerformers, loading: bestLoading, error: bestError } = useApi<BestPerformersApiResponse>(bestUrl)
   const { data: objections,     loading: objectionsLoading } = useApi<ObjectionsApiResponse>(objectionsUrl)
+  const { data: rawResults }                                 = useApi<ResultsApiResponse>(resultsUrl)
 
   const loading = ucLoading || bestLoading
   const hasData = (bestPerformers?.data?.length ?? 0) > 0 || (ucBreakdown?.data?.length ?? 0) > 0
@@ -334,6 +340,34 @@ export default function CoachPage() {
                 ? <div className="py-10 text-center text-sm text-muted-foreground">{t.loading}</div>
                 : <DataTable data={objections!.data} columns={objectionColumns} pageSize={10} />
               }
+            </div>
+          </div>
+        )}
+
+        {/* Internal/temporary: raw per-session export for KPI-design
+            evaluation (Aug 20/21 sprint review) -- lets an admin download
+            the exact rows a KPI/chart on this page is computed from. To be
+            removed once that evaluation is done, matching Certification's
+            existing "Evaluation Results" export. */}
+        {!!rawResults?.data?.length && (
+          <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+            <div className="px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
+              <div>
+                <h3 className="text-sm font-semibold">{t.rawExportTitle}</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">{rawResults.data.length} {t.rawExportSub}</p>
+              </div>
+              <ExportButton
+                data={rawResults.data}
+                filename={csvFilename("coach-raw-sessions")}
+                label={t.rawExportLabel}
+                columns={[
+                  { header: "Report ID",   value: r => r.savedReportId },
+                  { header: "Use Case ID", value: r => r.usecaseId },
+                  { header: "Score",       value: r => r.score },
+                  { header: "Result",      value: r => r.passed == null ? "" : r.passed ? "PASS" : "FAIL" },
+                  { header: "Date",        value: r => r.date },
+                ]}
+              />
             </div>
           </div>
         )}
