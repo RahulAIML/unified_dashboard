@@ -379,6 +379,11 @@ export interface LmsCourseRow {
   enrolled:       number
   completed:      number
   inProgress:     number
+  /** Total real users on the school -- the completion-rate denominator (every
+   *  user is expected to take every course), also shown as a "Total" column
+   *  so the table matches the KPI tile's own "of N users" sub-label. */
+  totalUsers:     number
+  /** Percent 0-100, against totalUsers (the whole roster), not `enrolled`. */
   completionRate: number | null
   avgScore:       number | null
 }
@@ -396,7 +401,9 @@ export interface LmsApiResponse {
   modulesCompleted: number
   inProgress:       number
   notStarted:       number
-  /** Percent 0-100. Null when there are no enrollments to divide by. */
+  /** Percent 0-100, against the FULL roster (totalUsers * totalCourses),
+   *  not against however many enrollments happened to exist -- every user
+   *  is expected to take every course. Null when there's nothing to divide by. */
   completionRate:   number | null
   /**
    * Percent 0-100, or null when the school has no graded assessments.

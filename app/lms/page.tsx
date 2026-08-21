@@ -195,6 +195,13 @@ export default function LmsPage() {
       render: r => <span className="tabular-nums text-muted-foreground">{r.inProgress}</span>,
     },
     {
+      // The roster size (same number as the "of N users" sub-label above the
+      // table) -- shown per row so the completion rate below is legible as
+      // "completed out of this many", not "out of however many enrolled".
+      key: "totalUsers", header: t.lmsColTotal,
+      render: r => <span className="tabular-nums text-muted-foreground">{r.totalUsers}</span>,
+    },
+    {
       key: "completionRate", header: t.completionRate,
       render: r => r.completionRate != null
         ? <CompletionBar value={r.completionRate} />
@@ -318,6 +325,7 @@ export default function LmsPage() {
                     { header: "Enrolled",         value: r => r.enrolled },
                     { header: "Completed",        value: r => r.completed },
                     { header: "In Progress",      value: r => r.inProgress },
+                    { header: "Total Users",      value: r => r.totalUsers },
                     { header: "Completion Rate (%)", value: r => r.completionRate },
                     // Empty, not 0 — the course was never graded.
                     { header: "Avg Score (%)",    value: r => r.avgScore },
