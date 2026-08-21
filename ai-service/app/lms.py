@@ -306,6 +306,12 @@ async def _build_lms_dashboard(creds: LmsCredentials, from_key: str, to_key: str
                 agg["scoreSum"] += score
                 agg["scoreN"] += 1
 
+    # completionRate (here and in the aggregate below) is against the TOTAL
+    # ROSTER (every real user on the school), not however many people
+    # happened to enroll -- mirrors lib/lms-learnworlds.ts exactly (found
+    # live 2026-08-20: completed/enrolled read as "half the workforce is
+    # done" when most of the roster hadn't even enrolled yet).
+    total_users = len(users)
     course_rows = sorted(
         (
             {
@@ -314,7 +320,8 @@ async def _build_lms_dashboard(creds: LmsCredentials, from_key: str, to_key: str
                 "enrolled": int(a["enrolled"]),
                 "completed": int(a["completed"]),
                 "inProgress": int(a["inProgress"]),
-                "completionRate": round((a["completed"] / a["enrolled"]) * 1000) / 10 if a["enrolled"] > 0 else None,
+                "totalUsers": total_users,
+                "completionRate": round((a["completed"] / total_users) * 1000) / 10 if total_users > 0 else None,
                 "avgScore": round((a["scoreSum"] / a["scoreN"]) * 10) / 10 if a["scoreN"] > 0 else None,
             }
             for cid, a in per_course.items()
@@ -333,7 +340,8 @@ async def _build_lms_dashboard(creds: LmsCredentials, from_key: str, to_key: str
         "modulesCompleted": completed,
         "inProgress": in_progress,
         "notStarted": not_started,
-        "completionRate": round((completed / total_enrollments) * 1000) / 10 if total_enrollments > 0 else None,
+        "completionRate": round((completed / (total_users * len(courses))) * 1000) / 10
+        if total_users > 0 and courses else None,
         "avgQuizScore": round((score_sum / score_n) * 10) / 10 if score_n > 0 else None,
         "hasScoreData": score_n > 0,
         "completionTrend": completion_trend,

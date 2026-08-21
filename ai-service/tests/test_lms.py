@@ -135,7 +135,7 @@ class LmsDashboardAggregationTests(unittest.TestCase):
         self.assertEqual(result["modulesCompleted"], 1)
         self.assertEqual(result["inProgress"], 1)
         self.assertEqual(result["notStarted"], 0)
-        self.assertEqual(result["completionRate"], 50.0)  # 1 completed / 2 enrollments
+        self.assertEqual(result["completionRate"], 16.7)  # 1 completed / (3 users x 2 courses = 6 possible)
 
     def test_avg_quiz_score_only_counts_positive_scores(self):
         result = _run(lms.lms_dashboard("apotex", "2023-11-01", "2023-11-30"))
@@ -161,7 +161,8 @@ class LmsDashboardAggregationTests(unittest.TestCase):
         self.assertEqual(c1["enrolled"], 2)
         self.assertEqual(c1["completed"], 1)
         self.assertEqual(c1["inProgress"], 1)
-        self.assertEqual(c1["completionRate"], 50.0)
+        self.assertEqual(c1["completionRate"], 33.3)  # 1 completed / 3 total users
+        self.assertEqual(c1["totalUsers"], 3)
         self.assertEqual(c1["avgScore"], 80.0)
         self.assertEqual(c1["name"], "Course One")
 

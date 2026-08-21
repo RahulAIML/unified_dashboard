@@ -455,6 +455,20 @@ export async function lmsDashboard(
       }
     }
 
+    // completionRate (both per-course and aggregate, below) is against the
+    // TOTAL ROSTER (every real user on the school), not against however many
+    // people happened to enroll. Found live 2026-08-20: a manager reading
+    // "49.8%" reasonably assumed it meant "half the workforce is done" --
+    // but that 49.8% was completed/enrolled, and most of the roster hadn't
+    // even enrolled yet, so the true completion against the full roster was
+    // ~21%. Every user is expected to take every course on the school, so
+    // the honest denominator per course is totalUsers (not `enrolled`), and
+    // for the aggregate it's totalUsers * totalCourses (not totalEnrollments).
+    // `totalUsers` is also surfaced on every course row (not just the
+    // aggregate) so a "Total" column can show the same roster size next to
+    // each course's own numbers -- the same reason the sub-label under this
+    // KPI already spells out "of N users" today.
+    const totalUsers = users.length
     const courseRows: LmsCourseRow[] = [...perCourse.entries()]
       .map(([cid, a]) => ({
         courseId: cid,
@@ -462,7 +476,8 @@ export async function lmsDashboard(
         enrolled: a.enrolled,
         completed: a.completed,
         inProgress: a.inProgress,
-        completionRate: a.enrolled > 0 ? Math.round((a.completed / a.enrolled) * 1000) / 10 : null,
+        totalUsers,
+        completionRate: totalUsers > 0 ? Math.round((a.completed / totalUsers) * 1000) / 10 : null,
         avgScore: a.scoreN > 0 ? Math.round((a.scoreSum / a.scoreN) * 10) / 10 : null,
       }))
       .sort((x, y) => y.enrolled - x.enrolled || x.name.localeCompare(y.name))
@@ -480,9 +495,11 @@ export async function lmsDashboard(
       modulesCompleted: completed,
       inProgress,
       notStarted,
+      // Against the full roster (totalUsers * totalCourses), not just the
+      // sessions that happened to enroll -- see the courseRows comment above.
       // Null, not zero, when there is nothing to divide by.
-      completionRate: totalEnrollments > 0
-        ? Math.round((completed / totalEnrollments) * 1000) / 10
+      completionRate: totalUsers > 0 && courses.length > 0
+        ? Math.round((completed / (totalUsers * courses.length)) * 1000) / 10
         : null,
       avgQuizScore: scoreN > 0 ? Math.round((scoreSum / scoreN) * 10) / 10 : null,
       hasScoreData: scoreN > 0,
