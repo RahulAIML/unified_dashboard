@@ -318,3 +318,23 @@ async def update_pass_threshold(slug: str, body: PassThresholdIn) -> DashboardCo
     if not cfg:
         raise HTTPException(status_code=404, detail=f"dashboard '{slug}' not found")
     return cfg
+
+
+class AuthorizedEmailsIn(BaseModel):
+    emails: list[str] = []
+
+
+@router.patch("/dashboard/{slug}/authorized-emails")
+async def update_authorized_emails(slug: str, body: AuthorizedEmailsIn) -> DashboardConfig:
+    """Restrict (or un-restrict) an ALREADY-PUBLISHED dashboard to a specific
+    list of real emails, on top of the normal tenant domain+roster check --
+    e.g. only the 3 admins at a client who should actually see it, not every
+    real user of that tenant. An empty list removes the restriction entirely
+    (back to "any real user of the tenant"). Same lightweight contract as
+    required-sections/pass-threshold above: no schema re-discovery, no
+    re-planning, no version bump -- see dashboard_versions.set_authorized_emails."""
+    from .. import dashboard_versions
+    cfg = await dashboard_versions.set_authorized_emails(slug, body.emails)
+    if not cfg:
+        raise HTTPException(status_code=404, detail=f"dashboard '{slug}' not found")
+    return cfg

@@ -230,6 +230,11 @@ async def _continue_from_planning(job: JobState, knowledge, primary: ServiceDesc
         cfg.confidential = req.confidential
         cfg.pass_threshold = req.pass_threshold
         cfg.has_no_passing_criteria = req.has_no_passing_criteria
+        # Normalize the same way every other email comparison in this codebase
+        # does (lib/pharma-tenant.ts, lib/bridge-rolplay-app.ts: lowercase,
+        # trim) so the stored allowlist matches however the viewer's email
+        # arrives from auth -- a mismatch here would silently lock everyone out.
+        cfg.authorized_emails = sorted({e.strip().lower() for e in req.authorized_emails if e and e.strip()})
         job.dashboard = cfg; job.percent = 76; await update(job)
 
         job.phase = JobPhase.validation; await update(job)

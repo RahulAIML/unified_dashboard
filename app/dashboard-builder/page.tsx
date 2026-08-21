@@ -264,6 +264,10 @@ function DashboardBuilder() {
   // while the manager retypes it rather than snapping to 0.
   const [passThresholdText, setPassThresholdText] = useState('80')
   const [hasNoPassingCriteria, setHasNoPassingCriteria] = useState(false)
+  // Optional -- empty (the default) means no extra restriction, every real
+  // user of the tenant sees the dashboard exactly as today. Only when a
+  // manager actually types emails here does it narrow to just those.
+  const [authorizedEmailsText, setAuthorizedEmailsText] = useState('')
   // Post-publish threshold editor: lets a manager correct 80 to 70 (or mark
   // "no criteria") on an ALREADY-PUBLISHED dashboard without rebuilding it
   // -- PATCH /ai/dashboard/{slug}/pass-threshold, then a live re-fetch of
@@ -364,6 +368,7 @@ function DashboardBuilder() {
     setPublishResult(null); setPublishError(null); setAcknowledgedEmpty(false); setForceRepublishAck(false)
     const exercise_ids = idsText.split(/[,\s]+/).map(s => parseInt(s, 10)).filter(n => !isNaN(n))
     const domains = domainText.split(/[,\s]+/).map(s => s.trim()).filter(Boolean)
+    const authorized_emails = authorizedEmailsText.split(/[,\n]+/).map(s => s.trim()).filter(Boolean)
     try {
       const parsedThreshold = parseInt(passThresholdText, 10)
       const res = await fetch('/api/ai/generate-dashboard', {
@@ -372,6 +377,7 @@ function DashboardBuilder() {
           company: company.trim(), exercise_ids, domains, services: Array.from(services), confidential,
           pass_threshold: Number.isFinite(parsedThreshold) ? parsedThreshold : 80,
           has_no_passing_criteria: hasNoPassingCriteria,
+          authorized_emails,
         }),
       })
       const j: JobState = await res.json()
@@ -620,6 +626,13 @@ function DashboardBuilder() {
                 </label>
               </div>
               <p className="text-xs text-muted-foreground mt-1">{t.builderPassThresholdHint}</p>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-foreground mb-1 block">{t.builderAuthorizedEmailsLabel}</label>
+              <textarea value={authorizedEmailsText} onChange={e => setAuthorizedEmailsText(e.target.value)}
+                placeholder={t.builderAuthorizedEmailsPlaceholder} disabled={running} rows={2}
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-y" />
+              <p className="text-xs text-muted-foreground mt-1">{t.builderAuthorizedEmailsHint}</p>
             </div>
           </div>
         )}

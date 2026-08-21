@@ -35,7 +35,15 @@ const VIEW_LIMIT = 60
 const VIEW_WINDOW_MS = 60_000
 
 interface StoredConnectorHandle { client_id?: number | string }
-interface StoredConfig { connector: string; connector_handle?: StoredConnectorHandle }
+interface StoredConfig {
+  connector: string
+  connector_handle?: StoredConnectorHandle
+  // Optional extra restriction on top of the tenant domain+roster check
+  // below — see ai-service's DashboardConfig.authorized_emails docstring.
+  // Empty/absent means no extra restriction (every dashboard's behavior
+  // before this field existed).
+  authorized_emails?: string[]
+}
 interface AuthCheck { authorized: boolean; isAdmin: boolean }
 
 async function checkAccess(auth: ApiAuthContext, slug: string, cfg: StoredConfig): Promise<AuthCheck> {
@@ -43,21 +51,32 @@ async function checkAccess(auth: ApiAuthContext, slug: string, cfg: StoredConfig
   const isAdmin = user?.role === 'admin'
   if (isAdmin) return { authorized: true, isAdmin: true }
 
+  let tenantAuthorized: boolean
   if (PHARMA_KINDS.has(cfg.connector)) {
     const tenant = await resolvePharmaTenantAccess(auth.email)
-    return { authorized: tenant === slug, isAdmin: false }
-  }
-  if (cfg.connector === 'rolplay_app_sql') {
+    tenantAuthorized = tenant === slug
+  } else if (cfg.connector === 'rolplay_app_sql') {
     const clientId = await resolveRolplayAppAccess(auth.email)
     const owningClientId = Number(cfg.connector_handle?.client_id)
-    return {
-      authorized: clientId !== null && Number.isFinite(owningClientId) && clientId === owningClientId,
-      isAdmin: false,
-    }
+    tenantAuthorized = clientId !== null && Number.isFinite(owningClientId) && clientId === owningClientId
+  } else {
+    // coach_app_sql and anything else: no verified per-user access resolver
+    // wired up against a slug yet — deny rather than guess who owns it.
+    tenantAuthorized = false
   }
-  // coach_app_sql and anything else: no verified per-user access resolver
-  // wired up against a slug yet — deny rather than guess who owns it.
-  return { authorized: false, isAdmin: false }
+  if (!tenantAuthorized) return { authorized: false, isAdmin: false }
+
+  // Additional restriction: if the manager configured a specific allowlist
+  // for this dashboard (e.g. "only these 3 admins", not the whole tenant
+  // roster), a real tenant member who isn't on that list is still denied.
+  // This can only ever narrow access further — it never grants access to
+  // someone who fails the tenant check above. Empty/absent (the default for
+  // every dashboard) means no extra restriction at all.
+  if (cfg.authorized_emails && cfg.authorized_emails.length > 0) {
+    const email = auth.email.toLowerCase().trim()
+    if (!cfg.authorized_emails.includes(email)) return { authorized: false, isAdmin: false }
+  }
+  return { authorized: true, isAdmin: false }
 }
 
 /**
