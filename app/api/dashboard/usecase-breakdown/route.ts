@@ -6,8 +6,8 @@ import { resolveDynamicUsecaseIds } from '@/lib/dynamic-usecase-resolver'
 import { resolveOrgType } from '@/lib/org-type'
 import { bancoDashboardUsecaseBreakdown } from '@/lib/bridge-banco-analytics'
 import { resolvePharmaTenantAccess } from '@/lib/pharma-tenant'
-import { pharmaDashboardUsecaseBreakdown } from '@/lib/bridge-pharma-analytics'
 import { resolveRolplayAppAccess, rolplayAppUsecaseBreakdown } from '@/lib/bridge-rolplay-app'
+import { resolveDataSources, fetchUsecaseBreakdown } from '@/lib/data-sources'
 import { isDemoDataEnabled } from '@/lib/demo'
 import { demoUsecaseBreakdown } from '@/lib/demo/engine'
 
@@ -58,17 +58,20 @@ export async function GET(request: NextRequest) {
     }
 
     // ── Pharma-sim pipeline (Sanfer, Apotex, …) ───────────────────────────────
+    // Rolplay App SQL composed in as the primary source when it also
+    // resolves for this identity -- see lib/data-sources.ts.
     if (orgType === 'pharma') {
       const tenant = await resolvePharmaTenantAccess(ctx.email)
       if (!tenant) return buildApiError('Pharma tenant could not be resolved', 500)
 
-      const data = await pharmaDashboardUsecaseBreakdown(tenant, {
-        fromIso: range.from.toISOString(),
-        toIso:   range.to.toISOString(),
-        solution,
-      })
-      return buildSuccess(data, {
-        from: range.from.toISOString(), to: range.to.toISOString(), solution, source: `pharma-${tenant}`,
+      const sources = await resolveDataSources(ctx.email, tenant, solution)
+      const result = await fetchUsecaseBreakdown(sources, {
+        fromIso: range.from.toISOString(), toIso: range.to.toISOString(),
+      }, solution)
+      if (!result) return buildApiError('Pharma tenant could not be resolved', 500)
+
+      return buildSuccess({ data: result.data }, {
+        from: range.from.toISOString(), to: range.to.toISOString(), solution, source: result.source,
       })
     }
 

@@ -6,8 +6,8 @@ import { resolveDynamicUsecaseIds } from '@/lib/dynamic-usecase-resolver'
 import { resolveOrgType } from '@/lib/org-type'
 import { bancoDashboardTrends } from '@/lib/bridge-banco-analytics'
 import { resolvePharmaTenantAccess } from '@/lib/pharma-tenant'
-import { pharmaDashboardTrends } from '@/lib/bridge-pharma-analytics'
 import { resolveRolplayAppAccess, rolplayAppTrends } from '@/lib/bridge-rolplay-app'
+import { resolveDataSources, fetchTrends as fetchTrendsComposed } from '@/lib/data-sources'
 import { isDemoDataEnabled } from '@/lib/demo'
 import { demoTrends } from '@/lib/demo/engine'
 import { bucketTrends, bucketTrend, attachPreviousScore, isGranularity, type Granularity } from '@/lib/trend-transform'
@@ -62,10 +62,18 @@ export async function GET(request: NextRequest) {
       source = 'banco'
       fetchTrends = (from, to) => bancoDashboardTrends({ fromIso: from.toISOString(), toIso: to.toISOString() })
     } else if (orgType === 'pharma') {
+      // Rolplay App SQL composed in as the primary source when it also
+      // resolves for this identity -- see lib/data-sources.ts. Resolved
+      // ONCE up front (not inside the closure) since it must not re-run
+      // per call when `compare` also fetches the previous-period window.
       const tenant = await resolvePharmaTenantAccess(ctx.email)
       if (!tenant) return buildApiError('Pharma tenant could not be resolved', 500)
-      source = `pharma-${tenant}`
-      fetchTrends = (from, to) => pharmaDashboardTrends(tenant, { fromIso: from.toISOString(), toIso: to.toISOString(), solution })
+      const sources = await resolveDataSources(ctx.email, tenant, solution)
+      source = sources.map(s => s.kind === 'rolplay-app-sql' ? `rolplay-app-${s.clientId}` : `pharma-${s.tenant}`).join('+')
+      fetchTrends = async (from, to) => {
+        const result = await fetchTrendsComposed(sources, { fromIso: from.toISOString(), toIso: to.toISOString() }, solution)
+        return result?.data ?? EMPTY
+      }
     } else if (orgType === 'rolplay-app') {
       const clientId = await resolveRolplayAppAccess(ctx.email)
       if (!clientId) return buildApiError('Rolplay-app client could not be resolved', 500)
