@@ -154,9 +154,13 @@ export function Sidebar() {
     ] : []),
     ...(hasModule('certification')  ? [{ href: "/certification", label: t.navCertification, icon: BadgeCheck }] : []),
     ...(hasModule('second-brain')   ? [{ href: "/second-brain",  label: t.navSecondBrain,   icon: Database   }] : []),
-    // KPIs: Sugerencia de KPI's Cesar.xlsx, rolplay-app only (the one
-    // connector this spec was verified against real data for).
-    ...(access?.hasRolplayAppAccess ? [{ href: "/kpis", label: t.navKpis, icon: BarChart3 }] : []),
+    // KPIs: rolplay-app tenants get the full Cesar KPI suite (Sugerencia de
+    // KPI's Cesar.xlsx, verified against real rolplay_app_sql data). Pharma
+    // tenants (Apotex, Sanfer, ...) previously had NO KPI page at all despite
+    // having their own real, already-computed metrics -- the page now
+    // branches on which access the viewer actually has (see app/kpis/page.tsx).
+    ...(access?.hasRolplayAppAccess || access?.hasPharmaAccess
+      ? [{ href: "/kpis", label: t.navKpis, icon: BarChart3 }] : []),
     ...((access?.hasCoachData || access?.hasPharmaAccess || access?.hasBancoAccess || access?.hasRolplayAppAccess)
       ? [{ href: "/reports", label: t.navReports, icon: FileText }] : []),
     // Admin-only: the AI Dashboard Builder has no other discoverable entry

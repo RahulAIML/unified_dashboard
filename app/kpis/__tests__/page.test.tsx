@@ -8,7 +8,7 @@
  *    the spec doesn't define a target for.
  *  - the period-over-period delta badge on the 6 scalar KPI cards.
  */
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import React from 'react'
 
@@ -68,6 +68,17 @@ vi.mock('@/lib/lang-store', () => ({
 
     kpiTopOpportunitiesTitle: 'Top Opportunities',
     kpiTopOpportunitiesDesc: 'desc', kpiTopOpportunitiesFormula: 'formula', kpiTopOpportunitiesFooter: 'footer',
+
+    // Pharma view (no rolplay_app_sql access) — reuses real Overview/Trends/
+    // Usecase-breakdown/Best-performers data, not a separate Cesar-style spec.
+    pharmaKpisSubtitle: 'How your real metrics are calculated',
+    unitPts: 'pts',
+    kpiTotalEvalTitle: 'Total Evaluations', kpiTotalEvalDesc: 'desc', kpiTotalEvalFormula: 'formula', kpiTotalEvalFooter: 'footer',
+    kpiAvgScoreTitle: 'Average Score', kpiAvgScoreDesc: 'desc', kpiAvgScoreFormula: 'formula', kpiAvgScoreFooter: 'footer',
+    kpiPassRateTitle: 'Pass Rate', kpiPassRateDesc: 'desc', kpiPassRateFormula: 'formula', kpiPassRateFooter: 'footer',
+    kpiScoreTrendTitle: 'Score Trend', kpiScoreTrendDesc: 'desc', kpiScoreTrendFormula: 'formula', kpiScoreTrendFooter: 'footer',
+    kpiUsecaseBreakdownTitle: 'Usecase Breakdown', kpiUsecaseBreakdownDesc: 'desc', kpiUsecaseBreakdownFormula: 'formula', kpiUsecaseBreakdownFooter: 'footer',
+    kpiBestPerformersTitle: 'Best Performers', kpiBestPerformersDesc: 'desc', kpiBestPerformersFormula: 'formula', kpiBestPerformersFooter: 'footer',
   }),
 }))
 vi.mock('recharts', () => {
@@ -80,14 +91,34 @@ vi.mock('recharts', () => {
     ),
     Cell: () => null,
     Tooltip: () => null,
+    // ActivityLineChart's dependencies (PharmaKpisView's Score Trend card) --
+    // stubbed the same way as the Pie chart above, no visual assertions on these.
+    AreaChart: Pass,
+    Area: () => null,
+    XAxis: () => null,
+    YAxis: () => null,
+    CartesianGrid: () => null,
+    Legend: () => null,
+    ReferenceLine: () => null,
   }
 })
 
 let mockData: Record<string, unknown> | null = null
 let mockError: string | null = null
+let mockAccess: { hasRolplayAppAccess?: boolean; hasPharmaAccess?: boolean } = { hasRolplayAppAccess: true }
+// Pharma view fetches 4 separate endpoints in parallel -- unlike the Cesar
+// view's single cesar-kpis call, so each needs its own mock slot.
+let mockOverview: Record<string, unknown> | null = null
+let mockTrends: Record<string, unknown> | null = null
+let mockUc: Record<string, unknown> | null = null
+let mockBest: Record<string, unknown> | null = null
 vi.mock('@/lib/hooks/useApi', () => ({
   useApi: (url: string | null) => {
-    if (url === '/api/auth/access-status') return { data: { hasRolplayAppAccess: true }, loading: false, error: null }
+    if (url === '/api/auth/access-status') return { data: mockAccess, loading: false, error: null }
+    if (url === '/api/dashboard/overview') return { data: mockOverview, loading: false, error: null }
+    if (url === '/api/dashboard/trends') return { data: mockTrends, loading: false, error: null }
+    if (url === '/api/dashboard/usecase-breakdown') return { data: mockUc, loading: false, error: null }
+    if (url === '/api/dashboard/best-performers') return { data: mockBest, loading: false, error: null }
     return { data: mockData, loading: false, error: mockError }
   },
   buildApiUrl: (path: string) => path,
@@ -206,5 +237,58 @@ describe('KPIs page — Delta Score sampling transparency', () => {
     mockError = null
     render(<KpisPage />)
     expect(screen.queryByText(/\(sampled\)/)).toBeNull()
+  })
+})
+
+// Pharma tenants (Apotex, Sanfer, ...) have no rolplay_app_sql access, so the
+// Cesar suite above has nothing to compute from. They get their OWN real,
+// already-computed metrics instead -- the exact same Overview/Trends/Usecase-
+// breakdown/Best-performers data their other pages already show, in the same
+// card format. Regression: this page previously showed a bare "No data"
+// message for every pharma tenant, with no way to ever see a KPI page at all.
+describe('KPIs page — pharma tenants (no rolplay_app_sql access)', () => {
+  beforeEach(() => {
+    mockAccess = { hasRolplayAppAccess: false, hasPharmaAccess: true }
+    mockOverview = {
+      totalEvaluations: 240, prevTotalEvaluations: 200,
+      avgScore: 78.4, prevAvgScore: 75,
+      passRate: 82, prevPassRate: 80,
+      passedEvaluations: 197,
+      passRateLegend: 'Pass threshold: score >= 70 pts',
+    }
+    mockTrends = { scoreTrend: [{ date: '2026-04-10', value: 80 }], passFailTrend: [], evalCountTrend: [] }
+    mockUc = { data: [{ usecaseId: 1, usecase_name: 'Objection Handling', totalEvaluations: 90, avgScore: 81, passRate: 88, passed: 79 }] }
+    mockBest = { data: [{ user_email: 'rep@apotex.com', user_name: 'Ana Lopez', sessions: 12, avg_score: 91, pass_rate: 100 }] }
+  })
+  afterEach(() => {
+    // Restore the module-scope default so later runs of the Cesar describe
+    // blocks above (re-run order isn't guaranteed across files) see rolplay access.
+    mockAccess = { hasRolplayAppAccess: true }
+  })
+
+  it('renders real Overview/Trends/Usecase/Best-performers data instead of the Cesar suite', () => {
+    render(<KpisPage />)
+    expect(screen.getByText('240')).toBeTruthy() // Total Evaluations
+    expect(screen.getByText('78.4')).toBeTruthy() // Average Score
+    expect(screen.getByText('82')).toBeTruthy() // Pass Rate
+    expect(screen.getByText('Pass threshold: score >= 70 pts')).toBeTruthy() // the real applied legend, not a generic footer
+    expect(screen.getByText(/Objection Handling/)).toBeTruthy()
+    expect(screen.getByText(/Ana Lopez/)).toBeTruthy()
+    // None of the Cesar-only KPIs (which need rolplay_app_sql session JSON) render.
+    expect(screen.queryByText('Activation Rate')).toBeNull()
+  })
+
+  it('hides the Pass Rate card entirely for a tenant with no passing criteria (passRateLegend: null)', () => {
+    mockOverview = { ...mockOverview, passRateLegend: null }
+    render(<KpisPage />)
+    expect(screen.queryByText('Pass Rate')).toBeNull()
+  })
+
+  it('shows an honest empty state for each section rather than fabricating rows when there is no data yet', () => {
+    mockOverview = { totalEvaluations: 0, prevTotalEvaluations: 0, avgScore: null, prevAvgScore: null, passRate: null, prevPassRate: null, passedEvaluations: 0, passRateLegend: undefined }
+    mockUc = { data: [] }
+    mockBest = { data: [] }
+    render(<KpisPage />)
+    expect(screen.getAllByText('No data').length).toBeGreaterThan(0)
   })
 })
