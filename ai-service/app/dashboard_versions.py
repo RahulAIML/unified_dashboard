@@ -169,3 +169,29 @@ async def set_pass_threshold(slug: str, pass_threshold: int, has_no_passing_crit
         slug, cfg.model_dump_json(),
     )
     return cfg
+
+
+async def set_authorized_emails(slug: str, emails: list[str]) -> DashboardConfig | None:
+    """Update the extra per-viewer email allowlist (DashboardConfig.
+    authorized_emails) WITHOUT a full regenerate -- same sanctioned
+    metadata-only-patch exception to the post-launch freeze as
+    set_required_sections/set_pass_threshold above: no version bump, no
+    dashboard_versions snapshot, layout untouched. Enforced in
+    app/api/dashboard-view/[slug]/route.ts's checkAccess, ON TOP OF the
+    normal tenant domain+roster check -- an empty list here means no extra
+    restriction, not "nobody may view it"."""
+    pool = await get_pool()
+    if not pool:
+        return None
+    row = await pool.fetchrow("SELECT config FROM dashboard_metadata WHERE slug=$1", slug)
+    if not row:
+        return None
+    cfg = DashboardConfig.model_validate(json.loads(row["config"]))
+
+    cfg.authorized_emails = sorted({e.strip().lower() for e in emails if e and e.strip()})
+
+    await pool.execute(
+        "UPDATE dashboard_metadata SET config=$2::jsonb, updated_at=NOW() WHERE slug=$1",
+        slug, cfg.model_dump_json(),
+    )
+    return cfg

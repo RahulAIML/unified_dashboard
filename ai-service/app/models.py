@@ -291,6 +291,18 @@ class DashboardConfig(BaseModel):
     # affected KPI/chart the next time the dashboard is viewed -- no rebuild.
     pass_threshold: int = Field(default=80, ge=1, le=100)
     has_no_passing_criteria: bool = False
+    # Additional access restriction layered ON TOP OF the existing tenant
+    # domain+roster check (app/api/dashboard-view/[slug]/route.ts's
+    # checkAccess) -- never a replacement for it. Empty (the default) means
+    # "no extra restriction, same as every dashboard before this field
+    # existed": anyone who's a real, verified user of the owning tenant can
+    # view it. Non-empty means ONLY these exact emails may view it, even if
+    # other real users of the same tenant exist -- e.g. a manager wants just
+    # the 3 admins who'll actually use it, not the whole company roster.
+    # Editable after publish via PATCH /ai/dashboard/{slug}/authorized-emails
+    # (dashboard_versions.set_authorized_emails), same narrow-edit pattern as
+    # pass_threshold/required_sections above -- no rebuild, no version bump.
+    authorized_emails: list[str] = Field(default_factory=list)
 
 
 # ── Validation ──────────────────────────────────────────────────────────────────
@@ -430,6 +442,11 @@ class GenerateRequest(BaseModel):
     # Every pass-rate widget must show an honest "no data" state for such a
     # tenant, never a number computed against a threshold that doesn't apply.
     has_no_passing_criteria: bool = False
+    # See DashboardConfig.authorized_emails's docstring -- an ADDITIONAL
+    # restriction on top of the normal tenant domain+roster check, not a
+    # replacement for it. Empty (default) means every dashboard behaves
+    # exactly as before this field existed.
+    authorized_emails: list[str] = Field(default_factory=list)
 
 
 class JobState(BaseModel):
