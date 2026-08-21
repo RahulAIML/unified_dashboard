@@ -58,7 +58,13 @@ async def run_generation(job: JobState, update) -> None:
         job.percent = 8; await update(job)
 
         job.phase = JobPhase.company_discovery; await update(job)
-        knowledge = await company_discovery.run(req.company, req.exercise_ids, log)
+        # req.domains: the manager-typed login domain(s), if supplied. Without
+        # this, company_discovery falls back to guess_domains(company, slug)
+        # -- a naive "{slug}.com" guess that's often wrong (e.g. 'sanfer.com'
+        # when reps are really on 'sanfer.com.mx') and silently breaks client
+        # logins. graph.py's alternate (unused) pipeline already threaded
+        # this through; this is the one the API actually calls.
+        knowledge = await company_discovery.run(req.company, req.exercise_ids, log, req.domains)
         job.knowledge = knowledge; job.percent = 18; await update(job)
 
         job.phase = JobPhase.service_discovery; await update(job)

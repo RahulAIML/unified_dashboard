@@ -168,8 +168,11 @@ describe('MiniDonut', () => {
     )
     const pieData = JSON.parse(container.querySelector('[data-testid="pie"]')?.getAttribute('data-points') ?? '[]')
     const byLabel = new Map(pieData.map((d: { label: string; value: number }) => [d.label, d.value]))
-    expect(byLabel.get('Passed')).toBe(9)
-    expect(byLabel.get('Failed')).toBe(6)
+    // Default test language is Spanish (SSR_LANG='es') -- these backend enum
+    // labels now go through translateGeneratedText like every other
+    // generated string, so the split is checked by its translated labels.
+    expect(byLabel.get('Aprobado')).toBe(9)
+    expect(byLabel.get('Reprobado')).toBe(6)
   })
 
   it('collapses a long tail into a single "Other" slice so it stays legible', () => {
@@ -197,11 +200,12 @@ describe('MiniJourney', () => {
         { module: 'certification', label: 'Certification', phase: 'validation', total_sessions: 3, pass_rate: 66.7 },
       ]} />,
     )
-    expect(getByText('Practice Simulator')).toBeTruthy()
+    // Default test language is Spanish (SSR_LANG='es') -- a stage's module
+    // name is now translated the same as every other generated string.
+    expect(getByText('Simulador de Práctica')).toBeTruthy()
     expect(getByText('144')).toBeTruthy()
-    // Default test language is Spanish (SSR_LANG='es' — see lib/lang-store.ts).
     expect(getByText('36.8% Tasa de Aprobación')).toBeTruthy()
-    expect(getByText('Certification')).toBeTruthy()
+    expect(getByText('Certificación')).toBeTruthy()
     expect(getByText('3')).toBeTruthy()
   })
 
@@ -300,8 +304,9 @@ describe('DashboardRenderer — end to end with real widget shapes', () => {
 
     const pieData = JSON.parse(container.querySelector('[data-testid="pie"]')?.getAttribute('data-points') ?? '[]')
     const byLabel = new Map(pieData.map((d: { label: string; value: number }) => [d.label, d.value]))
-    expect(byLabel.get('Passed')).toBe(9)
-    expect(byLabel.get('Failed')).toBe(6)
+    // Default test language is Spanish (SSR_LANG='es') -- translated, as above.
+    expect(byLabel.get('Aprobado')).toBe(9)
+    expect(byLabel.get('Reprobado')).toBe(6)
   })
 
   it('renders the Solution Journey for a journey widget with real per-module data', () => {
@@ -322,8 +327,9 @@ describe('DashboardRenderer — end to end with real widget shapes', () => {
 
     const { getByText } = render(<DashboardRenderer config={config} preview={preview} />)
 
-    expect(getByText('Practice Simulator')).toBeTruthy()
-    expect(getByText('Certification')).toBeTruthy()
+    // Default test language is Spanish (SSR_LANG='es') -- translated, as above.
+    expect(getByText('Simulador de Práctica')).toBeTruthy()
+    expect(getByText('Certificación')).toBeTruthy()
     expect(getByText('144')).toBeTruthy()
   })
 
@@ -364,7 +370,10 @@ describe('DashboardRenderer — end to end with real widget shapes', () => {
 
     const { getByText } = render(<DashboardRenderer config={config} preview={preview} />)
 
-    expect(getByText('Passing threshold: 90 pts')).toBeTruthy()
+    // Default test language is Spanish (SSR_LANG='es') -- this backend-
+    // generated legend is now translated via translateLegend, same pattern
+    // as every other generated string in this file.
+    expect(getByText('Umbral de aprobación: puntuación ≥ 90 pts')).toBeTruthy()
   })
 
   it('shows an honest no-data state, no legend, for a tenant with no passing criteria', () => {

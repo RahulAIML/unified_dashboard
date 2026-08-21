@@ -65,6 +65,7 @@ vi.mock('@/lib/lang-store', () => ({
     insightsRecommendation: 'Recommendation',
     insightsRecoText:     'Keep up the momentum. Average score:',
   }),
+  useLangStore: () => ({ lang: 'en' as const, toggle: vi.fn() }),
 }))
 vi.mock('@/lib/hooks/useClientBrand', () => ({
   useClientBrand: () => ({ name: 'TestBrand', primaryColor: '#ff0000', chartColors: ['#ff0000', '#00ff00', '#0000ff'] }),

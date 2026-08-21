@@ -4,7 +4,8 @@ import { motion } from "framer-motion"
 import { TrendingUp, TrendingDown, Minus } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { KpiCard } from "@/lib/types"
-import { useT } from "@/lib/lang-store"
+import { useT, useLangStore } from "@/lib/lang-store"
+import { translateLegend } from "@/lib/generated-content-i18n"
 import { KpiInfoButton } from "@/components/KpiInfoButton"
 
 interface Props {
@@ -15,6 +16,7 @@ interface Props {
 
 export function SummaryCard({ kpi, index = 0, icon }: Props) {
   const t = useT()
+  const { lang } = useLangStore()
   const { labelKey, label, value, delta, unit, noComparison, legend, info } = kpi
   const displayLabel = t[labelKey] ?? label
   const isPositive = !noComparison && delta > 0
@@ -82,7 +84,7 @@ export function SummaryCard({ kpi, index = 0, icon }: Props) {
         </div>
 
         {legend && (
-          <p className="mt-2.5 text-[11px] text-muted-foreground/80 leading-snug">{legend}</p>
+          <p className="mt-2.5 text-[11px] text-muted-foreground/80 leading-snug">{translateLegend(legend, lang)}</p>
         )}
       </div>
     </motion.div>

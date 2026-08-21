@@ -43,6 +43,7 @@ vi.mock('@/lib/lang-store', () => ({
     logout:          'Log out',
     phaseLabel:      'v1.0',
     dashboardWord:   'Dashboard',
+    ariaToggleMenu:  'Toggle menu',
   }),
 }))
 vi.mock('@/lib/hooks/useClientBrand', () => ({

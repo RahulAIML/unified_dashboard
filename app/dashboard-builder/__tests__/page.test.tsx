@@ -39,6 +39,7 @@ vi.mock('@/lib/lang-store', () => ({
         builderStepPlan: 'Plan', builderStepLocate: 'Locate',
         builderSessionsUsers: 'sessions', builderUsersWord: 'users', builderNoActivityYet: 'no activity yet',
         builderNewBadge: 'New', builderNoMatchingCompanies: 'No matching companies.',
+        ariaToggleLanguage: 'Toggle language',
       }
     : {
         builderTitle: 'Generador de Dashboards', builderSubtitlePre: 'Genera un ',
@@ -54,6 +55,7 @@ vi.mock('@/lib/lang-store', () => ({
         builderStepPlan: 'Plan', builderStepLocate: 'Localizar',
         builderSessionsUsers: 'sesiones', builderUsersWord: 'usuarios', builderNoActivityYet: 'sin actividad todavía',
         builderNewBadge: 'Nuevo', builderNoMatchingCompanies: 'Sin coincidencias.',
+        ariaToggleLanguage: 'Alternar idioma',
       }),
 }))
 
@@ -69,20 +71,23 @@ beforeEach(() => {
 })
 
 describe('Dashboard Builder page — language toggle', () => {
+  // Default test language is Spanish (mockLang defaults to 'es' below) --
+  // the toggle button's own aria-label is now translated like every other
+  // user-facing string, so it reads 'Alternar idioma' until switched to 'en'.
   it('renders a language toggle button (previously entirely absent)', () => {
     render(<DashboardBuilderPage />)
-    expect(screen.getByLabelText('Toggle language')).toBeTruthy()
+    expect(screen.getByLabelText('Alternar idioma')).toBeTruthy()
   })
 
   it('shows Spanish content by default and the button to switch to English', () => {
     render(<DashboardBuilderPage />)
     expect(screen.getByText('Generador de Dashboards')).toBeTruthy()
-    expect(screen.getByLabelText('Toggle language').textContent).toBe('EN')
+    expect(screen.getByLabelText('Alternar idioma').textContent).toBe('EN')
   })
 
   it('clicking the toggle calls the shared language store toggle, same as every other page', () => {
     render(<DashboardBuilderPage />)
-    fireEvent.click(screen.getByLabelText('Toggle language'))
+    fireEvent.click(screen.getByLabelText('Alternar idioma'))
     expect(mockToggle).toHaveBeenCalledTimes(1)
   })
 
