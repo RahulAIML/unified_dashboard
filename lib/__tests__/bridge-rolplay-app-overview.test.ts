@@ -113,11 +113,24 @@ describe('mergeOverviewSources — M8 pharma + rolplay_app_sql composition', () 
     expect(merged.passRate).toBeNull()
   })
 
-  it('always takes passRateLegend from the primary (pharma) side', async () => {
+  it('takes passRateLegend from whichever side actually has one, when it is the first argument', async () => {
     const mod = await fresh()
     const merged = mod.mergeOverviewSources(
       { totalEvaluations: 10, prevTotalEvaluations: 0, avgScore: 80, prevAvgScore: null, passRate: 70, prevPassRate: null, passedEvaluations: 7, passRateLegend: 'Pass threshold: score >= 70 pts' },
       { totalEvaluations: 5,  prevTotalEvaluations: 0, avgScore: 90, prevAvgScore: null, passRate: 90, prevPassRate: null, passedEvaluations: 4 },
+    )
+    expect(merged.passRateLegend).toBe('Pass threshold: score >= 70 pts')
+  })
+
+  it('takes passRateLegend from whichever side actually has one, even when it is the SECOND argument (order-independent)', async () => {
+    // This is the real production shape once rolplay_app_sql is composed as
+    // the preferred/primary source (lib/data-sources.ts orders it first):
+    // the pharma tenant's configured legend must still win even though
+    // pharma's data is now the second argument, not the first.
+    const mod = await fresh()
+    const merged = mod.mergeOverviewSources(
+      { totalEvaluations: 5,  prevTotalEvaluations: 0, avgScore: 90, prevAvgScore: null, passRate: 90, prevPassRate: null, passedEvaluations: 4 },
+      { totalEvaluations: 10, prevTotalEvaluations: 0, avgScore: 80, prevAvgScore: null, passRate: 70, prevPassRate: null, passedEvaluations: 7, passRateLegend: 'Pass threshold: score >= 70 pts' },
     )
     expect(merged.passRateLegend).toBe('Pass threshold: score >= 70 pts')
   })

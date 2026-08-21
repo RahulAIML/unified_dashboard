@@ -505,19 +505,24 @@ async function _rolplayAppOverviewImpl(
 }
 
 /**
- * Composes a pharma tenant's Overview KPIs with a REAL secondary
- * rolplay_app_sql source for the same authenticated person (currently only
- * M8: pharma_exceltis_rest is the tenant's primary sim bridge, but its real
- * reps also have activity in rolplay_app_sql under a distinct client_id on
- * the same real domain -- two live systems, the same real people, not a
- * dead/live pair). Counts sum (both are real, disjoint activity logs); rate
- * fields are weighted by each source's totalEvaluations and a null rate is
- * EXCLUDED from the weighted average rather than treated as zero, matching
- * the null-vs-zero rule used throughout this KPI layer. `passRateLegend`
- * always comes from the pharma side -- rolplay_app_sql has no configured
- * passing-criteria legend of its own.
+ * Composes two real Overview sources for the same authenticated person
+ * (currently only M8: pharma_exceltis_rest and rolplay_app_sql under a
+ * distinct client_id on the same real domain -- two live systems, the same
+ * real people, not a dead/live pair). Counts sum (both are real, disjoint
+ * activity logs); rate fields are weighted by each source's
+ * totalEvaluations and a null rate is EXCLUDED from the weighted average
+ * rather than treated as zero, matching the null-vs-zero rule used
+ * throughout this KPI layer.
+ *
+ * Order-independent by design (`a`/`b`, not `primary`/`secondary`):
+ * lib/data-sources.ts orders rolplay_app_sql first when composing, since
+ * it's the preferred/primary source wherever it exists, but a pharma
+ * tenant's configured pass-rate legend must still win regardless of which
+ * argument position it's passed in -- rolplay_app_sql never produces one of
+ * its own, so whichever side actually HAS a legend is used, not "whichever
+ * came first".
  */
-export function mergeOverviewSources(primary: OverviewApiResponse, secondary: OverviewApiResponse): OverviewApiResponse {
+export function mergeOverviewSources(a: OverviewApiResponse, b: OverviewApiResponse): OverviewApiResponse {
   const weightedAvg = (aVal: number | null, aWeight: number, bVal: number | null, bWeight: number): number | null => {
     if (aVal == null && bVal == null) return null
     if (aVal == null) return bVal
@@ -528,14 +533,14 @@ export function mergeOverviewSources(primary: OverviewApiResponse, secondary: Ov
   }
 
   return {
-    totalEvaluations:     primary.totalEvaluations + secondary.totalEvaluations,
-    prevTotalEvaluations: primary.prevTotalEvaluations + secondary.prevTotalEvaluations,
-    avgScore:     weightedAvg(primary.avgScore, primary.totalEvaluations, secondary.avgScore, secondary.totalEvaluations),
-    prevAvgScore: weightedAvg(primary.prevAvgScore, primary.prevTotalEvaluations, secondary.prevAvgScore, secondary.prevTotalEvaluations),
-    passRate:     weightedAvg(primary.passRate, primary.totalEvaluations, secondary.passRate, secondary.totalEvaluations),
-    prevPassRate: weightedAvg(primary.prevPassRate, primary.prevTotalEvaluations, secondary.prevPassRate, secondary.prevTotalEvaluations),
-    passedEvaluations: primary.passedEvaluations + secondary.passedEvaluations,
-    passRateLegend: primary.passRateLegend,
+    totalEvaluations:     a.totalEvaluations + b.totalEvaluations,
+    prevTotalEvaluations: a.prevTotalEvaluations + b.prevTotalEvaluations,
+    avgScore:     weightedAvg(a.avgScore, a.totalEvaluations, b.avgScore, b.totalEvaluations),
+    prevAvgScore: weightedAvg(a.prevAvgScore, a.prevTotalEvaluations, b.prevAvgScore, b.prevTotalEvaluations),
+    passRate:     weightedAvg(a.passRate, a.totalEvaluations, b.passRate, b.totalEvaluations),
+    prevPassRate: weightedAvg(a.prevPassRate, a.prevTotalEvaluations, b.prevPassRate, b.prevTotalEvaluations),
+    passedEvaluations: a.passedEvaluations + b.passedEvaluations,
+    passRateLegend: a.passRateLegend ?? b.passRateLegend,
   }
 }
 
