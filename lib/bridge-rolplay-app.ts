@@ -1061,3 +1061,148 @@ export async function rolplayAppAdoptionMovementRate(
   const positive = movements.filter(m => /^(sub|up|increas|avanz)/i.test(m)).length
   return { value: Math.round((100 * positive / movements.length) * 10) / 10, sampled }
 }
+
+// ── Admin/internal raw-interaction export ────────────────────────────────────
+//
+// Every other function in this file returns an AGGREGATED shape (a KPI, a
+// per-usecase rollup, a leaderboard row) — none of them expose the underlying
+// per-session record an admin would need to verify/debug how those numbers
+// were produced. This is the one exception: one row per real r_user_session,
+// every column a real, confirmed-existing table field (see the live
+// information_schema inspection this was built from) or a value already
+// computed elsewhere in this file (SCORE_SQL, PASS_THRESHOLD) -- nothing
+// invented. Internal/admin use only; see app/api/admin/export/route.ts for
+// the auth gate.
+
+/** Category filter for the raw export -- mirrors SOLUTION_TO_CATEGORY's three
+ *  mapped categories, plus 'OTHER' for every real session whose simulator has
+ *  no category, or one this dashboard doesn't map (e.g. 'DIAG') -- real,
+ *  currently-unclassified activity, not a fabricated bucket. 'SB' (Second
+ *  Brain) is deliberately excluded from 'OTHER' too, for the exact reason
+ *  documented at SOLUTION_TO_CATEGORY above: it has its own dedicated API and
+ *  must never be double-counted through this connector. */
+export type RawInteractionModule = 'COACH' | 'SIM' | 'SEGMENT' | 'OTHER'
+
+export interface RawInteractionRow {
+  session_id: number
+  client_id: number
+  user_id: number
+  user_name: string
+  user_email: string
+  user_department: string | null
+  user_designation: string | null
+  simulator_id: number | null
+  simulator_name: string | null
+  /** Raw r_simulator.category ('' or NULL for an unclassified simulator). */
+  module_category: string | null
+  date_created: string
+  /** Real 0-100 score extracted via SCORE_SQL, or null if unscoreable. */
+  score: number | null
+  /** Which SCORE_SQL branch produced `score` -- for verifying/debugging the
+   *  dashboard's own score extraction, not a KPI. Null when score is null. */
+  score_source: string | null
+  /** r_user_session.score -- the legacy column, essentially never populated
+   *  on this platform (see this file's own header comment). Exported as-is,
+   *  never backfilled from `score`, so a reader can see it really is empty. */
+  legacy_score: number | null
+  legacy_passed_flag: number | null
+  rating_score: number | null
+  interaction_type: number
+  /** score >= PASS_THRESHOLD, mirroring every other pass/fail computation in
+   *  this file. Null (not a fabricated fail) when score is null. */
+  result: 'pass' | 'fail' | null
+}
+
+/** Mirrors SCORE_SQL's exact branch conditions, but returns a label
+ *  identifying which one fired instead of the extracted value -- same CASE
+ *  structure, same ordering (Siigo's marker before Master Coach's, for the
+ *  same substring-containment reason documented on SCORE_SQL), so this can
+ *  never disagree with SCORE_SQL about which branch a row actually matched. */
+const SCORE_SOURCE_SQL = `CASE
+  WHEN JSON_VALID(s.raw_closing_data)
+       AND JSON_EXTRACT(s.raw_closing_data, '$.score_bar') IS NOT NULL
+       AND JSON_UNQUOTE(JSON_EXTRACT(s.raw_closing_data, '$.score_bar')) REGEXP '^[0-9]+(\\\\.[0-9]+)?$'
+    THEN 'json:score_bar'
+  WHEN JSON_VALID(s.raw_closing_data)
+       AND JSON_EXTRACT(s.raw_closing_data, '$.overall_score') IS NOT NULL
+       AND JSON_UNQUOTE(JSON_EXTRACT(s.raw_closing_data, '$.overall_score')) REGEXP '^[0-9]+(\\\\.[0-9]+)?$'
+    THEN 'json:overall_score'
+  WHEN LOCATE('rp-sim-report-score-number">', s.closing_analysis) > 0 THEN 'html:rp-sim-report-score-number'
+  WHEN LOCATE('rpt-score-num">', s.closing_analysis) > 0 THEN 'html:rpt-score-num'
+  WHEN LOCATE('total-score">', s.closing_analysis) > 0 THEN 'html:total-score'
+  WHEN LOCATE('score-number">', s.closing_analysis) > 0 THEN 'html:score-number'
+  WHEN LOCATE('rp-huge-grade">', s.closing_analysis) > 0 THEN 'html:rp-huge-grade'
+  ELSE NULL
+END`
+
+function moduleCategoryClause(module: RawInteractionModule): string {
+  if (module === 'OTHER') {
+    return ` AND (sim.category IS NULL OR sim.category NOT IN ('COACH','SIM','SEGMENT','SB'))`
+  }
+  return ` AND sim.category = '${module}'`
+}
+
+/**
+ * Raw per-session export rows for one client, one module, capped at `limit`
+ * (default 5000 -- generous for a CSV download, still a real bound so a
+ * huge tenant can't produce an unbounded response). Ordered most-recent-first,
+ * matching every other list endpoint in this file.
+ */
+export async function rolplayAppRawInteractions(
+  clientId: number,
+  module: RawInteractionModule,
+  range?: { fromIso: string; toIso: string },
+  limit = 5000,
+): Promise<RawInteractionRow[]> {
+  const cid = tenantId(clientId)
+  const lim = Math.max(1, Math.min(20000, Math.trunc(limit)))
+  const rows = await remoteSelect<{
+    session_id: number | string; client_id: number | string
+    user_id: number | string; user_name: string; user_email: string
+    user_department: string | null; user_designation: string | null
+    simulator_id: number | string | null; simulator_name: string | null; module_category: string | null
+    date_created: string
+    score: string | null; score_source: string | null
+    legacy_score: number | string | null; legacy_passed_flag: number | string | null
+    rating_score: number | string | null; interaction_type: number | string
+  }>(
+    `SELECT s.ID AS session_id, u.client_id AS client_id,
+            u.ID AS user_id, u.name AS user_name, u.email AS user_email,
+            u.department AS user_department, u.designation AS user_designation,
+            s.simulator_id AS simulator_id, sim.name AS simulator_name, sim.category AS module_category,
+            s.date_created AS date_created,
+            ${SCORE_SQL} AS score, ${SCORE_SOURCE_SQL} AS score_source,
+            s.score AS legacy_score, s.passed_flag AS legacy_passed_flag,
+            s.rating_score AS rating_score, s.interaction_type AS interaction_type
+       FROM r_user_session s
+       JOIN r_user u ON u.ID = s.user_id
+       LEFT JOIN r_simulator sim ON sim.ID = s.simulator_id
+      WHERE u.client_id = ${cid}${moduleCategoryClause(module)}${dateClause(range?.fromIso, range?.toIso)}
+      ORDER BY s.date_created DESC
+      LIMIT ${lim}`,
+  )
+
+  return rows.map(r => {
+    const score = r.score != null ? Number(r.score) : null
+    return {
+      session_id: Number(r.session_id),
+      client_id: Number(r.client_id),
+      user_id: Number(r.user_id),
+      user_name: r.user_name,
+      user_email: r.user_email,
+      user_department: r.user_department,
+      user_designation: r.user_designation,
+      simulator_id: r.simulator_id != null ? Number(r.simulator_id) : null,
+      simulator_name: r.simulator_name,
+      module_category: r.module_category,
+      date_created: String(r.date_created),
+      score,
+      score_source: score != null ? r.score_source : null,
+      legacy_score: r.legacy_score != null ? Number(r.legacy_score) : null,
+      legacy_passed_flag: r.legacy_passed_flag != null ? Number(r.legacy_passed_flag) : null,
+      rating_score: r.rating_score != null ? Number(r.rating_score) : null,
+      interaction_type: Number(r.interaction_type),
+      result: score != null ? (score >= PASS_THRESHOLD ? 'pass' : 'fail') : null,
+    }
+  })
+}

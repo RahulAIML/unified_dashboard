@@ -514,6 +514,90 @@ export async function lmsDashboard(
  * first time: correct everywhere except one caller nobody re-checked after
  * the DB store was added. Fixed here before anything wires it up.
  */
+// ── Admin/internal raw-progress export ───────────────────────────────────────
+//
+// lmsDashboard aggregates into KPI cards; nothing else in this file exposes
+// the underlying per-(user, course) progress row an admin would need to
+// verify those numbers. Every field below is a REAL key confirmed present in
+// the live LearnWorlds API response (verified directly against Apotex's
+// school, not assumed from the SDK docs) -- `user_name`/`user_email` come
+// straight from GET /users, everything else from GET /users/{id}/progress.
+// Internal/admin use only; see app/api/admin/export/route.ts for the auth gate.
+
+export interface LmsRawProgressRow {
+  tenant: string
+  user_id: string
+  user_email: string | null
+  user_name: string | null
+  course_id: string
+  course_title: string
+  status: string | null
+  progress_rate: number | null
+  average_score_rate: number | null
+  time_on_course: number | null
+  total_units: number | null
+  completed_units: number | null
+  /** ISO date (YYYY-MM-DD), converted from the API's real unix-seconds value
+   *  via the same toDateKey() used everywhere else in this file -- not a
+   *  fabricated field, a real timestamp in a readable format. Null when the
+   *  course was never completed. */
+  completed_at: string | null
+}
+
+interface RawUserFull { id?: string; email?: string; username?: string; first_name?: string | null; last_name?: string | null }
+
+/**
+ * Raw per-(user, course) progress rows for one tenant's LearnWorlds school.
+ * Empty array (not an error) when the tenant has no LMS configured -- same
+ * "no credentials = no data, never invent" contract as lmsDashboard/EMPTY_LMS.
+ */
+export async function lmsRawProgressRows(tenantKey: string | null): Promise<LmsRawProgressRow[]> {
+  const creds = await resolveLmsCredentialsAsync(tenantKey)
+  if (!creds) return []
+
+  const [courses, users] = await Promise.all([
+    apiGetAll<RawCourse>(creds, '/courses'),
+    apiGetAll<RawUserFull>(creds, '/users'),
+  ])
+  const title = new Map<string, string>()
+  for (const c of courses) if (c.id) title.set(String(c.id), String(c.title ?? c.id))
+
+  const perUser = await mapLimit(users, CONCURRENCY, async u => {
+    const uid = String(u.id ?? '')
+    if (!uid) return { u, rows: [] as RawProgress[] }
+    try {
+      const body = await apiGet<Paged<RawProgress>>(creds, `/users/${uid}/progress`)
+      return { u, rows: Array.isArray(body?.data) ? body.data : [] }
+    } catch {
+      return { u, rows: [] as RawProgress[] } // a user with no progress 404s; that is data, not an outage
+    }
+  })
+
+  const out: LmsRawProgressRow[] = []
+  for (const { u, rows } of perUser) {
+    const userName = [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || u.username || null
+    for (const r of rows) {
+      const cid = String(r.course_id ?? '')
+      out.push({
+        tenant: tenantKey ?? '-',
+        user_id: String(u.id ?? ''),
+        user_email: u.email ?? null,
+        user_name: userName,
+        course_id: cid,
+        course_title: title.get(cid) || cid || 'Unknown course',
+        status: r.status ?? null,
+        progress_rate: r.progress_rate ?? null,
+        average_score_rate: r.average_score_rate ?? null,
+        time_on_course: (r as { time_on_course?: number }).time_on_course ?? null,
+        total_units: r.total_units ?? null,
+        completed_units: r.completed_units ?? null,
+        completed_at: toDateKey(r.completed_at),
+      })
+    }
+  }
+  return out
+}
+
 export async function lmsProbe(tenantKey: string | null): Promise<{
   configured: boolean
   alive: boolean
