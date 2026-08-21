@@ -200,6 +200,13 @@ export async function bridgeBancoKpis(params: {
 
   const [summaryRows, byPositionRows, topPerformerRows, userCountRows] = await Promise.allSettled([
     // 1. Overall summary
+    // LEFT JOIN (not INNER): a session with zero saved_reports_options rows is
+    // still a real session and must count toward total_sessions/active_banco_users
+    // -- an INNER JOIN here silently dropped those sessions, so this "total"
+    // disagreed with sessionsByPosition (query 2, no rounds join) and with
+    // bridgeBancoSessions's own LEFT JOIN for the exact same date range.
+    // COALESCE(...,0) makes avg_rounds_per_session a true "rounds per session"
+    // average instead of "rounds per session-that-had-any-rounds".
     bancoPost<{
       total_sessions:        number | string
       active_banco_users:    number | string
@@ -208,9 +215,9 @@ export async function bridgeBancoKpis(params: {
       `SELECT
          COUNT(DISTINCT sr.id)                                         AS total_sessions,
          COUNT(DISTINCT sr.banco_user_id)                              AS active_banco_users,
-         ROUND(AVG(rnd.round_count), 1)                               AS avg_rounds_per_session
+         ROUND(AVG(COALESCE(rnd.round_count, 0)), 1)                  AS avg_rounds_per_session
        FROM coach_app.saved_reports sr
-       JOIN (
+       LEFT JOIN (
          SELECT saved_report_id, COUNT(*) AS round_count
          FROM coach_app.saved_reports_options
          GROUP BY saved_report_id
@@ -235,6 +242,9 @@ export async function bridgeBancoKpis(params: {
     ),
 
     // 3. Top performers by session count
+    // Same LEFT JOIN fix as query 1 -- a rep whose session had zero rounds
+    // must still be counted, or their `sessions` figure here silently
+    // undercounts relative to sessionsByPosition's total for the same rep.
     bancoPost<{
       employee_name: string
       position:      string
@@ -245,10 +255,10 @@ export async function bridgeBancoKpis(params: {
          bu.name                                                       AS employee_name,
          bu.position,
          COUNT(DISTINCT sr.id)                                         AS sessions,
-         ROUND(AVG(rnd.round_count), 1)                               AS avg_rounds
+         ROUND(AVG(COALESCE(rnd.round_count, 0)), 1)                  AS avg_rounds
        FROM coach_app.saved_reports sr
        JOIN coach_app.banco_users bu ON bu.ID = sr.banco_user_id
-       JOIN (
+       LEFT JOIN (
          SELECT saved_report_id, COUNT(*) AS round_count
          FROM coach_app.saved_reports_options
          GROUP BY saved_report_id
