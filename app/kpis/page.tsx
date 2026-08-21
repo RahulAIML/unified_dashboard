@@ -19,17 +19,20 @@ import { useMemo } from "react"
 import {
   AlertTriangle, UserCheck, Repeat, CalendarClock, TrendingUp as TrendUpIcon,
   ShieldCheck, PieChart as MasteryIcon, Compass, Briefcase, ThumbsUp, ThumbsDown,
+  ListChecks, Target, Award, LineChart as LineChartIcon, Layers, Trophy,
 } from "lucide-react"
 import { DashboardHeader } from "@/components/DashboardHeader"
 import { CesarKpiCard, CesarKpiValue } from "@/components/CesarKpiCard"
 import { DonutChart } from "@/components/charts/DonutChart"
+import { ActivityLineChart } from "@/components/charts/ActivityLineChart"
 import { useApi, buildApiUrl } from "@/lib/hooks/useApi"
 import { useDashboardStore } from "@/lib/store"
 import { useT } from "@/lib/lang-store"
 import { useAuthContext } from "@/components/AuthProvider"
 import { cn } from "@/lib/utils"
+import type { OverviewApiResponse, TrendsApiResponse, UsecaseBreakdownApiResponse, BestPerformersApiResponse } from "@/lib/types"
 
-interface AccessCaps { hasRolplayAppAccess?: boolean }
+interface AccessCaps { hasRolplayAppAccess?: boolean; hasPharmaAccess?: boolean }
 
 interface CesarKpisResponse {
   activationRate: number | null
@@ -86,6 +89,132 @@ function PerspectiveSection({ title, children }: { title: string; children: Reac
   )
 }
 
+/**
+ * Pharma tenants (Apotex, Sanfer, ...) have no rolplay_app_sql access, so the
+ * Cesar KPI suite below (which needs r_user_session's raw_closing_data JSON)
+ * has nothing to compute from -- forcing it here would mean fabricating
+ * numbers the pharma schema doesn't have. This shows pharma's OWN real,
+ * already-computed metrics instead (the exact same Overview/Trends/Usecase/
+ * Best-performers data their other pages already show), in the same
+ * "what is this, what's the formula, why does it matter" card format --
+ * closing the "we don't know how the KPIs are composed" gap from the same
+ * real source data, not a different or invented one.
+ */
+function PharmaKpisView() {
+  const { dateRange, selectedSolution, refreshKey } = useDashboardStore()
+  const t = useT()
+
+  const overviewUrl = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to, { solution: selectedSolution, rk: refreshKey })
+  const trendsUrl = buildApiUrl("/api/dashboard/trends", dateRange.from, dateRange.to, { solution: selectedSolution, rk: refreshKey })
+  const ucUrl = buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to, { solution: selectedSolution, rk: refreshKey })
+  const bestUrl = buildApiUrl("/api/dashboard/best-performers", dateRange.from, dateRange.to, { limit: 10, solution: selectedSolution, rk: refreshKey })
+
+  const { data: overview, loading: l1, error: e1 } = useApi<OverviewApiResponse>(overviewUrl)
+  const { data: trends, loading: l2 } = useApi<TrendsApiResponse>(trendsUrl)
+  const { data: uc, loading: l3 } = useApi<UsecaseBreakdownApiResponse>(ucUrl)
+  const { data: best, loading: l4 } = useApi<BestPerformersApiResponse>(bestUrl)
+
+  const loading = l1 || l2 || l3 || l4
+  const hasPassRate = overview?.passRateLegend !== null // undefined = not wired up yet (render normally); null = explicitly no criteria (hide)
+  const scoreTrendData = useMemo(() => (trends?.scoreTrend ?? []).map(p => ({ date: p.date, value: p.value })), [trends])
+  const ucRows = uc?.data ?? []
+  const bestRows = best?.data ?? []
+
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-64 rounded-[16px] bg-muted/50 animate-pulse" />)}
+      </div>
+    )
+  }
+
+  return (
+    <>
+      {e1 && <ErrorBanner message={`${t.errorLoading}: ${e1}`} />}
+      <PerspectiveSection title={t.perspAdoption}>
+        <CesarKpiCard
+          title={t.kpiTotalEvalTitle} description={t.kpiTotalEvalDesc} formula={t.kpiTotalEvalFormula}
+          footer={t.kpiTotalEvalFooter} icon={<ListChecks className="w-4 h-4" />}
+        >
+          <CesarKpiValue value={overview?.totalEvaluations ?? null} unit="" prevValue={overview?.prevTotalEvaluations ?? null} deltaLabel={t.kpiVsPreviousPeriod} />
+        </CesarKpiCard>
+
+        <CesarKpiCard
+          title={t.kpiAvgScoreTitle} description={t.kpiAvgScoreDesc} formula={t.kpiAvgScoreFormula}
+          footer={t.kpiAvgScoreFooter} icon={<Target className="w-4 h-4" />}
+        >
+          <CesarKpiValue value={overview?.avgScore ?? null} unit={t.unitPts} prevValue={overview?.prevAvgScore ?? null} deltaLabel={t.kpiVsPreviousPeriod} />
+        </CesarKpiCard>
+
+        {hasPassRate && (
+          <CesarKpiCard
+            title={t.kpiPassRateTitle} description={t.kpiPassRateDesc} formula={t.kpiPassRateFormula}
+            footer={overview?.passRateLegend || t.kpiPassRateFooter} icon={<Award className="w-4 h-4" />}
+          >
+            <CesarKpiValue value={overview?.passRate ?? null} prevValue={overview?.prevPassRate ?? null} deltaLabel={t.kpiVsPreviousPeriod} />
+          </CesarKpiCard>
+        )}
+      </PerspectiveSection>
+
+      <PerspectiveSection title={t.perspTechnical}>
+        <CesarKpiCard
+          title={t.kpiScoreTrendTitle} description={t.kpiScoreTrendDesc} formula={t.kpiScoreTrendFormula}
+          footer={t.kpiScoreTrendFooter} icon={<LineChartIcon className="w-4 h-4" />}
+          className="sm:col-span-2 lg:col-span-3"
+        >
+          {scoreTrendData.length === 0
+            ? <p className="text-sm text-muted-foreground">{t.noDataAvailable}</p>
+            : <ActivityLineChart data={scoreTrendData} label={t.kpiAvgScoreTitle} />}
+        </CesarKpiCard>
+      </PerspectiveSection>
+
+      <PerspectiveSection title={t.perspCommercial}>
+        <CesarKpiCard
+          title={t.kpiUsecaseBreakdownTitle} description={t.kpiUsecaseBreakdownDesc} formula={t.kpiUsecaseBreakdownFormula}
+          footer={t.kpiUsecaseBreakdownFooter} icon={<Layers className="w-4 h-4" />}
+          className="sm:col-span-2 lg:col-span-3"
+        >
+          {ucRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t.noDataAvailable}</p>
+          ) : (
+            <div className="space-y-2">
+              {ucRows.slice(0, 8).map(r => (
+                <div key={r.usecaseId} className="flex items-center justify-between text-sm gap-3">
+                  <span className="text-foreground truncate">{r.usecase_name ?? `#${r.usecaseId}`}</span>
+                  <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
+                    {r.totalEvaluations} · {r.avgScore != null ? `${r.avgScore} ${t.unitPts}` : "—"} · {r.passRate != null ? `${r.passRate}%` : "—"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </CesarKpiCard>
+
+        <CesarKpiCard
+          title={t.kpiBestPerformersTitle} description={t.kpiBestPerformersDesc} formula={t.kpiBestPerformersFormula}
+          footer={t.kpiBestPerformersFooter} icon={<Trophy className="w-4 h-4" />}
+          className="sm:col-span-2 lg:col-span-3"
+        >
+          {bestRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t.noDataAvailable}</p>
+          ) : (
+            <div className="space-y-2">
+              {bestRows.slice(0, 8).map(r => (
+                <div key={r.user_email} className="flex items-center justify-between text-sm gap-3">
+                  <span className="text-foreground truncate">{r.user_name || r.user_email}</span>
+                  <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
+                    {r.sessions} · {r.avg_score} {t.unitPts} · {r.pass_rate}%
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </CesarKpiCard>
+      </PerspectiveSection>
+    </>
+  )
+}
+
 export default function KpisPage() {
   const { dateRange, selectedSolution, refreshKey } = useDashboardStore()
   const t = useT()
@@ -93,6 +222,7 @@ export default function KpisPage() {
 
   const { data: access } = useApi<AccessCaps>(user ? "/api/auth/access-status" : null)
   const ready = !!access?.hasRolplayAppAccess
+  const pharmaReady = !ready && !!access?.hasPharmaAccess
 
   const url = ready
     ? buildApiUrl("/api/dashboard/cesar-kpis", dateRange.from, dateRange.to, { solution: selectedSolution, rk: refreshKey })
@@ -108,6 +238,17 @@ export default function KpisPage() {
     () => (data?.masteryDistribution ?? []).map(b => ({ name: b.label, value: b.value })),
     [data],
   )
+
+  if (pharmaReady) {
+    return (
+      <div className="min-h-screen w-full">
+        <DashboardHeader title={t.navKpis} subtitle={t.pharmaKpisSubtitle} showModuleFilter />
+        <div className="w-full px-4 sm:px-6 lg:px-8 py-5 sm:py-8 max-w-[1400px] mx-auto space-y-8">
+          <PharmaKpisView />
+        </div>
+      </div>
+    )
+  }
 
   if (!ready) {
     return (
