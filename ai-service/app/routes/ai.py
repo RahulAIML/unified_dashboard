@@ -226,6 +226,14 @@ async def get_dashboard(slug: str) -> DashboardConfig:
 
 
 _RENDER_CACHE_TTL_SECONDS = 30
+# A render where every widget succeeded is cached for the full TTL above.
+# A render with ANY failed widget gets this much shorter TTL instead --
+# found live: a single transient hiccup (a slow bridge timing out once) got
+# cached as a blank KPI tile for the FULL 30s, so every viewer in that
+# window saw the same frozen failure even though a retry moments later
+# would have succeeded. This lets a genuine transient failure self-heal on
+# the next request instead of guaranteeing 30s of blank tiles.
+_RENDER_FAILURE_CACHE_TTL_SECONDS = 3
 
 
 @router.get("/render/{slug}")
@@ -248,12 +256,18 @@ async def render_dashboard(slug: str) -> dict:
     if not cfg:
         raise HTTPException(status_code=404, detail="dashboard not found")
 
-    async def _compute() -> dict:
-        pv = await preview.run(cfg, _noop_log)
-        return {"config": cfg.model_dump(mode="json"), "preview": pv.model_dump(mode="json")}
-
     from .. import cache
-    return await cache.get_or_set(f"render:{slug}:v{cfg.version}", _RENDER_CACHE_TTL_SECONDS, _compute)
+    key = f"render:{slug}:v{cfg.version}"
+    cached = await cache.cache_get(key)
+    if cached is not None:
+        return cached
+
+    pv = await preview.run(cfg, _noop_log)
+    result = {"config": cfg.model_dump(mode="json"), "preview": pv.model_dump(mode="json")}
+    any_failed = any(not widget.get("ok") for widget in result["preview"]["widgets"])
+    ttl = _RENDER_FAILURE_CACHE_TTL_SECONDS if any_failed else _RENDER_CACHE_TTL_SECONDS
+    await cache.cache_set(key, result, ttl)
+    return result
 
 
 @router.get("/dashboard-versions/{slug}")

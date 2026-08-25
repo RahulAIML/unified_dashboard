@@ -72,6 +72,39 @@ class RenderEndpointCacheTests(unittest.TestCase):
             resp = client.get("/ai/render/nobody")
         self.assertEqual(resp.status_code, 404)
 
+    def test_a_render_with_a_failed_widget_gets_a_much_shorter_ttl_than_a_full_success(self):
+        """Found live: a single transient hiccup (a bridge timing out once)
+        got cached as a blank KPI tile for the FULL 30s TTL, freezing every
+        viewer in that window onto the same failure even though a retry
+        moments later would have succeeded. A render with any failed widget
+        must expire much sooner so it can self-heal."""
+        import time
+
+        from app.models import WidgetPreview
+        from app.routes.ai import _RENDER_CACHE_TTL_SECONDS, _RENDER_FAILURE_CACHE_TTL_SECONDS
+
+        async def fake_preview_run_ok(cfg, log):
+            return DashboardPreview(slug=cfg.slug, widgets=[])
+
+        async def fake_preview_run_failed(cfg, log):
+            return DashboardPreview(slug=cfg.slug, widgets=[WidgetPreview(widget_id="w1", ok=False, error="boom")])
+
+        with patch("app.routes.ai._load_config", new=AsyncMock(return_value=self._cfg(version=1))), \
+             patch("app.agents.preview.run", new=fake_preview_run_ok):
+            TestClient(app).get("/ai/render/siigo")
+        ok_expiry, _ = cache._memory_store["render:siigo:v1"]
+        cache._memory_store.clear()
+
+        with patch("app.routes.ai._load_config", new=AsyncMock(return_value=self._cfg(version=1))), \
+             patch("app.agents.preview.run", new=fake_preview_run_failed):
+            TestClient(app).get("/ai/render/siigo")
+        failed_expiry, _ = cache._memory_store["render:siigo:v1"]
+
+        now = time.monotonic()
+        self.assertLessEqual(failed_expiry - now, _RENDER_FAILURE_CACHE_TTL_SECONDS + 0.5)
+        self.assertGreater(ok_expiry - now, _RENDER_FAILURE_CACHE_TTL_SECONDS + 0.5)
+        self.assertEqual(_RENDER_CACHE_TTL_SECONDS, 30)
+
 
 if __name__ == "__main__":
     unittest.main()
