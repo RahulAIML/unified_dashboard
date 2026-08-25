@@ -339,8 +339,15 @@ async def _kpi(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
     if w.type == WidgetType.kpi_tile:
         _, body = await post_json(base, {"action": "kpi.overview", "date_from": frm, "date_to": to}, hdr)
         ov = (body or {}).get("overview", {}) if isinstance(body, dict) else {}
-        val = {"total_sessions": ov.get("total_sessions"), "avg_score": ov.get("avg_score"),
-               "pass_rate": ov.get("pass_rate_pct")}.get(w.metric_key)
+        metrics = {"total_sessions": ov.get("total_sessions"), "avg_score": ov.get("avg_score"),
+                   "pass_rate": ov.get("pass_rate_pct")}
+        # An unrecognized metric_key must be a loud, diagnosable error, not a
+        # silent None -- a stale/mismatched key would otherwise render as a
+        # permanently blank tile with no clue anywhere why (see the bare
+        # dict.get() this replaced).
+        if w.metric_key not in metrics:
+            return WidgetPreview(widget_id=w.id, ok=False, error=f"unsupported metric_key '{w.metric_key}' for pharma_kpi")
+        val = metrics[w.metric_key]
         return WidgetPreview(widget_id=w.id, ok=val is not None, value=val)
     if w.type == WidgetType.line_chart:
         _, body = await post_json(base, {"action": "kpi.score_trend", "date_from": frm, "date_to": to, "granularity": "month"}, hdr)
@@ -397,6 +404,12 @@ async def _exceltis(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
                 return _no_passing_criteria_preview(w)
             v = round(100 * sum(1 for s in scored if s >= cfg.pass_threshold) / len(scored), 1) if scored else None
             return WidgetPreview(widget_id=w.id, ok=v is not None, value=v, legend=_pass_rate_legend(cfg))
+        # An unrecognized metric_key must return here -- without this, a
+        # kpi_tile with a stale/mismatched key fell through to the usecase-
+        # breakdown `rows=` return at the bottom of this function, a
+        # wrong-shaped WidgetPreview (rows instead of value) that KpiTile
+        # renders as a permanently blank tile with no error shown at all.
+        return WidgetPreview(widget_id=w.id, ok=False, error=f"unsupported metric_key '{w.metric_key}' for pharma_exceltis_rest")
 
     # ── Score trend (monthly avg score) ── Found live (Heineken): this
     # connector's rows carry a real 'Fecha_y_Hora' timestamp, but nothing
@@ -989,8 +1002,14 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
         return _no_passing_criteria_preview(w)
 
     metrics = await _rolplay_app_kpi_metrics(cid, w.module, dc, cfg.pass_threshold)
-    sessions = metrics["total_sessions"]
-    val = metrics.get(w.metric_key, sessions)
+    # A stale/mismatched metric_key must error, not silently default to
+    # total_sessions's value (the previous `.get(w.metric_key, sessions)`) --
+    # that masked the mismatch by showing a real-looking but WRONG number
+    # under whatever title the tile has, worse than a blank tile because
+    # nothing anywhere would look off.
+    if w.metric_key not in metrics:
+        return WidgetPreview(widget_id=w.id, ok=False, error=f"unsupported metric_key '{w.metric_key}' for rolplay_app_sql")
+    val = metrics[w.metric_key]
 
     prev_val: float | None = None
     prev_window = _prev_period(frm, to)
@@ -1154,7 +1173,15 @@ async def _second_brain(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
     m = {"coaching_sessions": stats.get("total_coaching_sessions"), "total_members": stats.get("total_members"),
          "message_logs": stats.get("total_message_logs"),
          "engagement": round(100 * (stats.get("active_members") or 0) / (stats.get("total_members") or 1), 1)}
-    return WidgetPreview(widget_id=w.id, ok=w.metric_key in m, value=m.get(w.metric_key))
+    if w.metric_key not in m:
+        return WidgetPreview(widget_id=w.id, ok=False, error=f"unsupported metric_key '{w.metric_key}' for second_brain")
+    val = m[w.metric_key]
+    # `w.metric_key in m` alone (the previous check) is true for any of the
+    # 4 keys above regardless of whether the underlying stat was actually
+    # present -- a real organization with e.g. no coaching sessions yet got
+    # ok=True, value=None: a blank tile marked SUCCESSFUL, so the frontend
+    # never shows the "no data" caption either. Must check the value itself.
+    return WidgetPreview(widget_id=w.id, ok=val is not None, value=val)
 
 
 def _num(v) -> bool:
