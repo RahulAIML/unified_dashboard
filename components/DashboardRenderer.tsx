@@ -475,8 +475,8 @@ export function MiniChart({ series, bar }: { series: Record<string, unknown>[]; 
   const hasPassed = bar && data.some(d => d.passedValue !== null)
 
   return (
-    <div className="w-full h-40 mt-2">
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="w-full h-[240px] mt-2 min-w-0">
+      <ResponsiveContainer width="100%" height={240}>
         {bar ? (
           <BarChart data={data} margin={{ top: 20, right: 8, left: -20, bottom: hasPassed ? 20 : 0 }}>
             <CartesianGrid strokeDasharray="4 4" stroke="currentColor" strokeOpacity={0.06} vertical={false} />
@@ -632,7 +632,7 @@ export function MiniDonut({ rows }: { rows: Record<string, unknown>[] }) {
   return (
     <div className="flex flex-col items-center gap-2 mt-2">
       <div className="relative w-40 h-40 shrink-0">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height={160}>
           <PieChart>
             <Pie data={displayData} dataKey="value" nameKey="label" cx="50%" cy="50%" innerRadius="55%" outerRadius="90%" paddingAngle={2} strokeWidth={0}>
               {displayData.map((_, i) => <Cell key={i} fill={DONUT_PALETTE[i % DONUT_PALETTE.length]} />)}
