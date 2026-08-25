@@ -21,8 +21,14 @@
  * into the other.
  */
 
+// Robin is a fast, low-latency assistant (thinkingBudget: 0 below) -- the
+// model is env-configurable (mirroring ai-service/app/config.py's LLM_MODEL
+// for the Dashboard Builder, which was already configurable) rather than
+// hardcoded, so the flash-tier model in use can be swapped without a code
+// change/redeploy. ROBIN_AI_MODEL unset keeps today's exact behavior.
+const GEMINI_MODEL = process.env.ROBIN_AI_MODEL || "gemini-2.5-flash"
 const GEMINI_API_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+  `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`
 
 // ── Product knowledge (harness.py's AssistantContext.product_glossary) ──────
 //
