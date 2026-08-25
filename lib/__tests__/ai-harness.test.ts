@@ -259,3 +259,24 @@ describe('resilience (unchanged behavior worth keeping)', () => {
     await expect(getAIResponse('Why did the pass rate drop?', 'Pass rate: 65%')).rejects.toThrow(/GEMINI_API_KEY/)
   })
 })
+
+describe('model is env-configurable (ROBIN_AI_MODEL), not hardcoded', () => {
+  afterEach(() => { delete process.env.ROBIN_AI_MODEL })
+
+  it('defaults to gemini-2.5-flash (today\'s exact behavior) when unset', async () => {
+    const { getAIResponse } = await fresh()
+    await getAIResponse('Why did the pass rate drop?', 'Pass rate: 65%')
+
+    const url = String(fetchSpy.mock.calls[0][0])
+    expect(url).toContain('/models/gemini-2.5-flash:generateContent')
+  })
+
+  it('uses ROBIN_AI_MODEL when set, without a code change', async () => {
+    process.env.ROBIN_AI_MODEL = 'gemini-3-flash-preview'
+    const { getAIResponse } = await fresh()
+    await getAIResponse('Why did the pass rate drop?', 'Pass rate: 65%')
+
+    const url = String(fetchSpy.mock.calls[0][0])
+    expect(url).toContain('/models/gemini-3-flash-preview:generateContent')
+  })
+})
