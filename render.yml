@@ -29,3 +29,13 @@ services:
         sync: false
       - key: BRIDGE_SECRET
         sync: false   # set this secret in Render dashboard → Environment
+      # ── Robin AI (lib/ai.ts) ──────────────────────────────────────────────
+      # GEMINI_API_KEY is set directly in the Render dashboard (not listed
+      # here) since it's a secret. ROBIN_AI_MODEL picks Robin's own model,
+      # independent of the Dashboard Builder's LLM_MODEL (ai-service/render.yaml)
+      # -- Robin is the fast/latency-sensitive chat assistant, the Builder
+      # benefits more from a deeper-reasoning tier. Change this value (Render
+      # dashboard → this service → Environment, or edit here and redeploy)
+      # to switch Robin's model with no code change.
+      - key: ROBIN_AI_MODEL
+        value: gemini-2.5-flash
