@@ -38,4 +38,4 @@ services:
       # dashboard → this service → Environment, or edit here and redeploy)
       # to switch Robin's model with no code change.
       - key: ROBIN_AI_MODEL
-        value: gemini-2.5-flash
+        value: gemini-3.7-flash

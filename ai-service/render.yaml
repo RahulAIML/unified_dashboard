@@ -16,10 +16,12 @@ services:
       # Dashboard Builder work (schema/company discovery, dashboard planning,
       # insights) benefits from deeper reasoning more than low latency, unlike
       # Robin AI (lib/ai.ts's ROBIN_AI_MODEL, a separate, fast-tier setting on
-      # the Next.js service) -- Gemini 3's thinkingLevel lets the SAME model
+      # the Next.js service) -- Gemini's thinkingLevel lets the SAME model
       # reason harder without switching to a slower/costlier model tier.
+      # gemini-3.7-flash's thinkingLevel does NOT support "minimal" (the API
+      # errors on it) -- keep this at low/medium/high only.
       - key: LLM_MODEL
-        value: gemini-3-flash-preview
+        value: gemini-3.7-flash
       - key: LLM_THINKING_LEVEL
         value: high
       - key: AUTH_DATABASE_URL
