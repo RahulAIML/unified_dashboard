@@ -72,6 +72,20 @@ describe('rolplayAppOverview — previous-period boundary', () => {
     // May 25 00:00:00 -> May 31 23:59:59.
     expect(prevSql).toContain("BETWEEN '2026-05-25 00:00:00' AND '2026-05-31 23:59:59'")
   })
+
+  it('rounds passRate to 1 decimal via the shared lib/kpi-builder.ts computePassRate, not a local reimplementation', async () => {
+    const mod = await fresh()
+    // A fresh Response per call -- rolplayAppOverview issues 2 fetches
+    // (current + previous period), and a Response body can only be read once.
+    fetchSpy.mockImplementation(async () => respond([{ total: 3, scored: 3, avg_score: '80', passed: 1 }]))
+
+    const overview = await mod.rolplayAppOverview(29, { fromIso: '2026-06-01T00:00:00.000Z', toIso: '2026-06-08T00:00:00.000Z' })
+
+    // 1/3 = 33.333...% -- confirms the local Math.round(...*1000)/10 that used
+    // to live here was replaced by computePassRate() without changing its
+    // (already-correct) 1-decimal output.
+    expect(overview.passRate).toBe(33.3)
+  })
 })
 
 describe('mergeOverviewSources — M8 pharma + rolplay_app_sql composition', () => {

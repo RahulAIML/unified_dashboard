@@ -52,7 +52,7 @@ import type {
 } from './types'
 import type { DrilldownResult, DrilldownField } from './data-provider'
 import { TENANT_CONFIG, type PharmaTenant } from './pharma-tenant'
-import { passRateLegend, resolvePassThreshold } from './kpi-builder'
+import { computePassRate, passRateLegend, resolvePassThreshold } from './kpi-builder'
 
 /**
  * The pass threshold to apply for this tenant, or null when the tenant has no
@@ -345,7 +345,7 @@ export function aggregateSaleExercisesRows(rows: SaleExercisesRow[], threshold: 
   return {
     total,
     avgScore: avg != null ? Math.round(avg * 100) / 100 : null,
-    passRate: threshold !== null && total ? Math.round(((passed as number) / total) * 10000) / 100 : null,
+    passRate: threshold !== null ? computePassRate(passed as number, total) : null,
     passed: passed ?? 0,
   }
 }
@@ -466,7 +466,7 @@ async function sanferCertificationBreakdown(): Promise<UsecaseBreakdownApiRespon
       usecase_name: b.name,
       totalEvaluations: b.total,
       avgScore: b.scores.length ? Math.round((b.scores.reduce((a, c) => a + c, 0) / b.scores.length) * 100) / 100 : null,
-      passRate: b.total ? Math.round((b.passed / b.total) * 10000) / 100 : null,
+      passRate: computePassRate(b.passed, b.total),
       passed: b.passed,
     }))
     .sort((a, b) => b.totalEvaluations - a.totalEvaluations)
@@ -592,7 +592,7 @@ function summarizeApotexActivities(rows: ApotexActivityRow[]): OverviewApiRespon
   return {
     totalEvaluations: total,
     avgScore: total ? Math.round((scoreWeighted / total) * 100) / 100 : null,
-    passRate: total ? Math.round((passed / total) * 10000) / 100 : null,
+    passRate: computePassRate(passed, total),
     passedEvaluations: passed,
     prevTotalEvaluations: 0, prevAvgScore: null, prevPassRate: null, // filled in by caller with a second window
     // sessions_pass/pass_rate_pct come from Apotex's OWN bridge, computed by
@@ -897,7 +897,7 @@ export async function pharmaDashboardUsecaseBreakdown(
       usecase_name:     b.name || null,
       totalEvaluations: b.total,
       avgScore:         Math.round((b.scoreSum / b.total) * 100) / 100,
-      passRate:         Math.round((b.passed / b.total) * 10000) / 100,
+      passRate:         computePassRate(b.passed, b.total),
       passed:           b.passed,
     }))
     .sort((a, b) => b.totalEvaluations - a.totalEvaluations)
@@ -953,7 +953,7 @@ export async function pharmaDashboardBestPerformers(
       user_name:  b.name || null,
       sessions:   b.total,
       avg_score:  Math.round((b.scoreSum / b.total) * 100) / 100,
-      pass_rate:  Math.round((b.passed / b.total) * 10000) / 100,
+      pass_rate:  computePassRate(b.passed, b.total) ?? 0,
     }))
     .sort((a, b) => b.avg_score - a.avg_score || b.sessions - a.sessions)
     .slice(0, limit)

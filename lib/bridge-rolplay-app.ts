@@ -29,6 +29,7 @@ import type {
   BestPerformersApiResponse, BestPerformerRow,
 } from './types'
 import { getOrSetCache } from './cache'
+import { computePassRate } from './kpi-builder'
 
 // Rolplay-app is this platform's primary, fully-automated connector -- every
 // query here goes over the SQL-over-HTTP bridge (remoteSelect, ~seconds per
@@ -491,7 +492,7 @@ async function _rolplayAppOverviewImpl(
     prevRange ? fetchScoreStats(cid, prevRange.fromIso, prevRange.toIso, solution) : Promise.resolve<ScoreStats | null>(null),
   ])
 
-  const passRate = (s: ScoreStats) => s.scored > 0 ? Math.round((s.passed / s.scored) * 1000) / 10 : null
+  const passRate = (s: ScoreStats) => computePassRate(s.passed, s.scored)
 
   return {
     totalEvaluations:     cur.total,
@@ -696,7 +697,7 @@ async function _rolplayAppUsecaseBreakdownImpl(
       usecase_name: r.name?.trim() || `Simulator ${r.simulator_id}`,
       totalEvaluations: total,
       avgScore: r.avg != null ? Number(r.avg) : null,
-      passRate: scored ? Math.round((passed / scored) * 1000) / 10 : null,
+      passRate: computePassRate(passed, scored),
       passed,
     }
   })
@@ -743,7 +744,7 @@ async function _rolplayAppBestPerformersImpl(
       user_name: r.name?.trim() || null,
       sessions,
       avg_score: r.avg != null ? Number(r.avg) : 0,
-      pass_rate: scored ? Math.round((passed / scored) * 1000) / 10 : 0,
+      pass_rate: computePassRate(passed, scored) ?? 0,
     }
   })
   return { data }

@@ -39,6 +39,16 @@ describe('aggregateSaleExercisesRows — configurable threshold', () => {
     expect(result.total).toBe(2)
     expect(result.avgScore).toBe(80)
   })
+
+  it('rounds passRate to 1 decimal place, matching lib/kpi-builder.ts computePassRate exactly', () => {
+    // 1/3 = 33.333...% -- previously rounded to 2 decimals here (33.33) via a
+    // locally reimplemented Math.round(...*10000)/100, while every other KPI
+    // surface (lib/kpi-builder.ts's computePassRate, used by data-provider.ts)
+    // rounds to 1 decimal (33.3) -- two dashboards could show a different pass
+    // rate for the same underlying ratio. Now delegates to computePassRate.
+    const result = aggregateSaleExercisesRows([row(90), row(60), row(60)], 70)
+    expect(result.passRate).toBe(33.3)
+  })
 })
 
 /**
