@@ -659,11 +659,18 @@ export async function rolplayAppDrilldown(sessionId: number, clientId: number): 
     simulator_name: string | null
     extracted_score: string | null
   }>(
-    `SELECT us.*, u.name AS user_name, s.name AS simulator_name, ${SCORE_SQL} AS extracted_score
-       FROM r_user_session us
-       JOIN r_user u ON u.ID = us.user_id
-       JOIN r_simulator s ON s.ID = us.simulator_id
-      WHERE us.ID = ${sid} AND u.client_id = ${cid}
+    // SCORE_SQL (above) hardcodes s.raw_closing_data/s.closing_analysis --
+    // 's' MUST be r_user_session's own alias here, matching every other
+    // SCORE_SQL call site in this file. Aliasing the session row 's' too
+    // (as the platform owner's original manual query did) broke this live:
+    // 's' resolved to r_simulator instead, which has neither column, and
+    // the bridge's resulting SQL error surfaced only as the route's generic
+    // "Failed to load drilldown data" catch-all.
+    `SELECT s.*, u.name AS user_name, sim.name AS simulator_name, ${SCORE_SQL} AS extracted_score
+       FROM r_user_session s
+       JOIN r_user u ON u.ID = s.user_id
+       JOIN r_simulator sim ON sim.ID = s.simulator_id
+      WHERE s.ID = ${sid} AND u.client_id = ${cid}
       LIMIT 1`,
   )
   const session = rows[0]
