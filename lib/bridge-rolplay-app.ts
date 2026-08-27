@@ -666,10 +666,16 @@ export async function rolplayAppDrilldown(sessionId: number, clientId: number): 
     // 's' resolved to r_simulator instead, which has neither column, and
     // the bridge's resulting SQL error surfaced only as the route's generic
     // "Failed to load drilldown data" catch-all.
+    // r_simulator must be a LEFT JOIN, matching every other query in this
+    // file (see the other 5 call sites) -- a session whose simulator_id has
+    // no matching row (a deleted/orphaned simulator) is a real, valid
+    // session that must still resolve, not silently vanish because an INNER
+    // JOIN dropped it. Confirmed live: a real session for a real tenant came
+    // back "Report not found" purely because of this.
     `SELECT s.*, u.name AS user_name, sim.name AS simulator_name, ${SCORE_SQL} AS extracted_score
        FROM r_user_session s
        JOIN r_user u ON u.ID = s.user_id
-       JOIN r_simulator sim ON sim.ID = s.simulator_id
+       LEFT JOIN r_simulator sim ON sim.ID = s.simulator_id
       WHERE s.ID = ${sid} AND u.client_id = ${cid}
       LIMIT 1`,
   )

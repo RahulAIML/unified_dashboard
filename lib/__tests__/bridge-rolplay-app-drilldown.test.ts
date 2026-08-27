@@ -82,6 +82,20 @@ describe('rolplayAppDrilldown — tenant scoping', () => {
     expect(sqlCalls[0]).not.toContain('FROM r_user_session us')
   })
 
+  it('LEFT JOINs r_simulator, matching every other query in this file -- a real session with an orphaned/deleted simulator_id must still resolve, not silently vanish', async () => {
+    const mod = await fresh()
+    const sqlCalls: string[] = []
+    fetchSpy.mockImplementation(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body))
+      sqlCalls.push(body.sql)
+      return respond([sessionRow()])
+    })
+
+    await mod.rolplayAppDrilldown(78, 29)
+
+    expect(sqlCalls[0]).toContain('LEFT JOIN r_simulator sim')
+  })
+
   it('rejects a non-positive session id before ever querying the bridge', async () => {
     const mod = await fresh()
     await expect(mod.rolplayAppDrilldown(0, 29)).rejects.toThrow(/invalid session id/)
