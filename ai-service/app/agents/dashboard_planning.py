@@ -358,7 +358,7 @@ def _reports_page(schema: NormalizedSchema) -> DashboardPage | None:
     widget = WidgetConfig(
         id="table_reports", type=WidgetType.table, title="Session Reports",
         source_kind=src.source_kind, source_action="r_user_session", span=4,
-        paginated=True, searchable=True, exportable=True,
+        paginated=True, searchable=True, exportable=True, id_field="id",
         business_question="Which individual sessions were run, by whom, and with what result?",
     )
     return DashboardPage(id="reports", title="Reports", rows=[

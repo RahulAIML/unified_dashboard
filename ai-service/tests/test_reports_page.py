@@ -55,6 +55,15 @@ class ReportsPageTests(unittest.TestCase):
         self.assertTrue(widget.exportable)
         self.assertTrue(widget.business_question)
 
+    def test_reports_widget_has_a_real_id_field_now_that_a_drilldown_backend_exists(self):
+        # lib/bridge-rolplay-app.ts's rolplayAppDrilldown gives rolplay_app_sql
+        # a real, tenant-scoped session-detail lookup -- without id_field set
+        # here, components/DashboardRenderer.tsx's ReportsTable has no column
+        # to build a /drilldown/[id] link from, and every session in a
+        # Builder-generated dashboard's Reports page is a dead end.
+        widget = _reports_page(_rolplay_schema()).rows[0].widgets[0]
+        self.assertEqual(widget.id_field, "id")
+
     def test_none_for_non_rolplay_app_sql_connectors(self):
         # Explicitly scoped -- pharma_kpi (and every other connector) gets
         # no Reports page from this pass; nothing else was touched.
@@ -118,6 +127,19 @@ class ReportsWidgetFetchTests(unittest.TestCase):
         with patch("app.preview_fetch.post_json", new=fake_post_json):
             _run(fetch_widget(self._cfg(), self._widget()))
         self.assertIn("u.client_id=5", captured["sql"])
+
+    def test_query_selects_the_real_session_id_for_drilldown(self):
+        # s.ID AS id is what components/DashboardRenderer.tsx's ReportsTable
+        # (via WidgetConfig.id_field="id") builds each row's /drilldown/[id]
+        # link from -- and lib/bridge-rolplay-app.ts's rolplayAppDrilldown
+        # scopes its own lookup by this exact r_user_session.ID.
+        captured = {}
+        async def fake_post_json(url, body, headers=None):
+            captured["sql"] = body["sql"]
+            return 200, {"data": []}
+        with patch("app.preview_fetch.post_json", new=fake_post_json):
+            _run(fetch_widget(self._cfg(), self._widget()))
+        self.assertIn("s.ID AS id", captured["sql"])
 
 
 if __name__ == "__main__":

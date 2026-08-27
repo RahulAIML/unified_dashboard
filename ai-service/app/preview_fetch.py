@@ -941,7 +941,12 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
             f"WHEN ({SCORE_SQL})>={cfg.pass_threshold} THEN 'Passed' ELSE 'Failed' END AS result"
         )
         rows = await _rolplay_app_sql(
-            "SELECT s.date_created AS date, u.email AS rep, "
+            # s.ID drives the frontend's /drilldown/[id] link (WidgetConfig.id_field,
+            # set on this widget in dashboard_planning.py's _reports_page) -- it
+            # matches app/drilldown/[id]/page.tsx's own report-id key exactly, the
+            # same session id lib/bridge-rolplay-app.ts's rolplayAppDrilldown scopes
+            # its lookup by, so every session row here is now click-through-able.
+            "SELECT s.ID AS id, s.date_created AS date, u.email AS rep, "
             "COALESCE(sim.name, CONCAT('Simulator ', s.simulator_id)) AS simulator, "
             f"ROUND({SCORE_SQL},1) AS score, {result_case} "
             "FROM r_user_session s JOIN r_user u ON u.ID=s.user_id "
