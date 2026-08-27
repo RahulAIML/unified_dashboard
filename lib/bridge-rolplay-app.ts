@@ -236,16 +236,69 @@ export function invalidateRolplayAppDomainCache(): void {
   dbDomainCache = null
 }
 
+// ── Auto-discovered domains (real usage data, no code change/deploy needed) ──
+// Found live (2026-08-27): armstronglabs.com.mx (476 real users) and
+// procapslatam.com (156 real users) were both entirely absent from
+// BUILTIN_DOMAIN_MAP -- every user at either company got "not linked to any
+// organization" until someone noticed and a code change shipped. That is
+// exactly the "self-service dashboards keep needing manual backend
+// intervention for every new client" complaint this platform exists to
+// avoid. A domain that is unambiguously single-tenant in real r_user data
+// (every real user on it shares one client_id, and there's more than one of
+// them) resolves automatically -- a genuinely new client "just works" the
+// moment their users start logging in, no deploy required.
+//
+// Deliberately conservative: never auto-resolves a domain that (a) is a
+// known public/shared email provider (gmail.com etc. -- a coincidence of
+// sparse data could otherwise make one look single-tenant), (b) spans more
+// than one client_id (ambiguous, same reasoning audioweb.com.mx is
+// hardcoded to exclude), or (c) has fewer than 2 real users on it (a lone
+// row is as likely a typo/test account as a real company).
+const PUBLIC_EMAIL_DOMAINS = new Set([
+  'gmail.com', 'googlemail.com', 'yahoo.com', 'yahoo.com.mx', 'ymail.com',
+  'hotmail.com', 'hotmail.es', 'hotmail.com.mx', 'outlook.com', 'outlook.es',
+  'live.com', 'live.com.mx', 'icloud.com', 'me.com', 'aol.com',
+  'protonmail.com', 'proton.me', 'gmx.com', 'mail.com', 'msn.com',
+  'yandex.com', 'zoho.com',
+])
+const MIN_AUTO_DOMAIN_USERS = 2
+const AUTO_DOMAIN_TTL_MS = 10 * 60_000
+const autoDomainCache = new Map<string, { clientId: number | null; at: number }>()
+
+async function autoDiscoverDomain(domain: string): Promise<number | null> {
+  if (PUBLIC_EMAIL_DOMAINS.has(domain)) return null
+  // Reject rather than escape (same rule as rolplayAppUserExists above) --
+  // a real email domain never legitimately contains anything outside
+  // letters/digits/dot/hyphen, so anything else is refused, not sanitized.
+  if (!/^[a-z0-9.-]+$/.test(domain)) return null
+
+  const cached = autoDomainCache.get(domain)
+  if (cached && Date.now() - cached.at < AUTO_DOMAIN_TTL_MS) return cached.clientId
+
+  const rows = await remoteSelect<{ client_id: number | string; n: number | string }>(
+    `SELECT client_id, COUNT(*) AS n FROM r_user WHERE email LIKE '%@${domain}' GROUP BY client_id`,
+  ).catch(() => [])
+
+  const clientId = rows.length === 1 && Number(rows[0].n) >= MIN_AUTO_DOMAIN_USERS
+    ? Number(rows[0].client_id)
+    : null
+  autoDomainCache.set(domain, { clientId, at: Date.now() })
+  return clientId
+}
+
 /**
- * Pipeline resolution including DB-published domains. Prefer this wherever an
- * await is possible; resolveRolplayAppClientId stays for sync callers.
+ * Pipeline resolution including DB-published domains AND auto-discovered
+ * ones (see autoDiscoverDomain above). Prefer this wherever an await is
+ * possible; resolveRolplayAppClientId stays for sync callers.
  */
 export async function resolveRolplayAppClientIdAsync(email: string): Promise<number | null> {
   const sync = resolveRolplayAppClientId(email)
   if (sync) return sync
   const domain = email.toLowerCase().trim().split('@')[1]
   if (!domain) return null
-  return (await dbDomainMap()).get(domain) ?? null
+  const fromDb = (await dbDomainMap()).get(domain)
+  if (fromDb) return fromDb
+  return autoDiscoverDomain(domain)
 }
 
 // ── Authorization (tenant isolation) ──────────────────────────────────────────
