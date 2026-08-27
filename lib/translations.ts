@@ -117,10 +117,10 @@ export const translations = {
     // Cesar KPI set (app/kpis) — see /api/dashboard/cesar-kpis. Description/
     // formula/footer text sourced from Sugerencia_de_KPIs_Cesar.xlsx (Cesar's
     // real spec) -- only the 9 KPIs computable from real rolplay-app data.
-    kpisSubtitle:                "Sugerencia de KPI's Cesar",
+    kpisSubtitle:                'How your real evaluation metrics are calculated',
     // Pharma tenants (Apotex, Sanfer, ...) have no rolplay_app_sql access, so
     // they get their OWN real, already-computed metrics here instead of the
-    // Cesar suite above -- see PharmaKpisView in app/kpis/page.tsx. Formula
+    // suite above -- see PharmaKpisView in app/kpis/page.tsx. Formula
     // text matches docs/KPI_AUDIT_AND_MAPPING.md exactly, not re-derived.
     pharmaKpisSubtitle:          'How your real evaluation metrics are calculated',
     kpiTotalEvalTitle:           'Total Evaluations',
@@ -1169,10 +1169,10 @@ export const translations = {
     // --- Ranking / KPIs (solo rolplay-app) ---
     navRanking:              'Clasificación',
     navKpis:                 'KPIs',
-    // Conjunto de KPIs Cesar (app/kpis) — ver /api/dashboard/cesar-kpis.
+    // Conjunto de KPIs (app/kpis) — ver /api/dashboard/cesar-kpis.
     // Descripción/fórmula/interpretación tomadas de Sugerencia_de_KPIs_Cesar.xlsx
-    // (spec real de Cesar) -- solo los 9 KPIs calculables con datos reales de rolplay-app.
-    kpisSubtitle:                "Sugerencia de KPI's Cesar",
+    // -- solo los 9 KPIs calculables con datos reales de rolplay-app.
+    kpisSubtitle:                'Cómo se calculan tus métricas reales de evaluación',
     pharmaKpisSubtitle:          'Cómo se calculan tus métricas reales de evaluación',
     kpiTotalEvalTitle:           'Evaluaciones Totales',
     kpiTotalEvalDesc:            'Cantidad de sesiones/evaluaciones realizadas en el rango de fechas seleccionado.',
