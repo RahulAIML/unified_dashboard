@@ -317,7 +317,7 @@ function DashboardRows({ rows, pv }: { rows: DashRow[]; pv: Map<string, WidgetPr
                       {w.type === 'journey' && <MiniJourney rows={p?.rows ?? []} />}
                       {isLeaderboard && <Leaderboard rows={p?.rows ?? []} />}
                       {w.type === 'table' && !isLeaderboard && (w.paginated
-                        ? <ReportsTable rows={p?.rows ?? []} searchable={!!w.searchable} exportable={!!w.exportable} filenamePrefix={w.id} />
+                        ? <ReportsTable rows={p?.rows ?? []} searchable={!!w.searchable} exportable={!!w.exportable} filenamePrefix={w.id} idField={w.id_field} />
                         : <MiniTable rows={p?.rows ?? []} idField={w.id_field} />)}
                       {failed && <div className="text-xs text-amber-600 dark:text-amber-400 mt-2">{t.noDataInline}{p!.error ? `: ${p!.error}` : ''}</div>}
                     </WidgetCard>
@@ -709,19 +709,25 @@ const REPORTS_PAGE_SIZE = 25
  * actually usable report.
  */
 export function ReportsTable({
-  rows, searchable, exportable, filenamePrefix,
+  rows, searchable, exportable, filenamePrefix, idField,
 }: {
   rows: Record<string, unknown>[]
   searchable: boolean
   exportable: boolean
   filenamePrefix: string
+  idField?: string | null
 }) {
   const t = useT()
   const { lang } = useLangStore()
   const [query, setQuery] = useState('')
   const [page, setPage] = useState(0)
 
-  const cols = rows.length ? Object.keys(rows[0]) : []
+  // The id itself isn't interesting to show as a column (it's an opaque
+  // report id) -- it's what the "View" link's href is built from instead.
+  // Kept in the CSV export columns (below, from the unfiltered key set) since
+  // a raw report id is a genuinely useful cross-reference there.
+  const allCols = rows.length ? Object.keys(rows[0]) : []
+  const cols = allCols.filter(c => c !== idField)
 
   const filtered = useMemo(() => {
     if (!query.trim()) return rows
@@ -753,7 +759,7 @@ export function ReportsTable({
           {exportable && (
             <ExportButton
               data={filtered}
-              columns={cols.map(c => ({
+              columns={allCols.map(c => ({
                 header: translateColumnHeader(c, lang),
                 value: (r: Record<string, unknown>) => c === 'result' ? translateResultValue(fmt(r[c]), lang) : r[c],
               }))}
@@ -768,14 +774,27 @@ export function ReportsTable({
           <thead>
             <tr className="text-muted-foreground text-left">
               {cols.map(c => <th key={c} className="py-1 pr-4 font-medium capitalize">{translateColumnHeader(c, lang)}</th>)}
+              {idField && <th className="py-1 pr-4 font-medium" />}
             </tr>
           </thead>
           <tbody>
-            {visible.map((r, i) => (
-              <tr key={i} className="border-t border-border/40">
-                {cols.map(c => <td key={c} className="py-1 pr-4 text-foreground">{c === 'result' ? translateResultValue(fmt(r[c]), lang) : fmt(r[c])}</td>)}
-              </tr>
-            ))}
+            {visible.map((r, i) => {
+              const id = idField ? r[idField] : null
+              return (
+                <tr key={i} className="border-t border-border/40">
+                  {cols.map(c => <td key={c} className="py-1 pr-4 text-foreground">{c === 'result' ? translateResultValue(fmt(r[c]), lang) : fmt(r[c])}</td>)}
+                  {idField && (
+                    <td className="py-1 pr-4">
+                      {id !== null && id !== undefined && (
+                        <Link href={`/drilldown/${id}`} className="text-primary hover:underline whitespace-nowrap">
+                          {t.viewLink} →
+                        </Link>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              )
+            })}
           </tbody>
         </table>
         {visible.length === 0 && <div className="py-6 text-center text-xs text-muted-foreground">{t.noMatchingRows}</div>}

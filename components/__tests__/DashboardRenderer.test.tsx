@@ -617,6 +617,32 @@ describe('ReportsTable', () => {
     render(<ReportsTable rows={rows} searchable exportable={false} filenamePrefix="reports" />)
     expect(screen.queryByText('Export CSV')).toBeNull()
   })
+
+  it('links each row to /drilldown/[id] when idField is set (rolplay_app_sql Reports page)', () => {
+    render(
+      <ReportsTable
+        rows={[{ id: 78, date: '2026-04-13', rep: 'a@siigo.com', result: 'Passed' }]}
+        searchable exportable filenamePrefix="reports" idField="id"
+      />,
+    )
+    const link = screen.getByText('Ver →').closest('a')
+    expect(link?.getAttribute('href')).toBe('/drilldown/78')
+  })
+
+  it('never renders the raw id as its own displayed column', () => {
+    render(
+      <ReportsTable
+        rows={[{ id: 78, date: '2026-04-13', rep: 'a@siigo.com', result: 'Passed' }]}
+        searchable exportable filenamePrefix="reports" idField="id"
+      />,
+    )
+    expect(screen.queryByText('78')).toBeNull()
+  })
+
+  it('adds no link column at all when idField is absent', () => {
+    render(<ReportsTable rows={rows} searchable exportable filenamePrefix="reports" />)
+    expect(screen.queryByText('Ver →')).toBeNull()
+  })
 })
 
 describe('DashboardRenderer — AI Insights', () => {

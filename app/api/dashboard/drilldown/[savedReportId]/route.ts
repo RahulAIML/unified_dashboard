@@ -5,6 +5,7 @@ import { getAuthContextFromRequest } from '@/lib/server-auth'
 import { resolveOrgType } from '@/lib/org-type'
 import { resolvePharmaTenantAccess } from '@/lib/pharma-tenant'
 import { pharmaDashboardDrilldown } from '@/lib/bridge-pharma-analytics'
+import { resolveRolplayAppAccess, rolplayAppDrilldown } from '@/lib/bridge-rolplay-app'
 import { isDemoDataEnabled } from '@/lib/demo'
 import { getDemoReport } from '@/lib/demo/reports'
 import { DEMO_REPORT_IDS } from '@/lib/demo/engine'
@@ -42,6 +43,16 @@ export async function GET(
       if (!data) return buildApiError('Report not found', 404)
 
       return buildSuccess(data, { savedReportId: id, source: `pharma-${tenant}` })
+    }
+
+    if (orgType === 'rolplay-app') {
+      const clientId = await resolveRolplayAppAccess(ctx.email)
+      if (!clientId) return buildApiError('Rolplay-app tenant could not be resolved', 500)
+
+      const data = await rolplayAppDrilldown(id, clientId)
+      if (!data) return buildApiError('Report not found', 404)
+
+      return buildSuccess(data, { savedReportId: id, source: 'rolplay-app' })
     }
 
     const data = await getDrilldown(id, ctx.customerId)

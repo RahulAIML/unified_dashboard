@@ -30,6 +30,7 @@ import type {
 } from './types'
 import { getOrSetCache } from './cache'
 import { computePassRate } from './kpi-builder'
+import type { DrilldownResult, DrilldownField } from './data-provider'
 
 // Rolplay-app is this platform's primary, fully-automated connector -- every
 // query here goes over the SQL-over-HTTP bridge (remoteSelect, ~seconds per
@@ -615,6 +616,127 @@ async function _rolplayAppResultsImpl(
     }
   })
   return { data }
+}
+
+function safeSessionId(id: number): number {
+  const n = Math.trunc(id)
+  if (!Number.isSafeInteger(n) || n < 1) throw new Error('rolplay-app SQL: invalid session id')
+  return n
+}
+
+function rdField(key: string, label: string | null, value: string | null): DrilldownField | null {
+  if (!value || !value.trim()) return null
+  return { fieldKey: key, fieldLabel: label, valueNum: null, valueText: value, valueLongtext: null, normalizedValue: value }
+}
+
+/**
+ * Full session detail for one report id (r_user_session.ID) -- the same two
+ * queries used to build a manual summary report: the session row (joined to
+ * user/simulator names) plus every per-turn interaction from
+ * r_user_session_details, ordered by sequence. Scoped by client_id so a
+ * session id belonging to another tenant returns null, never that tenant's
+ * transcript -- the platform-owner's queries had no such scoping, which is
+ * fine for a manual one-off lookup but not for a multi-tenant endpoint.
+ *
+ * Returns the SAME generic DrilldownResult/DrilldownField shape
+ * coach_app_sql and pharma already use, so app/drilldown/[id]/page.tsx
+ * renders this with zero frontend changes: field keys `question_N`/
+ * `answer_N`/`retro_N` match the page's own groupInteractions() regex and
+ * render as an ordered conversation, `overall_score`/`overall_result` match
+ * lib/field-map.ts's CORE_FIELD_MAP and get the hero score/result treatment.
+ */
+export async function rolplayAppDrilldown(sessionId: number, clientId: number): Promise<DrilldownResult | null> {
+  const cid = tenantId(clientId)
+  const sid = safeSessionId(sessionId)
+
+  const rows = await remoteSelect<{
+    ID: number | string
+    simulator_id: number | string | null
+    date_created: string
+    closing_analysis: string | null
+    raw_closing_data: string | null
+    user_name: string | null
+    simulator_name: string | null
+    extracted_score: string | null
+  }>(
+    `SELECT us.*, u.name AS user_name, s.name AS simulator_name, ${SCORE_SQL} AS extracted_score
+       FROM r_user_session us
+       JOIN r_user u ON u.ID = us.user_id
+       JOIN r_simulator s ON s.ID = us.simulator_id
+      WHERE us.ID = ${sid} AND u.client_id = ${cid}
+      LIMIT 1`,
+  )
+  const session = rows[0]
+  if (!session) return null
+
+  const details = await remoteSelect<{
+    sequence: number | string
+    ai_text: string | null
+    user_text: string | null
+    retro_analysis: string | null
+  }>(
+    `SELECT sequence, ai_text, user_text, retro_analysis
+       FROM r_user_session_details
+      WHERE session_id = ${sid}
+      ORDER BY sequence ASC`,
+  )
+
+  const score = session.extracted_score != null ? Number(session.extracted_score) : null
+  const passed = score != null ? score >= PASS_THRESHOLD : null
+
+  const fields: DrilldownField[] = []
+  if (score != null) {
+    fields.push({ fieldKey: 'overall_score', fieldLabel: 'Score', valueNum: score, valueText: null, valueLongtext: null, normalizedValue: score })
+  }
+  if (passed !== null) {
+    const text = passed ? 'Aprobado' : 'Deficiente'
+    fields.push({ fieldKey: 'overall_result', fieldLabel: 'Resultado', valueNum: null, valueText: text, valueLongtext: null, normalizedValue: text })
+  }
+
+  for (const d of details) {
+    const seq = Number(d.sequence)
+    const q = rdField(`question_${seq}`, `Turn ${seq}`, d.ai_text)
+    if (q) fields.push(q)
+    const a = rdField(`answer_${seq}`, `Turn ${seq} response`, d.user_text)
+    if (a) fields.push(a)
+    const r = rdField(`retro_${seq}`, `Turn ${seq} feedback`, d.retro_analysis)
+    if (r) fields.push(r)
+  }
+
+  // Qualitative summary. raw_closing_data (richer, e.g. Siigo) preferred over
+  // closing_analysis (legacy JSON-as-text or, for some templates, raw HTML) --
+  // same preference order as SCORE_SQL above. general_strengths/
+  // general_improvement_areas already match lib/field-map.ts's
+  // EXTRA_FIELD_MAP aliases, so they surface as qualitative fields with no
+  // extra mapping needed.
+  let closingJson: Record<string, unknown> | null = null
+  const rawSource = session.raw_closing_data || session.closing_analysis
+  if (rawSource) {
+    try {
+      const parsed: unknown = JSON.parse(rawSource)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        closingJson = parsed as Record<string, unknown>
+        for (const [key, value] of Object.entries(closingJson)) {
+          if (typeof value !== 'string' || fields.some(f => f.fieldKey === key)) continue
+          const f = rdField(key, null, value)
+          if (f) fields.push(f)
+        }
+      }
+    } catch {
+      // Some legacy templates (e.g. Takeda) store raw HTML here, not JSON --
+      // not parseable into structured fields. The score/transcript above
+      // already cover the meaningful content; skip rather than show a wall
+      // of markup.
+    }
+  }
+
+  return {
+    savedReportId: Number(session.ID),
+    usecaseId: session.simulator_id != null ? Number(session.simulator_id) : null,
+    date: String(session.date_created).slice(0, 10),
+    fields,
+    closingJson,
+  }
 }
 
 /** Daily trends (score + counts + pass) and a score-distribution histogram. */
