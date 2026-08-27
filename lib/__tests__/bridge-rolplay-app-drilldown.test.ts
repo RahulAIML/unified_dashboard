@@ -64,7 +64,22 @@ describe('rolplayAppDrilldown — tenant scoping', () => {
 
     expect(result).toBeNull()
     expect(sqlCalls[0]).toContain('u.client_id = 29')
-    expect(sqlCalls[0]).toContain('us.ID = 78')
+    expect(sqlCalls[0]).toContain('s.ID = 78')
+  })
+
+  it('aliases r_user_session as `s` (not `us`), matching what SCORE_SQL hardcodes -- a real live bug where `s` resolved to r_simulator instead, breaking every drilldown with a SQL error', async () => {
+    const mod = await fresh()
+    const sqlCalls: string[] = []
+    fetchSpy.mockImplementation(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body))
+      sqlCalls.push(body.sql)
+      return respond([sessionRow()])
+    })
+
+    await mod.rolplayAppDrilldown(78, 29)
+
+    expect(sqlCalls[0]).toContain('FROM r_user_session s')
+    expect(sqlCalls[0]).not.toContain('FROM r_user_session us')
   })
 
   it('rejects a non-positive session id before ever querying the bridge', async () => {
