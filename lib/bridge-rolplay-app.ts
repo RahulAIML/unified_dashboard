@@ -170,6 +170,18 @@ const BUILTIN_DOMAIN_MAP: Record<string, number> = {
   // this exact domain -- distinct from the audioweb.com.mx shared-staff
   // domain excluded below, which really does span multiple unrelated clients.
   'arceralifesciences.com': 24,
+  // Confirmed live via a direct r_user query (2026-08-27): every client_id
+  // with >=3 real users cross-checked against this map. Two large real
+  // clients were entirely missing -- every one of their users got "You're
+  // not linked to any organization yet" on login, reported live by a real
+  // Armstrong Labs user. armstronglabs.com.mx has 476 real users under
+  // client_id 33; procapslatam.com has 156 under client_id 40. (The other
+  // unmapped client_ids found in that same query -- below.com, client.com,
+  // first.com, rolplay.ca, gmail.com -- are test/demo/shared-public domains
+  // that genuinely can't map to one company, same reasoning as
+  // audioweb.com.mx below.)
+  'armstronglabs.com.mx': 33,
+  'procapslatam.com': 40,
   // audioweb.com.mx is deliberately excluded: it's the shared staff domain and
   // spans several clients (Takeda/M8/Rowe), so it can't map to one.
 }
