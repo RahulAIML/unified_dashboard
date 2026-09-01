@@ -1,0 +1,17 @@
+{
+  "r_client": [
+    { "id": 29, "name": "Siigo", "created_on": "2026-07-10", "sessions": 124, "users": 42 },
+    { "id": 13, "name": "Takeda", "created_on": "2024-05-01", "sessions": 312, "users": 105 },
+    { "id": 9999, "name": "TestCorp", "created_on": "2026-08-20", "sessions": 5, "users": 3 }
+  ],
+  "r_user": [
+    { "id": 1001, "email": "alice@testcorp.com", "client_id": 9999 },
+    { "id": 1002, "email": "bob@testcorp.com", "client_id": 9999 },
+    { "id": 1, "email": "demo@siigo.com", "client_id": 29 }
+  ],
+  "r_user_session": [
+    { "id": 5001, "user_id": 1001, "client_id": 9999, "raw_closing_data": null, "closing_analysis": "<div class=\"rp-sim-report-score-number\">85</div>", "created_on": "2026-08-21 10:00:00" },
+    { "id": 5002, "user_id": 1002, "client_id": 9999, "raw_closing_data": "{\"overall_score\": 72}", "closing_analysis": null, "created_on": "2026-08-22 12:00:00" },
+    { "id": 5010, "user_id": 1, "client_id": 29, "raw_closing_data": "{\"overall_score\": 90}", "closing_analysis": null, "created_on": "2026-08-23 09:00:00" }
+  ]
+}

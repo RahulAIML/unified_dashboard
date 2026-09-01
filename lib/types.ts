@@ -418,6 +418,7 @@ export interface LmsApiResponse {
   modulesCompleted: number
   inProgress:       number
   notStarted:       number
+  notEnrolled?:     number
   /** Percent 0-100, against the FULL roster (totalUsers * totalCourses),
    *  not against however many enrollments happened to exist -- every user
    *  is expected to take every course. Null when there's nothing to divide by. */

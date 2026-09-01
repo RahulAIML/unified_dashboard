@@ -94,12 +94,19 @@ function CompletionBar({ value }: { value: number }) {
   )
 }
 
+// Use the shared status breakdown component; individual breakdown implementation
+// lives in `components/LmsStatusBreakdown.tsx` to avoid duplicating logic here.
 export default function LmsPage() {
-  const { dateRange, refreshKey } = useDashboardStore()
+  const { refreshKey } = useDashboardStore()
   const t     = useT()
   const brand = useClientBrand()
+  // Force the completion-trend API call to a rolling 30-day window
+  const now = new Date()
+  const toDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  const fromDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  fromDate.setUTCDate(fromDate.getUTCDate() - 29)
 
-  const lmsUrl = buildApiUrl("/api/dashboard/lms", dateRange.from, dateRange.to, { rk: refreshKey })
+  const lmsUrl = buildApiUrl("/api/dashboard/lms", fromDate, toDate, { rk: refreshKey })
   const { data, loading, error } = useApi<LmsApiResponse>(lmsUrl)
 
   const configured = data?.configured ?? true
@@ -108,7 +115,7 @@ export default function LmsPage() {
   const kpis = useMemo<KpiCard[]>(() => {
     if (!data || !data.configured) return []
     return [
-      {
+        {
         label: "Enrolled Users", labelKey: "enrolledUsers",
         value: data.enrolledUsers,
         delta: 0, noComparison: true, tier: "A",
@@ -120,6 +127,7 @@ export default function LmsPage() {
         value: data.completionRate ?? "—",
         unit: data.completionRate != null ? "%" : undefined,
         delta: 0, noComparison: true, tier: "B",
+        // description updated in translations
         info: t.completionRateInfo,
       },
       {
@@ -144,6 +152,7 @@ export default function LmsPage() {
       render: r => <span className="font-medium text-sm">{r.name}</span>,
     },
     {
+<<<<<<< HEAD
       // The roster size (same number as the "of N users" sub-label above the
       // table) -- shown right after the course name, before Enrolled, so the
       // completion rate further right is legible as "completed out of this
@@ -153,6 +162,14 @@ export default function LmsPage() {
     },
     {
       key: "enrolled", header: t.lmsColEnrolled,
+=======
+      // New Users column: total unique LMS users
+      key: "users", header: t.lmsColUsers,
+      render: r => <span className="tabular-nums font-medium">{r.totalUsers}</span>,
+    },
+    {
+      key: "enrolled", header: t.lmsColRegistered,
+>>>>>>> 38d6a96 (LMS: KPI calculation fixes, labels, 30-day trend, course table updates)
       render: r => <span className="tabular-nums font-medium">{r.enrolled}</span>,
     },
     {
@@ -181,22 +198,19 @@ export default function LmsPage() {
         )}>
           {r.avgScore}%
         </span>
-      ) : (
-        <span className="text-xs text-muted-foreground italic">{t.lmsNotGraded}</span>
-      ),
-    },
-  ], [t])
-
-  return (
-    <div className="min-h-screen w-full">
-      <DashboardHeader title={t.lmsTitle} subtitle={t.lmsSub} />
-      <div className="w-full max-w-[1400px] mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
-
-        {error && <ErrorBanner message={`${t.errorLoading}: ${error}`} />}
-
-        {!loading && !error && !configured ? (
-          <NotConfigured />
-        ) : (
+      {
+        key: "name", header: t.lmsColCourse,
+        render: r => <span className="font-medium text-sm">{r.name}</span>,
+      },
+      {
+        // New Users column: total unique LMS users
+        key: "users", header: t.lmsColUsers,
+        render: r => <span className="tabular-nums font-medium">{r.totalUsers}</span>,
+      },
+      {
+        key: "enrolled", header: t.lmsColRegistered,
+        render: r => <span className="tabular-nums font-medium">{r.enrolled}</span>,
+      },
           <>
             {/* KPI cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -243,12 +257,16 @@ export default function LmsPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
               <ChartCard
                 title={t.lmsCompletionTrend}
+<<<<<<< HEAD
                 // This chart is a fixed, always-current 30-day window
                 // (lib/lms-learnworlds.ts's lmsDashboard), independent of the
                 // global date-range picker -- so the subtitle is a static
                 // label, not built from `days`, which would otherwise show
                 // whatever range happens to be selected elsewhere on the page.
                 subtitle={t.lmsCompletionTrendSub}
+=======
+                subtitle={t.last30Days}
+>>>>>>> 38d6a96 (LMS: KPI calculation fixes, labels, 30-day trend, course table updates)
               >
                 {loading
                   ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
@@ -289,7 +307,8 @@ export default function LmsPage() {
                   columns={[
                     { header: "Course",           value: r => r.name },
                     { header: "Course ID",        value: r => r.courseId },
-                    { header: "Enrolled",         value: r => r.enrolled },
+                    { header: "Users",            value: r => r.totalUsers },
+                    { header: "Registered",       value: r => r.enrolled },
                     { header: "Completed",        value: r => r.completed },
                     { header: "In Progress",      value: r => r.inProgress },
                     { header: "Total Users",      value: r => r.totalUsers },

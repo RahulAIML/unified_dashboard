@@ -1,0 +1,1450 @@
+Sprint Buddhadeb - August 20
+
+
+VIEW RECORDING - 61 mins (No highlights)
+
+
+@0:12 - Diego Mérigo (Rolplay)
+
+John Doe.
+
+
+@0:13 - Raul Jasso
+
+Sure.
+
+
+@0:17 - Diego Mérigo (Rolplay)
+
+I'm taking a break. Hi, Buddhadeb.
+
+
+@0:25 - Buddhadeb Bhattacharya
+
+Uh, hi, Diego.
+
+
+@0:30 - Diego Mérigo (Rolplay)
+
+How are you? How have you been?
+
+
+@0:33 - Buddhadeb Bhattacharya
+
+I'm good, how are you? Hey, just give me the notification, man.
+
+
+@0:40 - Diego Mérigo (Rolplay)
+
+Sorry?
+
+
+@0:43 - Buddhadeb Bhattacharya
+
+Google, just give me the notification after 15 minutes of the time.
+
+
+@0:48 - Diego Mérigo (Rolplay)
+
+Okay.
+
+
+@0:50 - Buddhadeb Bhattacharya
+
+The meeting notification.
+
+
+@0:51 - Raul Jasso
+
+Yeah, no, we just got in, like, one minute ago. We were in a meeting with Mario.
+
+
+@0:57 - Diego Mérigo (Rolplay)
+
+Yeah. Okay, so, we have, like, some things to discuss. We have to, um, we take, like, the, the, sorry. Yeah, we need to, to start talking about the next steps regarding the dashboard. I have already, or we have already, showed it to Mario. He liked it a lot.
+
+The self-service dashboard. But still, eh, We need to refine some things. We need to, to close the part of the KPIs and also the part of the publication. I, well, I, I hope that right now all tickets are closed in Play, or, or how's your, how's your progress? Let's begin with the, with the easiest part, that is the, how, how do you do a publication of the self-service dashboard, because Mario asked me, and I didn't know how to tell him.
+
+Can you show us?
+
+
+@2:03 - Raul Jasso
+
+Yeah, no, I, I think the, the problem was not the publishing, but the, the finding the link, no?
+
+
+@2:11 - Diego Mérigo (Rolplay)
+
+Yeah, exactly. So, where is it? You, you published, okay, now where can I see?
+
+
+@2:16 - Raul Jasso
+
+It was like, now it's, now it's published, and Mario was like, okay, now take me through it, and we were like, uh.
+
+
+@2:24 - Buddhadeb Bhattacharya
+
+No, actually, I think, uh, Diego is an admin there. So, you can just log in with your credentials and you can just build it.
+
+
+@2:35 - Diego Mérigo (Rolplay)
+
+Yeah. Yeah, I did that, but at the end you have the button of publish.
+
+
+@2:40 - Raul Jasso
+
+The problem was actually finding the, the dashboard that we had just generated.
+
+
+@2:47 - Diego Mérigo (Rolplay)
+
+Yeah.
+
+
+@2:48 - Buddhadeb Bhattacharya
+
+Okay. I think this one is like an admin account. And here, I think Diego, you are very bad at impressing in this area.
+
+
+@3:07 - Diego Mérigo (Rolplay)
+
+I think that's probably with Render because Fathom also will not platform. Don't know why it happens.
+
+
+@3:16 - Buddhadeb Bhattacharya
+
+Sometimes it happens with Render, but after refreshing it works. So, we have this, like, you, you're this account, the Diego tester at that packet. This one is as, you know, you have an admin account.
+
+So, yeah, this kind of thing you were talking about, the new or something.
+
+
+@3:39 - Diego Mérigo (Rolplay)
+
+Yeah.
+
+
+@3:40 - Buddhadeb Bhattacharya
+
+But, I, like, you have given, like, I think seven days window is there. If it just, you are building for seven days, may I ask, like, what, should be the window, the size, that, if it is in that particular range, we will be, just treating it as, uh, new.
+
+
+@4:00 - Diego Mérigo (Rolplay)
+
+Didn't got, didn't got that. Can you repeat it?
+
+
+@4:03 - Buddhadeb Bhattacharya
+
+Yeah, sure. Like here the, this Mastercard was actually created three days ago.
+
+
+@4:10 - Diego Mérigo (Rolplay)
+
+Okay.
+
+
+@4:10 - Buddhadeb Bhattacharya
+
+That's why it has the, uh, link as like new.
+
+
+@4:14 - Diego Mérigo (Rolplay)
+
+Okay.
+
+
+@4:15 - Buddhadeb Bhattacharya
+
+But what should the, you know, what should the window size, that how many days I should put there? And if it is in between that day, I will take that as new.
+
+
+@4:23 - Diego Mérigo (Rolplay)
+
+Got it. Can it be that when you hover over the, the, the title, the, the label disappears of new? Like when you click on, on a new mail, maybe? Or when you click it, click on it, then it will be removed from the window? Was that your question?
+
+
+@4:44 - Buddhadeb Bhattacharya
+
+No, no, no. I'm saying, like, these, uh, these accounts, like the Mastercard one, I just noticed that this one is still built, created, uh, in the platform.
+
+
+@4:56 - Diego Mérigo (Rolplay)
+
+Yeah.
+
+
+@4:57 - Buddhadeb Bhattacharya
+
+Three days ago. That's why it has the mention here new.
+
+
+@5:00 - Diego Mérigo (Rolplay)
+
+Yeah.
+
+
+@5:02 - Buddhadeb Bhattacharya
+
+Yeah. So, like, if one user is there, whose dashboard is not built yet, but the user is there for 10 days, should I also claim that user as new, or it will be a regular user?
+
+It's like, how many days I should consider for a client new?
+
+
+@5:23 - Diego Mérigo (Rolplay)
+
+Yeah. Let me, let me see if I understood the question. So, you are asking me if, if the dashboard has new users also, if we put the label or we don't?
+
+
+@5:37 - Buddhadeb Bhattacharya
+
+Yeah, like, here, like, these users are there for a long time. That's why they don't have the new tag, you know? They're not in the dashboard, but in the main platform, in the Rolplay app, they are there for a long time.
+
+That's right. But these were added very, you know, a few days before. Only two days, three days or something. That's why they have the tag. Like, how many days I should consider or how I should consider to tag them as new?
+
+
+@6:05 - Diego Mérigo (Rolplay)
+
+I think as soon as you, yeah, yeah, yeah. I think as soon as you, uh, create the database.
+
+
+@6:17 - Buddhadeb Bhattacharya
+
+Yeah.
+
+
+@6:18 - Diego Mérigo (Rolplay)
+
+That would be like the, the, the point where you catalog that as new. It doesn't matter how many users you have or you have or you create. But, like, I think, like, like, it's now, it's, it's okay.
+
+
+@6:34 - Buddhadeb Bhattacharya
+
+Okay. This one is a new user. You are asking, like, how to build it. Just click on this user. Yeah, we can do it.
+
+If you know. It's like, if you know that their domain, I don't know probably. Also, their exercise IDs, that is also unknown. So, you can just keep them, you know, empty. So, it will be automatically, like, if you just generate the dashboard.
+
+
+@7:02 - Diego Mérigo (Rolplay)
+
+Okay.
+
+
+@7:05 - Buddhadeb Bhattacharya
+
+And these are the users. They have 24 sessions. One user is there, and these are the credentials. If you want to preview what things are actually appeared, this is like, only they have the linear respiratory sounds, you know, medical, but then you have the ranking, and you have one user.
+
+And they have some activities. These are the activities they have done, total sessions for punctuation and all. After that, these are the physical KPIs for them right now.
+
+It is just swing. It will only probably rather than keeping them, just removing them, keep them, but keep them as blank. Probably that was mentioned in a KPI, if I may take it. And after that, have the reporters. Their activities, their, when they have done these activities and all, you can just export them as report. And if you just publish the dashboard,
+
+It may take 30 seconds. That's the maximum time.
+
+
+@8:10 - Diego Mérigo (Rolplay)
+
+Okay.
+
+
+@8:11 - Buddhadeb Bhattacharya
+
+And you can just get a basic preview here. If you want to see.
+
+
+@8:17 - Diego Mérigo (Rolplay)
+
+I think that.
+
+
+@8:19 - Buddhadeb Bhattacharya
+
+For the admin view, it's not going to read, right?
+
+
+@8:22 - Diego Mérigo (Rolplay)
+
+That was our problem. Like, actually finding this right now. That is preview, right?
+
+
+@8:29 - Buddhadeb Bhattacharya
+
+Yeah, that's the preview. Once it will be deployed, you can just log out and log in as their user. I think I don't have any user right now.
+
+
+@8:43 - Diego Mérigo (Rolplay)
+
+But then, what do you do?
+
+
+@8:46 - Buddhadeb Bhattacharya
+
+Yeah. We'll just create one user.
+
+
+@8:50 - Diego Mérigo (Rolplay)
+
+So we have to find, uh, their user, no?
+
+
+@8:54 - Buddhadeb Bhattacharya
+
+Yes. We have to enter with their domain. Otherwise, it will, uh, reject it.
+
+
+@9:01 - Diego Mérigo (Rolplay)
+
+Okay. So, if we were making the one of Mastercard, I create a user called admin, uh, at, uh, mastercard.com, and then I will see the dashboard.
+
+
+@9:23 - Buddhadeb Bhattacharya
+
+Oh. This is not a user.
+
+
+@9:28 - Diego Mérigo (Rolplay)
+
+Yeah, so. Yeah, so this is the problem. We actually don't have the self-service dashboard because we can't really create it. We never got to this part.
+
+
+@9:42 - Buddhadeb Bhattacharya
+
+So I tested with other clients, the EMA, the CEO, other things. Those were fine.
+
+
+@9:50 - Diego Mérigo (Rolplay)
+
+Do you want to test with Mastercard? To see if you can get another result?
+
+
+@10:01 - Buddhadeb Bhattacharya
+
+These domains should be there. I tested, uh, you know, with two, three clients. That was working, but.
+
+
+@10:09 - Diego Mérigo (Rolplay)
+
+Also, I think that, I don't know if this can be done, but the, the dashboard builder should be able to tell you, okay, here is your dashboard. Here are your credentials so you can enter and see it.
+
+And automatically creates as part of the process, the credentials of the admin that can see the new dashboard.
+
+
+@10:32 - Buddhadeb Bhattacharya
+
+They don't have any users, I know, sessions?
+
+
+@10:37 - Diego Mérigo (Rolplay)
+
+I don't know.
+
+
+@10:40 - Buddhadeb Bhattacharya
+
+Let's say EMT. You can just test with any others. I think Mastercard, let me just open it. Oh, no activity yet. They don't have any activity right now.
+
+
+@10:54 - Diego Mérigo (Rolplay)
+
+With Chinoyin? If you try with Chinoyin? Oh, that one was, was, no, it wasn't working.
+
+
+@11:03 - Buddhadeb Bhattacharya
+
+It should work, because I'm, these things are actually done, these are working, like this one, I did earlier. Like, you just, you sent me a screenshot earlier of this platform, and this one is quite easily working.
+
+
+@11:25 - Diego Mérigo (Rolplay)
+
+Which one is?
+
+
+@11:27 - Buddhadeb Bhattacharya
+
+This is the EMA one, the one you sent me the screenshot earlier, that you cannot locate where it is. I tested after that and it was fine.
+
+And here you have option that previous client.
+
+
+@11:52 - Diego Mérigo (Rolplay)
+
+Yeah, no, I think the problem was that we, um, didn't know that we had to, like, copy one of the users, like, find the users and then log in with them.
+
+So we were having trouble coming back to it after publishing it.
+
+
+@12:11 - Buddhadeb Bhattacharya
+
+Exactly. Like, we have to, we have to just get one real user that is actually in the database. That's for the security purpose that somebody else can just know this domain name and just put their name, ABCR, that is this domain, and they will get the access, but we don't want to give that access to them.
+
+After publishing, it should be there. Then we'll go back and create one account on their name.
+
+
+@12:51 - Diego Mérigo (Rolplay)
+
+But in the middle of the sentence, it just says Accelerate Life Sciences. How do you knew that you had to put that?
+
+
+@13:02 - Buddhadeb Bhattacharya
+
+Uh, he, his domain is important.
+
+
+@13:09 - Diego Mérigo (Rolplay)
+
+In, before, when he created Diego, you have, like, one of the parts of the dashboard has the list of the users. So you have to go there and copy the URL.
+
+Hmm. Maybe there's, I think there, there might be, um, is it possible that after we publish it, uh, with the dev, that the URL or, like, the domain that we need to use appears by the, like,
+
+by the publish button so that we don't have to remember to go and find it and then.
+
+
+@13:56 - Buddhadeb Bhattacharya
+
+Yeah. Yeah, we can, like, I.
+
+
+@14:01 - Diego Mérigo (Rolplay)
+
+Just so that when we're doing it, it doesn't happen like it did before that we had some trouble showing Mario the functionalities.
+
+
+@14:13 - Buddhadeb Bhattacharya
+
+Okay. Got it. You know. I also told this thing probably with Diego, like, we had a conversation that if this thing is needed, we can add it. Like, how to taste it after publishing, like, what domains are needed, like, what domain is needed, and I can just take the credential from there and just log in with this credential and it will reflect the dashboard. Actually, this one is also built in the same way and it is appearing. Probably, I don't know how it is happening with the Chino one. I'll have a look.
+
+
+@14:44 - Diego Mérigo (Rolplay)
+
+Yeah, we need to check.
+
+
+@14:46 - Buddhadeb Bhattacharya
+
+This one is.
+
+
+@14:48 - Diego Mérigo (Rolplay)
+
+The Chino one will be, at this time, it's like the most near, uh, real use case that we are going to, to do for the self-service dashboard. So we need to check how can we make it work.
+
+
+@15:03 - Buddhadeb Bhattacharya
+
+Yes, we would like, I will definitely, uh, fix that.
+
+
+@15:08 - Diego Mérigo (Rolplay)
+
+Thanks.
+
+
+@15:10 - Buddhadeb Bhattacharya
+
+You can see it.
+
+
+@15:11 - Diego Mérigo (Rolplay)
+
+Yeah, just, just to, to wrap up that part, so we can have, like, as part of the process of the dashboard, dashboard builder at the end, like, uh, the dashboard builder can, can tell you, uh, which domains to use so you can enter to the new dashboard or how it's going to be that at the end.
+
+
+@15:35 - Buddhadeb Bhattacharya
+
+Okay. Okay. This one is one thing, and I think you told me to add something in the below, this one, right? I have not checked, I'm not pretty sure how it is working in the scanning domain.
+
+
+@15:55 - Diego Mérigo (Rolplay)
+
+Let's check the tickets.
+
+
+@15:58 - Buddhadeb Bhattacharya
+
+Okay. Yes.
+
+
+@16:01 - Diego Mérigo (Rolplay)
+
+Let me go back now and I'll tell you which ones we are doing. So.
+
+
+@16:11 - Buddhadeb Bhattacharya
+
+Give me one second. Why does the render just stop after a few minutes? No, no, you can just check out the tickets. Just give me one second here.
+
+
+@16:38 - Diego Mérigo (Rolplay)
+
+Yeah.
+
+
+@16:39 - Buddhadeb Bhattacharya
+
+Yeah, it's fine.
+
+
+@16:42 - Diego Mérigo (Rolplay)
+
+Five tickets only. Okay, yeah. So, let's start with the first one. That it's apply closing criteria. That it's password, confidential label, GitHub repo. So, we have password, we have label.
+
+The repo is also in the, in the.
+
+
+@17:01 - Buddhadeb Bhattacharya
+
+GitHub, yeah.
+
+
+@17:03 - Diego Mérigo (Rolplay)
+
+Yeah, yeah, I have already. So, that is done. Now, let's go to the other one. The KPI first pass. I think that's on, I don't, yeah, that's on.
+
+That, that is the one that you had in the left panel that said KPIs, right?
+
+
+@17:39 - Buddhadeb Bhattacharya
+
+Yes.
+
+
+@17:41 - Diego Mérigo (Rolplay)
+
+I think it's in another domain. Maybe with the.
+
+
+@17:50 - Buddhadeb Bhattacharya
+
+My system lagging.
+
+
+@17:52 - Diego Mérigo (Rolplay)
+
+Yeah. Yeah, I still see the dashboard generator.
+
+
+@18:01 - Buddhadeb Bhattacharya
+
+Oh, it's just, just lagged on there. Should we go with a real user so that you can check that little bit?
+
+So, go with a real user so that you can check that your data.
+
+
+@18:19 - Diego Mérigo (Rolplay)
+
+Yeah.
+
+
+@18:22 - Buddhadeb Bhattacharya
+
+Just go with any real user that has good data so that you can evaluate.
+
+
+@18:27 - Diego Mérigo (Rolplay)
+
+Okay.
+
+
+@18:29 - Buddhadeb Bhattacharya
+
+This, just say, like, Henneken is there and. You know, the system is on for since the evening. That's why you're going.
+
+You can remove the main interest. Another Sanford, Henneken, Packard, or something. Packard has very limited data to paste. Go with this one. I think that would be good.
+
+
+@19:03 - Diego Mérigo (Rolplay)
+
+Okay.
+
+
+@19:19 - Buddhadeb Bhattacharya
+
+Please go ahead.
+
+
+@19:24 - Diego Mérigo (Rolplay)
+
+Okay, but do you remember the KPIs that we have? Like, one of the ones that Raul sent to you?
+
+
+@19:39 - Buddhadeb Bhattacharya
+
+It's Raul's, it was Trakya Wood and Demod Aswood. I think his Demod Aswood has, like, if I just log in with this one. These numbers are quite, you know, randomly generated. That's why it's showing, I think it was Trakya Wood, that activities are, or some wood. It was something crossing one level to other, but that should not be. These numbers are not something real. Anything is just created by the random method. You know, one random is there in the Python, it's just generating everything randomly.
+
+Nothing is true.
+
+
+@20:16 - Diego Mérigo (Rolplay)
+
+Yeah, we know that nothing is true, but, uh, well, that's another topic, but yeah, now that you bring that up, uh, what we want is to understand how the KPIs are composed. If you go to LMS, if you can help me get in there, we knew how the completion rate was made because we saw the label that says, below, out of 102 users, it took 115 registrations.
+
+So, we did the math and understood how did you make that KPI of completion rate. That, uh, that we have a remark about that particular KPI, but right now what we want or we need from you is to have like a relationship of how all the other KPIs are composed. Because we guessed about LMS and we calculated the numbers and everything and we knew how they were composed. But then if you go to Master Coach.
+
+
+@21:29 - Buddhadeb Bhattacharya
+
+Actually, every KPI definition I have added. If you want to just check it out.
+
+
+@21:34 - Diego Mérigo (Rolplay)
+
+Yeah. Yeah, yeah, that is good. That, that, that label is good. I like it. But then, I don't know if you can tell me, Raul, what is, what is, what we need exactly?
+
+What we need is to understand, uh, how each of the KPIs is. It's created and added. Like, I don't know. For example, go to simulator, maybe.
+
+Which one was the one that we could. Activities. Hmm. The one below.
+
+
+@22:25 - Buddhadeb Bhattacharya
+
+Yeah. Earlier, you don't have the KPIs.
+
+
+@22:28 - Diego Mérigo (Rolplay)
+
+Oh, yeah, there. Here, we, we are in all, no? And we have discovery called domain, 53,000, objection handling, excellence, negotiation, in-depth, no? And now, let's go to LMS.
+
+
+@22:45 - Buddhadeb Bhattacharya
+
+Which one is directly coming from data?
+
+
+@22:48 - Diego Mérigo (Rolplay)
+
+Inside activities.
+
+
+@22:53 - Buddhadeb Bhattacharya
+
+Which one?
+
+
+@22:54 - Diego Mérigo (Rolplay)
+
+Like, inside activities.
+
+
+@22:56 - Buddhadeb Bhattacharya
+
+Yes.
+
+
+@22:58 - Diego Mérigo (Rolplay)
+
+Filter LMS. And we only have dominio llamadas. Discovery called domain. And then go to master coach. Objection handling. Now the simulator.
+
+Oh. Did you, you, you did change this?
+
+
+@23:25 - Buddhadeb Bhattacharya
+
+No. Oh, yeah. After you told me, I just, uh, made some changes there.
+
+
+@23:32 - Diego Mérigo (Rolplay)
+
+Yeah, because, like, the problems that we had, like, anyone that we were, we were filtering all of them, and all of them said the same thing, and then we went to all, and many appeared, and it was like, where the hell are they coming from?
+
+
+@23:44 - Buddhadeb Bhattacharya
+
+Yeah. After you told me, I just, I made some changes.
+
+
+@23:48 - Diego Mérigo (Rolplay)
+
+Okay.
+
+
+@23:49 - Buddhadeb Bhattacharya
+
+And in the real business. And in the real process.
+
+
+@23:52 - Diego Mérigo (Rolplay)
+
+Okay.
+
+
+@23:55 - Buddhadeb Bhattacharya
+
+Also, regarding these KPIs, actually, uh, these KPIs are not directly created. These formulas were given by César. And I am just using these direct formulas. Whatever is feasible, he, yeah, sorry.
+
+
+@24:13 - Diego Mérigo (Rolplay)
+
+Yeah, yeah, that's fine. That's fine.
+
+
+@24:16 - Buddhadeb Bhattacharya
+
+Like, all of the formulas are not consumable.
+
+
+@24:21 - Diego Mérigo (Rolplay)
+
+Is it possible that we create some data that is not as random as the one that we have right now and maybe not as robust? Like, instead of having like 250,000 interactions or 190,000 or whatnot, to have like a hundred or a thousand, but that actually makes sense.
+
+Like, mirrors the data that would come out of the Master Coach, the simulator, and all of those, so that we can understand, like, what we're trying to do is understand how the data is flowing. Like, for example, a single interaction in the Master Coach or in the simulator, what kind of data it generates, and then how it flows into this dashboard.
+
+So, we can understand which are the, maybe not the KPIs that César gave us, but we want to understand what are, what is the data that we have available and how is it available and that so that we can define which of the numbers tell the story better. Like, for example, go to the LMS.
+
+The LMS, uh, we already understood it. And, like, for example, no, we have 102 total users. You can see it, uh, below the 94.
+
+Like, below? Okay. So, and, and now we go to the, and the completion rate and stuff. Like, go, uh, further down, please, to the table. Okay.
+
+So, that table, um, for example, what we could think about improving it is you have all these columns, but there would, there would need to be an extra column that would say total and that in that column it would have 102 in all of them.
+
+Why? Why? Because there's 102 people in total and each one of them has to take five courses, right? Because there's 102 people in total and each one of them has to take five courses, right? So, 100 times 5 is 510.
+
+So, 100 times 5 is 510. So, the completion rates should be considered not, uh, compared to the enrolled, but to the total. You see what I mean?
+
+
+@27:00 - Buddhadeb Bhattacharya
+
+Yes, I can understand.
+
+
+@27:03 - Diego Mérigo (Rolplay)
+
+So, that's, uh, because right now it seems like, um, if I were reading it, if you go further, uh, to, to the top, please, there in LMS.
+
+If I am, for example, a manager, and I am reading this, and I say, hey, my completion rate is 49.8, so one out of two is done. But that is not, not real, you know? That completion rate is compared to the people that have already enrolled, and half of the people that have enrolled have finished it, but not at all, like, many of them haven't even enrolled.
+
+So that completion rate should be maybe, like, for example, the completion rate is the 107, right? Yes. So it would have to be, uh, 107 divided by 510.
+
+Which is, like, the total courses that need to be taken. Because it's 102 users, five courses each. So, it would be, like, 20%. Yes?
+
+
+@28:18 - Buddhadeb Bhattacharya
+
+Okay. Yeah. So that they can get the real insight, like, rather than just assuming something.
+
+
+@28:24 - Diego Mérigo (Rolplay)
+
+Exactly. So, so that is the kind of analysis that we would like to do to all the modules. But for that to happen, uh, the data has to, you know, make some sense. And it, it doesn't have to be, like, completely made up and random because then we cannot, uh, try to follow what someone would think of looking at this. You know what I mean?
+
+
+@28:53 - Buddhadeb Bhattacharya
+
+Yes.
+
+
+@28:55 - Diego Mérigo (Rolplay)
+
+So, that, that's pretty much our concern here. Like, optimizing the KPIs is not, like, trying to impose KPIs. impose KPIs, uh, or make up some. We have to know which is the, what data we have available and how the data flows from the master coach to the, to the SQL tables or whatnot. And then, like, what would be very beneficial for us right now is, for example, if you added, um, a report in each one of the modules that exports a CSV with all the data.
+
+That, maybe we, we, we can remove it afterwards. But for now, if we can export all the data that is available in that module, like, I, I think with this one, it actually works. That's, that's how we got to this. Like, we exported this and then we saw that we were missing a column. But,
+
+For example, for the master coach, the simulator, uh, and all of the ones that, uh, come directly from an app and an interaction, if we're available to see what is all the, all the data that, that is generated in a CSV, then from that, we can make sense of how the data is flowing, and then we can give you some recommendations on how to improve the, the, the KPIs.
+
+Yeah. Like, well, how to define them, no? And, and, how to better tell the story and so that someone that is reading the dashboard can actually, uh, you know, so that it works for them.
+
+Do you think you can help us with that?
+
+
+@30:45 - Buddhadeb Bhattacharya
+
+Yeah, I can.
+
+
+@30:47 - Diego Mérigo (Rolplay)
+
+Or, or, or, or if you can tell us, I don't know if we have this already somewhere, but I think that this suggestion of Raul is very valuable because, yeah, if we can have, like, the option to export all the information per section, then you don't need to create, like, a document or anything. You just need to put that integration. I will get the data, the data, sorry. So, that's what you need, right, Raul?
+
+Yeah, yeah. Like, uh, in each one of them, like, the most, I understand that maybe later, after it's, uh, finished, we can remove those reports that can export all the data because maybe we don't want, uh, the user to take all the data possible.
+
+But for now, because we are trying to test it and understand what is it, what's the data available and how does it look and what's the relationship in between them.
+
+I think it would be very helpful.
+
+
+@31:53 - Buddhadeb Bhattacharya
+
+Yeah, certainly. Yeah, but, uh, The way you are, you want to the data, that is not possible. Right now, it's not there. But, yeah, like, the one they told me that you don't want to expose the data to the client or the user, but they will eventually get the data. This one is not, uh, the real, that's why it's not working. But if you just text, just tweet something new, so you actually, like, real client, it will just give you the full export. But, yeah, the render is making too much of noise.
+
+
+@32:24 - Diego Mérigo (Rolplay)
+
+Yeah.
+
+
+@32:24 - Buddhadeb Bhattacharya
+
+But, but,
+
+
+@32:26 - Diego Mérigo (Rolplay)
+
+Okay. The problem with a real client is that we don't get like all these models and at the end, uh, I'm just, I'm just trying so we can think about it, but at the end, what we want to do with the KPIs is give them an order and to say, okay, we have all these KPIs, we maintain these ones, we remove this one, we change these ones, et cetera. And we get that from having all of them and then selecting the ones that we need.
+
+But if we do it over a dashboard that has real data, that dashboard may not have these, may not have the LMS or may not have the simulator or may not have the, you know.
+
+So that, that is why we are doing it over the demo dashboard instead of a dashboard with real data.
+
+And it will also be very helpful if we cap it to, like, for example, to very round and easy numbers to understand, you know, like instead of the 192,000 interactions, maybe have a hundred.
+
+
+@33:30 - Buddhadeb Bhattacharya
+
+Yeah.
+
+
+@33:31 - Diego Mérigo (Rolplay)
+
+Because with a hundred, our brain, you know, works with the decimal system. So if we have a hundred and then we have the percentages and stuff, we can say, ah, okay, so this, all this adds to a hundred, and then this is the score, and this is what, this is that, and this is that. And then we can do it easier. I don't know if you, if you agree. Or if you have any recommendations on how to analyze it or export it.
+
+Yeah, you can also take that approach.
+
+
+@34:04 - Buddhadeb Bhattacharya
+
+Yeah, that's good, actually. Here, you just want to evaluate. You don't want the real odd kinds of data that will be hard to evaluate here. So, we can just keep something that will be the whole numbers and easy to understand the interactions between the data.
+
+
+@34:20 - Diego Mérigo (Rolplay)
+
+Exactly.
+
+
+@34:22 - Buddhadeb Bhattacharya
+
+I hope it is real.
+
+
+@34:23 - Diego Mérigo (Rolplay)
+
+Unless it has, like, uh, it's similar to the data that would come from using the app, you know? Like, the same formula. Yeah, like the, yeah, the, the, the same fields, if you may. Like, you know.
+
+
+@34:43 - Buddhadeb Bhattacharya
+
+It resembles the real data.
+
+
+@34:45 - Diego Mérigo (Rolplay)
+
+Maybe the, uh, a session with the master coach, uh, populates the SQL with some fields, you know? Uh, and what we would like is, like, for those fields, that all of the fields that come out of an interaction for the master coach to be in a CSV.
+
+And with the most data possible. Like, by interaction. And so then we can understand then how to make the KPIs. And then afterwards we can remove it and maybe just the report, make it, uh, an executive report and not just like throw all the data at them.
+
+
+@35:27 - Buddhadeb Bhattacharya
+
+Okay. Um, it, it will resemble the real data, like the data we have for the real client. Same kind of interaction fields and, uh, activities, everything will be there. So that, like, whatever the changes you will make here, it should be real on the, like, we're not going to make the changes on the real client right now. I think that's why it will need, like, we'll be doing everything in the testing on the demo platform. After it will be fully functional or it will be completed, then we'll just, uh, make the migration of the same thing on the real users later.
+
+
+@36:07 - Diego Mérigo (Rolplay)
+
+Okay.
+
+
+@36:09 - Buddhadeb Bhattacharya
+
+Okay.
+
+
+@36:15 - Diego Mérigo (Rolplay)
+
+One moment, I, I, I'll go back. Two minutes.
+
+
+@36:41 - Buddhadeb Bhattacharya
+
+Actually, I think that for the synonal, synonal or synonal, whatever, that this audio.com or .mx, these email IDs, they are for other users as well. Like, if I just open it one more time.
+
+
+@36:57 - Diego Mérigo (Rolplay)
+
+Okay. So, just to conclude the part of the KPIs, because it's very important for us.
+
+
+@37:04 - Buddhadeb Bhattacharya
+
+Yeah, go ahead.
+
+
+@37:07 - Diego Mérigo (Rolplay)
+
+Can you confirm if you understand what we need?
+
+
+@37:13 - Buddhadeb Bhattacharya
+
+Yes, like, um, that we'll be understanding the interactions within the data from the, you know, um, that's why we'll be creating every reports, we'll be, you know, exporting every reports based on the models and understand, like, how the data and the activities, other things are interacting with each other. So, uh, like, uh, nothing will be, like, uh, they should not misinterpret something, like, whatever they will interpret, interpret with the data, that should be real. And they can get the real insight from there. Like, right now, what is actually happening?
+
+Maybe, uh, something here, if I just, just, I will tell you that it is approval rate is seventy, thirty-seven percent. But is it the, is it on the whole number or is it on the numbers the users has enrolled? That thing is not pretty clear.
+
+And the name is me, means as in something else.
+
+
+@38:09 - Diego Mérigo (Rolplay)
+
+Yep. Like, what, what, what we need is to, for us to absolutely understand each number so that when we are, uh, handing it off to a client, we are there, like, we can explain absolutely everything and we can make sure that it makes sense and it's the best way to display it.
+
+Yeah. Yeah, as you say, to be able to interpret the data. So, I think you, you got the, the idea. Now, when do you think we can have this, so we can start working around it?
+
+
+@38:46 - Buddhadeb Bhattacharya
+
+By, by tomorrow night time, I will, I hope I will be able to provide you the CSV. I will work in the morning to move it.
+
+
+@38:55 - Diego Mérigo (Rolplay)
+
+Okay, thanks. Thanks. Yeah, that will help us a lot. You can send it, uh, well, you can update us. As soon as you have it, because we're just waiting for that to start working, uh, our side or our part of the, of the KPI optimization part.
+
+Now, uh, yeah, cause actually, like, uh, when we showed this to Mario, uh, he was really happy about it. Um, he really liked how it, how it worked, how easy it was to create it. So, good job with that. We're just, like, in the final stretch, so that we can actually make it something that will be working perfectly in production, you know?
+
+
+@39:42 - Buddhadeb Bhattacharya
+
+Yeah. I will, I will do a final sweep here as well. Like, I have to organize a little, because if I just give that report to someone, they will not probably gonna understand in that way, that, you know, it's quite mixed up. Like, after making so, so much of changes, these things just become messy. I will do a final sweep, one proper regression test, this means, you know, end-to-end proper testing. Then we can just deliver to the production. I think that's, that would be the better thing.
+
+
+@40:11 - Diego Mérigo (Rolplay)
+
+Great. Thanks. Now, uh, I, I must ask you, uh, do you know if there is any dashboard left that doesn't have a password? I understand that from your side, all the dashboards have a password, but do you know if Suvankar has already achieved this?
+
+
+@40:31 - Buddhadeb Bhattacharya
+
+Yeah, Suvankar has made focus on probably in four or five dashboards. Like, he has left probably three of three, most probably three, as he told me. And also, I had a discussion with Silvari regarding this. He told me, like, just left keep him do, because there is no such urgency to provide that thing to the client right now, these clients. So that we can just do that later. Also, yeah, I was about to forget to tell you that. Silvari also told me one thing. Like, when you are just giving this access, when users are entering.
+
+Uh, I was about to forget to tell you that. Uh, Silvari also told me one thing. Like, when you are just giving this access, when users are entering, so rather than giving the access to all the users, we can just give the access to a few people of that organization.
+
+
+@41:14 - Diego Mérigo (Rolplay)
+
+Okay.
+
+
+@41:16 - Buddhadeb Bhattacharya
+
+He told me that.
+
+
+@41:17 - Diego Mérigo (Rolplay)
+
+Okay, got it. I'll mark it.
+
+
+@41:21 - Buddhadeb Bhattacharya
+
+I asked him, like, you know.
+
+
+@41:24 - Diego Mérigo (Rolplay)
+
+Like, yeah.
+
+
+@41:26 - Buddhadeb Bhattacharya
+
+Go ahead.
+
+
+@41:27 - Diego Mérigo (Rolplay)
+
+No, no, no, no.
+
+
+@41:30 - Buddhadeb Bhattacharya
+
+Yeah. Like, I don't know the exact people who are the admin or something. Then he told me that we'll provide you a list of the admins and you can just give them the access.
+
+
+@41:44 - Diego Mérigo (Rolplay)
+
+Got it.
+
+
+@41:45 - Buddhadeb Bhattacharya
+
+But I am planning to just keep this thing on the dashboard builder page itself. I can just add their email IDs. Or whoever will be creating this, because otherwise it will be pretty hard to identify from there. This will be quite hard coded. Then we have to do the coding again. So that's not the purpose. We can just upload that file or something. And the AI will automatically understand that we need to give the access only to these people.
+
+Not to everyone. That will be better for me.
+
+
+@42:17 - Diego Mérigo (Rolplay)
+
+Got it. And Robin, AI works now? That was another ticket.
+
+
+@42:23 - Buddhadeb Bhattacharya
+
+Yeah, it's working.
+
+
+@42:27 - Diego Mérigo (Rolplay)
+
+Now, uh, there are two other topics.
+
+
+@42:30 - Buddhadeb Bhattacharya
+
+Yeah, I know, I knew. I think, uh, Aditya changed the API too.
+
+
+@42:36 - Diego Mérigo (Rolplay)
+
+Yeah, we got leaked again. You knew?
+
+
+@42:40 - Buddhadeb Bhattacharya
+
+Yeah.
+
+
+@42:43 - Diego Mérigo (Rolplay)
+
+I think this was, this time was Haryam's API that got exposed. Again?
+
+
+@42:52 - Buddhadeb Bhattacharya
+
+Actually, like, I got one, I got one lesson from the earlier one, that never play with the real API.
+
+Actually, like, earlier, one time, I actually got leaked from my side as well, in the beginning. Then I realized that I will never put that actual API during the development. I will be keeping some free APIs. Even if it gets exposed, it doesn't matter.
+
+When will we? Putting this thing in the production, only I then, I will then configure on the render, or in some secure environments, so that it's not got exposed anymore.
+
+
+@43:28 - Diego Mérigo (Rolplay)
+
+You should check, you should tell Haryam, because, yeah. I think it was like. Was it, was this recently, Devo?
+
+Today. Today in the morning. Oh, .
+
+
+@43:46 - Buddhadeb Bhattacharya
+
+Yeah, like, I got two APIs back on yesterday and on today.
+
+
+@43:51 - Diego Mérigo (Rolplay)
+
+And it's not, uh, it was like, I think, eight thousand dollars. .
+
+
+@43:59 - Buddhadeb Bhattacharya
+
+It, it cost eight thousand dollars.
+
+
+@44:01 - Diego Mérigo (Rolplay)
+
+Yeah. From where? I think it was from Render, the API that Karim had in Render, of, I don't know which, I think of. Of Afoura. That I'm not sure.
+
+The Andropic? Or the? No. N-A-I. Very nice. So, no, so it's not the Afoura one. It was an API from Gemini.
+
+
+@44:30 - Buddhadeb Bhattacharya
+
+I thought.
+
+
+@44:32 - Diego Mérigo (Rolplay)
+
+Mario didn't know, I told him, like, 20 minutes ago. And yeah, he got mad. Yeah. But these things. Yeah, Karyam did the right thing. He told me right away. And also, when it happened with you, you told us that's what we need to do. But yeah.
+
+
+@44:55 - Buddhadeb Bhattacharya
+
+It, it, it cost any quarter of my time as well. I just switched the API, you know, removed the API from everywhere in a few minutes. Not even a few minutes, in very quickly, like, I was, I got a notification from the API, like, GitHub, that your API is here. Then I just immediately go there and remove the entire repository before then asking anyone. Like, then I ask someone that, yeah, it got exposed somehow and if you just fix it and say it was fixed.
+
+
+@45:26 - Diego Mérigo (Rolplay)
+
+Okay. Now, okay, I'll mark, I'll mark it as done. Now, the only one that we have, like, in progress is the one of the journey. I will mark it as done because you have something there.
+
+And I want to move forward. Yeah, but this is like more ambitious job that we are trying to do. I don't know if you remember the diagram I shared. If not, let me share screen.
+
+
+@45:54 - Buddhadeb Bhattacharya
+
+Yeah, I will send it to you, but I have reviewed it, but I couldn't understand that how to get the fast behavior. Like, uh, he can make it gummy. That's, that's not a case. But the one you sent me, first we need to diagnose the user. In the diagnostic stage, like, what is their performance? What they're actually doing? And what is their score or something? We don't either don't have this data. And in the final exam, we don't have this data as well. But how I should represent that? Like, in the real users, we don't have this data yet, probably.
+
+
+@46:31 - Diego Mérigo (Rolplay)
+
+Yeah.
+
+
+@46:32 - Buddhadeb Bhattacharya
+
+If you, if you just, you know, propose that, probably that will be added later. We don't have it right now. That's why I haven't made the changes on the real users. But, yeah, we can definitely give a demonstration in the demo dashboard on that.
+
+
+@46:46 - Diego Mérigo (Rolplay)
+
+Yeah, let's start with that demonstration. Let's focus on the front first. I know that, uh, the important part is the back, but, uh, I don't know if, if we can start like this for this time, uh, with mock data, start like configuring the front. Meanwhile, we start doing some things, uh, regarding the Rolplay app to start standardizing the, the information, the, the grades and everything.
+
+I think we should do that. Uh, of course, we need to have, like, I understand the, like, the, the issue here. Uh, but at the end, the diagnostic coach is going to have the, uh, like, the same reports that the certification coach has at the beginning. So we can start, like, mapping out the, how are we going to be tracking the, the grades or the, the qualifications. That, this is something that we need to start, like, uh, yeah, to start, like, uh, approaching, like, in the process.
+
+We can begin with the front and then start checking, okay, we need here this type of data. We can standardize here. We can, I, I think that we should do it like this.
+
+
+@48:06 - Buddhadeb Bhattacharya
+
+Hmm. Okay.
+
+
+@48:10 - Diego Mérigo (Rolplay)
+
+Yeah, you got it. I didn't, I didn't got the issue.
+
+
+@48:17 - Buddhadeb Bhattacharya
+
+No, no, no. I can understand you were saying, like, just start with the front right now, and later when it will be imposed, it will be quite similar, like the certified coach, like the way you told me.
+
+And later we can just make the transition, you know. We can just add this in the dashboard builder itself, or? No, I think that is a single time piece, right? The diagnostic coach.
+
+
+@48:42 - Diego Mérigo (Rolplay)
+
+It's supposed, it's supposed to be now in every deployment. We are trying, like, to push this coach as one of the ones that we have because this is the only way that we can have a parameter of how the user was at the beginning and how the user is ending.
+
+So this is the, I think, one of the most important coaches also. Um, I don't know. We'll try this for one, two clients and then we will see if we can, uh, have it with, with all, all the other ones.
+
+Like, we, we have to implement it, uh, somehow with everybody because the, we, we need to have a baseline, a baseline so we can measure the progress of the, of the customers. So if the, the, if in the end it's going to be a certified coach, then we have, we should have at the beginning a diagnostic coach. And then the comparison in between the results of those two would be the result of our platform, you know?
+
+
+@49:46 - Buddhadeb Bhattacharya
+
+Okay. They will, they will give the value. Like, just to evaluate that they entered in a, in a state and now they are completing in a different state. I think I'm right.
+
+
+@50:00 - Diego Mérigo (Rolplay)
+
+And that's why you should keep paying us, basically, you know? Mm-hmm. That was the sales pitch. It's like, when they came in, they were, like, having a score of, I don't know, 25, and now they are finishing the process, and now they have 60. So that, those 25 point difference, that's thanks to me.
+
+Here's the check.
+
+
+@50:28 - Buddhadeb Bhattacharya
+
+Like, if, if somebody is well-trained and the score in the diagnostic is 90, then.
+
+
+@50:35 - Diego Mérigo (Rolplay)
+
+Yeah, no, that, that's why the diagnostic should be very hard. Always.
+
+
+@50:40 - Buddhadeb Bhattacharya
+
+Okay.
+
+
+@50:42 - Diego Mérigo (Rolplay)
+
+Yeah. Okay. And just to finish, um. You told me, I, I think it was from. About some timestamp issues?
+
+
+@51:01 - Buddhadeb Bhattacharya
+
+Yeah, like, the timestamp issue was there, and I asked, I had a conversation with Amit regarding that. Then he clarified, and now you can see the new icon is there.
+
+
+@51:11 - Diego Mérigo (Rolplay)
+
+Okay.
+
+
+@51:13 - Buddhadeb Bhattacharya
+
+Actually, the, when they are using it, these activity times are there. They are there, basically. But after that, when they are actually created, the created timestamp column was not there in the input. So I asked Amit to provide me that.
+
+
+@51:30 - Diego Mérigo (Rolplay)
+
+Got it. Okay. So, uh, we need to end the meeting because we have another meeting with the sales team in this same, in this same room, but next steps for, uh, for Tuesday, our next meeting will be. If you can send us tomorrow the, the information that we, that we required, it will help us a lot so we can start, uh, Monday and Tuesday before our meeting to, to, to work and send you some, some feedback about the KPIs or some changes.
+
+Um, let's see if you can have a front for Tuesday about the journey. And, uh, what else, what else? Hmm.
+
+Well, the, this part, the bug that we saw on the dashboard builder has to be also, uh, fixed.
+
+
+@52:33 - Buddhadeb Bhattacharya
+
+Yes.
+
+
+@52:34 - Diego Mérigo (Rolplay)
+
+I, I, I am seeing now some tickets about RoboAI, handle token overflow on large data ranges. Also, Redis caching layer.
+
+Have you implemented Redis, or?
+
+
+@52:51 - Buddhadeb Bhattacharya
+
+Yeah, like, the basic count, Redis is there. Uh, I think this performance is fine. The one that you are looking into it, that, I will disappear. This is, Redis is implemented there. But yeah, if you want to go with the premium one, then I think, when we move to the version two, we can just update it if it is needed to be even more faster.
+
+
+@53:14 - Diego Mérigo (Rolplay)
+
+Okay, yeah, we will start version two from the next Tuesday. Also, take a look at the, at the repo in GitCop regarding, let me check quickly.
+
+
+@53:29 - Buddhadeb Bhattacharya
+
+Yeah, I also have upgraded some wikis. You can have a look there.
+
+
+@53:34 - Diego Mérigo (Rolplay)
+
+Okay.
+
+
+@53:35 - Buddhadeb Bhattacharya
+
+Which platforms are similar, I have not created the documentation because all the dashboards are following the same thing. Only their KPIs and a few things are, like, different. I just have modified that, updated that.
+
+
+@53:50 - Diego Mérigo (Rolplay)
+
+Got it. Okay, thanks. I will take a look. So, if you go to, to GitCop, to the repository, there's one called Supervisor Coach.
+
+
+@54:02 - Buddhadeb Bhattacharya
+
+Just, just give me one sec.
+
+
+@54:04 - Diego Mérigo (Rolplay)
+
+Also, I am seeing that some dashboards are public in, in GitCop.
+
+
+@54:12 - Buddhadeb Bhattacharya
+
+No, I just made this thing public when I was pushing that code. I, I will just, this is a quick process, I will make that. Although, if it is public, actually, like, in the organization, nobody can take the access, but, yeah, I'll just make the changes.
+
+
+@54:27 - Diego Mérigo (Rolplay)
+
+Okay.
+
+
+@54:29 - Buddhadeb Bhattacharya
+
+You are taking out the Rolplay sense?
+
+
+@54:33 - Diego Mérigo (Rolplay)
+
+Yeah, take a look to the code of Supervisor Coach, because we are going to work on, on that later, on a new platform for Rolplay, and this will be the base.
+
+
+@54:49 - Buddhadeb Bhattacharya
+
+Okay. Also, you know, I was about to tell you, like, yesterday, I just opened the platform, Rolplay platform, you know, for nothing, you know, and just, uh, I was just in a Rolplay, and it just got crashed, you know, like, it was not opening. Today, I think it is, yeah, this one.
+
+It's still like this.
+
+
+@55:13 - Diego Mérigo (Rolplay)
+
+Which is this one?
+
+
+@55:15 - Buddhadeb Bhattacharya
+
+This is Roleplay, yeah, the main platform. Yeah, this is Rolplay, yeah, the main platform.
+
+
+@55:19 - Diego Mérigo (Rolplay)
+
+And what is the issue?
+
+
+@55:22 - Buddhadeb Bhattacharya
+
+Uh, I think it's something from the hosting side, because when I'm just opening the one that I have created, like when I was building the platform, this is working fine. The code base has not, is not in the issue, but the issue is probably somewhere else.
+
+
+@55:40 - Diego Mérigo (Rolplay)
+
+Okay.
+
+
+@55:43 - Buddhadeb Bhattacharya
+
+See, here it's working fine.
+
+
+@55:45 - Diego Mérigo (Rolplay)
+
+Okay, okay.
+
+
+@55:47 - Buddhadeb Bhattacharya
+
+You can just, if possible, please talk with the Hariyam once, because I don't have the digital, digital ocean access. He has it.
+
+
+@55:57 - Diego Mérigo (Rolplay)
+
+Okay. So this is what we are going to focus on till next Tuesday.
+
+
+@56:07 - Buddhadeb Bhattacharya
+
+Mm, yeah.
+
+
+@56:11 - Diego Mérigo (Rolplay)
+
+Please, if you have any questions, doubts, or updates, let us know. As soon as, as soon as you have the information, please send it to us because we need to finish this as soon as possible. I, I am feeling that we have been stuck with these dashboards for some time and we need to get out of here.
+
+So, just, just optimize, we need to optimize the KPIs and we're ready to go to, to try different projects, but. For now, we do that, and also, you can start, like, studying a little bit the repository of the, of the provider coach, so we can start with a new project.
+
+
+@56:53 - Buddhadeb Bhattacharya
+
+Okay. And, have you the, do you have the meeting recorded?
+
+
+@56:59 - Diego Mérigo (Rolplay)
+
+Yeah, I'll show you.
+
+
+@57:00 - Buddhadeb Bhattacharya
+
+Do we have this?
+
+
+@57:01 - Diego Mérigo (Rolplay)
+
+I'll show you the recording.
+
+
+@57:03 - Buddhadeb Bhattacharya
+
+We have discussed a lot of things, last time we noted down for a problem.
+
+
+@57:08 - Diego Mérigo (Rolplay)
+
+Yeah, also, feel free to make tickets on Plan and assign yourself so we can see the progress because right now I think that we should use more Plan. I use it a lot with Hariyam. It helps me a lot to see that the progress that he's doing, but I think that you most of the time forget to update the tickets.
+
+And that's the way that we are going to, to check how are we. If we are going, if we are efficient with the time and with the task and everything and measure if, if you are, if you are slant or if you need more work or if you're idle. So let's use more plane and be, and be, feel free to create tickets regarding of what you hear here on the, on the recording of the meeting.
+
+Do you like that? The other meeting is in a different room. Not this one. No, I have Miriam and Bill in the waiting room.
+
+No, I have meeting in the waiting room. Okay. Because I just got an invite, an invite that it's from you that it says the meeting link has been changed.
+
+If they're in the, in the room, it's okay. I'll tell Miriam. So, thank you. Thank you, Harion. Sorry. Thank you, Bhattacharya. And we'll be in touch.
+
+
+@58:35 - Buddhadeb Bhattacharya
+
+Okay.
+
+
+@58:36 - Diego Mérigo (Rolplay)
+
+I'll also delete the recording.
+
+
+@58:39 - Buddhadeb Bhattacharya
+
+Yeah, please. Thank you.
+
+
+@58:43 - Diego Mérigo (Rolplay)
+
+Thank you. Have a good weekend. And we'll, we'll be, uh, waiting for the information, please.
+
+
+@58:49 - Buddhadeb Bhattacharya
+
+Yeah, like, I'll try to, uh, provide that by tomorrow.
+
+
+@58:53 - Diego Mérigo (Rolplay)
+
+Thank you. Have a good night.
+
+
+@58:56 - Buddhadeb Bhattacharya
+
+Thank you. Have a good night.
+
+
+@58:58 - Diego Mérigo (Rolplay)
+
+Bye-bye. ¿Qué onda, Viri?
+
+
+@59:07 - Viridiana Flores
+
+¿Qué onda, Diego? ¿Cómo estás? Okay, muy bien.
+
+
+@59:17 - Diego Mérigo (Rolplay)
+
+Este, perdón, estábamos terminando de juntar con Bhattacharya, este, desde temprano hemos estado con Mario, luego con Banco Azteca, luego, entonces nos fuimos atrasando, pero mira, ya nos vamos poniendo al corriente.
+
+
+@59:30 - Viridiana Flores
+
+Okay, muy bien, ¿cómo les fue?
+
+
+@59:33 - Diego Mérigo (Rolplay)
+
+Bien, bien, este, hubo ahí algunas fallitas técnicas, nada grave, pero creo que están interesados y, este, le tenemos que mandar el, la plataforma al director de Banco Azteca que la quiere probar.
+
+
+@59:50 - Viridiana Flores
+
+Okay, muy bien.
+
+
+@59:52 - Diego Mérigo (Rolplay)
+
+Entonces, creo que cae bien este focus group para que ustedes también, o sea, ahorita lo que vamos a hacer hoy, Raúl y yo, va a ser probar y probar y probar la plataforma, anotar todos los errores que veamos, todo lo que se puede mejorar, y en la noche hablar con Harion para pedirle, Harion es el, el que desarrolló la plataforma, para pedirle que haga sus cambios y podamos mandarla, pues, sin errores, ¿no?
+
+
+@1:00:14 - Viridiana Flores
+
+Claro. Okay.
+
+
+@1:00:18 - Diego Mérigo (Rolplay)
+
+Ahorita, la idea para esta sesión era ya tener nosotros como algunas preguntas, yo no tuve chance de hacerlas, me imagino que, que Raúl tampoco, pero.
+
+
+@1:00:26 - Viridiana Flores
+
+Bueno, tampoco. Muchas, ¿no?
+
+
+@1:00:32 - Diego Mérigo (Rolplay)
+
+Pero la idea es empezar a hacer este tipo de experimentos, ¿no? O sea, no solamente con esta plataforma, sino con otros prototipos.
+
+Entonces, bueno, pues ahorita que no tenemos preguntas, pues podemos platicar en general cómo ha sido tu experiencia, qué has visto, qué puede mejorar, qué no. No sé si te puede que compartas pantalla todavía mejor para que nos vayamos guiando con algo visual y no se nos pase nada.
+
+
+@1:01:00 - Viridiana Flores
+
+Mm-hmm. Mhm.
+
+
+@1:01:02 - Diego Mérigo (Rolplay)
+
+Y vayamos anotando ahí, qué onda, ¿no?
+
+
+@1:01:05 - Viridiana Flores
+
+Vamos. Déjame abrirte.

@@ -342,6 +342,10 @@ async def _build_lms_dashboard(creds: LmsCredentials, from_key: str, to_key: str
     )
 
     completion_trend = [{"date": d, "value": v} for d, v in sorted(trend.items())]
+    # total possible user-course combinations
+    total_courses = len(courses)
+    total_possible = total_users * total_courses
+    not_enrolled = max(0, total_possible - total_enrollments) if total_possible > 0 else 0
 
     return {
         "configured": True,
@@ -352,8 +356,9 @@ async def _build_lms_dashboard(creds: LmsCredentials, from_key: str, to_key: str
         "modulesCompleted": completed,
         "inProgress": in_progress,
         "notStarted": not_started,
-        "completionRate": round((completed / (total_users * len(courses))) * 1000) / 10
-        if total_users > 0 and courses else None,
+        "notEnrolled": not_enrolled,
+        "completionRate": round((completed / (total_users * total_courses)) * 1000) / 10
+        if total_users > 0 and total_courses else None,
         "avgQuizScore": round((score_sum / score_n) * 10) / 10 if score_n > 0 else None,
         "hasScoreData": score_n > 0,
         "completionTrend": completion_trend,

@@ -1,0 +1,21 @@
+﻿1. For the main summary 
+
+
+SELECT us.*,u.name AS user_name,s.name as simulator_name
+FROM r_user_session us
+JOIN r_user u On u.ID = us.user_id
+JOIN r_simulator s on s.ID = us.simulator_id
+WHERE us.ID =128;
+
+
+
+
+
+
+2. To understand the sessions and interaction rows 
+
+
+SELECT *
+FROM r_user_session_details
+WHERE session_id = 128
+ORDER BY sequence ASC;
