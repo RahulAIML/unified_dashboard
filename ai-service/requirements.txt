@@ -4,9 +4,14 @@ httpx==0.28.1
 pydantic==2.10.4
 pydantic-settings==2.7.1
 asyncpg==0.30.0
-python-dotenv==1.0.1
-cryptography==44.0.0
-langgraph==0.2.60
+python-dotenv==1.2.3
+cryptography==50.0.1
+# Smallest version that clears the known CVEs against 0.2.60 (1.0.10 is the
+# first patched release) -- deliberately not jumping further than needed for
+# a 0.x -> 1.x major bump, to keep the behavioral-change surface as small as
+# possible. Only StateGraph/START/END (app/graph.py) are actually used, the
+# most stable part of the API.
+langgraph==1.0.10
 # LLM providers are optional at runtime (agents fall back to heuristics when no
 # key is configured). Installed so the LLM path works when a key IS present.
 anthropic==0.42.0
