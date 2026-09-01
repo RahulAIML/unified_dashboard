@@ -369,6 +369,17 @@ export async function lmsDashboard(
   const toKey = to.toISOString().slice(0, 10)
   const cacheKey = `${creds.origin}|${tenantKey ?? '-'}|${fromKey}|${toKey}`
 
+  // The completions trend is a FIXED, always-current 30-day window --
+  // independent of `from`/`to` (the caller's date-range filter), which
+  // every other field in this payload already ignores (current-state
+  // roster snapshot, no comparison). Computed from "now", not `to`, so it
+  // is genuinely "the last 30 days" regardless of whatever range the
+  // dashboard's global date picker happens to have selected.
+  const trendWindowEnd = new Date()
+  const trendWindowStart = new Date(trendWindowEnd.getTime() - 30 * 86_400_000)
+  const trendFromKey = trendWindowStart.toISOString().slice(0, 10)
+  const trendToKey = trendWindowEnd.toISOString().slice(0, 10)
+
   const cached = await cacheGet<LmsApiResponse>(cacheKey)
   if (cached) return cached
   const flying = _inflight.get(cacheKey)
@@ -428,7 +439,7 @@ export async function lmsDashboard(
           completed++
           agg.completed++
           const key = toDateKey(r.completed_at)
-          if (key && key >= fromKey && key <= toKey) {
+          if (key && key >= trendFromKey && key <= trendToKey) {
             trend.set(key, (trend.get(key) ?? 0) + 1)
           }
         } else if (status === 'not_started') {

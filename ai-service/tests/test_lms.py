@@ -8,9 +8,17 @@ a real tenant with no visible error.
 import asyncio
 import os
 import unittest
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
 from app import lms
+
+
+def _days_ago(n: int) -> tuple[float, str]:
+    """(unix seconds, UTC date key) for a moment n days before now -- matches
+    _to_date_key()'s own bucketing."""
+    dt = datetime.now(timezone.utc) - timedelta(days=n)
+    return dt.timestamp(), dt.strftime("%Y-%m-%d")
 
 
 def _run(coro):
@@ -144,13 +152,47 @@ class LmsDashboardAggregationTests(unittest.TestCase):
         self.assertEqual(result["avgQuizScore"], 80.0)
         self.assertTrue(result["hasScoreData"])
 
-    def test_completion_trend_falls_within_the_requested_range(self):
-        result = _run(lms.lms_dashboard("apotex", "2023-11-01", "2023-11-30"))
-        self.assertEqual(result["completionTrend"], [{"date": "2023-11-14", "value": 1}])
+    def test_completion_trend_is_a_fixed_recent_window_independent_of_the_requested_range(self):
+        # The trend is now a FIXED, always-current 30-day window (see
+        # _build_lms_dashboard's trend_from_key/trend_to_key) -- mirrors the
+        # identical fix in lib/lms-learnworlds.ts. A caller-supplied range
+        # that would have EXCLUDED this recent completion under the old
+        # range-filtered behavior (2023) must have zero effect now.
+        epoch, date_key = _days_ago(3)
 
-    def test_completion_trend_excludes_dates_outside_the_range(self):
-        result = _run(lms.lms_dashboard("apotex", "2023-12-01", "2023-12-31"))
+        async def fake_api_get(creds, path):
+            if path.startswith("/courses"):
+                return {"data": [{"id": "c1", "title": "Course One"}], "meta": {"totalPages": 1}}
+            if path.startswith("/users/"):
+                uid = path.split("/")[2]
+                if uid == "u1":
+                    return {"data": [{"course_id": "c1", "status": "completed", "average_score_rate": 80, "completed_at": epoch}]}
+                return {"data": []}
+            return {"data": [{"id": "u1"}, {"id": "u2"}], "meta": {"totalPages": 1}}
+
+        with patch("app.lms._api_get", new=AsyncMock(side_effect=fake_api_get)):
+            result = _run(lms.lms_dashboard("apotex", "2023-11-01", "2023-11-30"))
+        self.assertEqual(result["completionTrend"], [{"date": date_key, "value": 1}])
+
+    def test_completion_trend_excludes_a_completion_older_than_30_days(self):
+        epoch, _ = _days_ago(45)
+
+        async def fake_api_get(creds, path):
+            if path.startswith("/courses"):
+                return {"data": [{"id": "c1", "title": "Course One"}], "meta": {"totalPages": 1}}
+            if path.startswith("/users/"):
+                uid = path.split("/")[2]
+                if uid == "u1":
+                    return {"data": [{"course_id": "c1", "status": "completed", "average_score_rate": 80, "completed_at": epoch}]}
+                return {"data": []}
+            return {"data": [{"id": "u1"}, {"id": "u2"}], "meta": {"totalPages": 1}}
+
+        with patch("app.lms._api_get", new=AsyncMock(side_effect=fake_api_get)):
+            result = _run(lms.lms_dashboard("apotex", "2023-11-01", "2023-11-30"))
         self.assertEqual(result["completionTrend"], [])
+        # Still counts toward the current-state total even though it falls
+        # outside the trend's 30-day window.
+        self.assertEqual(result["modulesCompleted"], 1)
 
     def test_course_rows_only_include_courses_with_real_enrollment(self):
         result = _run(lms.lms_dashboard("apotex", "2023-11-01", "2023-11-30"))
