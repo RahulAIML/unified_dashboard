@@ -146,7 +146,7 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
       <div className="px-4 sm:px-6 py-3 sm:py-4">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 sm:gap-4 mb-3 sm:mb-4">
           <div>
-            <h1 className="text-xl font-semibold tracking-tight text-foreground">{title}</h1>
+            <h1 className="text-xl font-bold tracking-tight text-foreground">{title}</h1>
             {subtitle && <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>}
           </div>
 
