@@ -25,6 +25,7 @@ import { ChartCard } from "@/components/ChartCard"
 import { ActivityLineChart } from "@/components/charts/ActivityLineChart"
 import { DataTable, type Column } from "@/components/DataTable"
 import { ExportButton } from "@/components/ExportButton"
+import { LmsStatusBreakdown } from "@/components/LmsStatusBreakdown"
 import { useDashboardStore } from "@/lib/store"
 import { useT } from "@/lib/lang-store"
 import { useApi, buildApiUrl } from "@/lib/hooks/useApi"
@@ -93,50 +94,10 @@ function CompletionBar({ value }: { value: number }) {
   )
 }
 
-/** Stacked proportion bar over the three enrollment statuses. */
-function StatusBreakdown({ data }: { data: LmsApiResponse }) {
-  const t = useT()
-  const total = data.totalEnrollments
-  if (total === 0) return <EmptyState />
-
-  const rows = [
-    { key: "done", label: t.lmsStatusCompleted,  value: data.modulesCompleted, cls: "bg-primary",     text: "text-primary" },
-    { key: "wip",  label: t.lmsStatusInProgress, value: data.inProgress,       cls: "bg-amber-500",   text: "text-amber-600" },
-    { key: "new",  label: t.lmsStatusNotStarted, value: data.notStarted,       cls: "bg-muted-foreground/40", text: "text-muted-foreground" },
-  ]
-
-  return (
-    <div className="space-y-4 py-2">
-      <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted" role="presentation">
-        {rows.map(r => r.value > 0 && (
-          <div key={r.key} className={r.cls} style={{ width: `${(r.value / total) * 100}%` }} />
-        ))}
-      </div>
-      <ul className="space-y-2">
-        {rows.map(r => (
-          <li key={r.key} className="flex items-center justify-between gap-3 text-sm">
-            <span className="flex items-center gap-2">
-              <span className={cn("w-2.5 h-2.5 rounded-full shrink-0", r.cls)} />
-              <span className="text-muted-foreground">{r.label}</span>
-            </span>
-            <span className="flex items-baseline gap-2">
-              <span className={cn("tabular-nums font-semibold", r.text)}>{r.value.toLocaleString()}</span>
-              <span className="tabular-nums text-xs text-muted-foreground">
-                {Math.round((r.value / total) * 1000) / 10}%
-              </span>
-            </span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  )
-}
-
 export default function LmsPage() {
   const { dateRange, refreshKey } = useDashboardStore()
   const t     = useT()
   const brand = useClientBrand()
-  const days = Math.round((dateRange.to.getTime() - dateRange.from.getTime()) / 86_400_000)
 
   const lmsUrl = buildApiUrl("/api/dashboard/lms", dateRange.from, dateRange.to, { rk: refreshKey })
   const { data, loading, error } = useApi<LmsApiResponse>(lmsUrl)
@@ -183,6 +144,14 @@ export default function LmsPage() {
       render: r => <span className="font-medium text-sm">{r.name}</span>,
     },
     {
+      // The roster size (same number as the "of N users" sub-label above the
+      // table) -- shown right after the course name, before Enrolled, so the
+      // completion rate further right is legible as "completed out of this
+      // many", not "out of however many enrolled".
+      key: "totalUsers", header: t.lmsColTotal,
+      render: r => <span className="tabular-nums text-muted-foreground">{r.totalUsers}</span>,
+    },
+    {
       key: "enrolled", header: t.lmsColEnrolled,
       render: r => <span className="tabular-nums font-medium">{r.enrolled}</span>,
     },
@@ -193,13 +162,6 @@ export default function LmsPage() {
     {
       key: "inProgress", header: t.lmsColInProgress,
       render: r => <span className="tabular-nums text-muted-foreground">{r.inProgress}</span>,
-    },
-    {
-      // The roster size (same number as the "of N users" sub-label above the
-      // table) -- shown per row so the completion rate below is legible as
-      // "completed out of this many", not "out of however many enrolled".
-      key: "totalUsers", header: t.lmsColTotal,
-      render: r => <span className="tabular-nums text-muted-foreground">{r.totalUsers}</span>,
     },
     {
       key: "completionRate", header: t.completionRate,
@@ -281,7 +243,12 @@ export default function LmsPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
               <ChartCard
                 title={t.lmsCompletionTrend}
-                subtitle={`${t.lmsCompletionTrendSub} — ${t.last} ${days} ${t.days}`}
+                // This chart is a fixed, always-current 30-day window
+                // (lib/lms-learnworlds.ts's lmsDashboard), independent of the
+                // global date-range picker -- so the subtitle is a static
+                // label, not built from `days`, which would otherwise show
+                // whatever range happens to be selected elsewhere on the page.
+                subtitle={t.lmsCompletionTrendSub}
               >
                 {loading
                   ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
@@ -298,7 +265,7 @@ export default function LmsPage() {
                 {loading
                   ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t.loading}</div>
                   : data
-                    ? <StatusBreakdown data={data} />
+                    ? <LmsStatusBreakdown data={data} />
                     : <EmptyState />
                 }
               </ChartCard>
