@@ -666,13 +666,21 @@ export function demoLms(from: Date, to: Date, lang: 'en' | 'es' = 'es') {
     }
   })
 
-  // Completions accrue over the selected window.
-  const completionTrend = Array.from({ length: days }, (_, d) => {
-    const date = new Date(from)
-    date.setDate(date.getDate() + d)
+  // Cursos finalizados por día is now a FIXED, always-current 30-day
+  // window, independent of the selected date range -- matches the real fix
+  // in lib/lms-learnworlds.ts's lmsDashboard exactly (that chart no longer
+  // follows the global range either). Anchored to the real "today", not
+  // `to`, so demo exercises the same "last 30 days from now" semantics a
+  // real client sees rather than however wide "Todos" happens to be
+  // (previously produced a chart spanning years for that selection).
+  const TREND_WINDOW_DAYS = 30
+  const trendEnd = new Date()
+  const completionTrend = Array.from({ length: TREND_WINDOW_DAYS }, (_, d) => {
+    const date = new Date(trendEnd)
+    date.setDate(date.getDate() - (TREND_WINDOW_DAYS - 1 - d))
     return {
       date:  date.toISOString().slice(0, 10),
-      value: Math.max(0, Math.round((totalCompleted / days) * (0.5 + rng()))),
+      value: Math.max(0, Math.round((totalCompleted / TREND_WINDOW_DAYS) * (0.5 + rng()))),
     }
   })
 

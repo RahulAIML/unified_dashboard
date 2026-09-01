@@ -193,3 +193,36 @@ describe('demoLms — raw enrollment export rows are consistent with the aggrega
     }
   })
 })
+
+/**
+ * Cursos finalizados por día ("Dashboard KPI fixes" item 3) is now a fixed,
+ * always-current 30-day window, matching the identical fix in
+ * lib/lms-learnworlds.ts's lmsDashboard. Found live: with the demo date
+ * range set to "Todos" (~10 years, FROM/TO above), the chart's x-axis
+ * still spanned years even after that real fix shipped -- demoLms had its
+ * own separate trend generator that was never updated to match.
+ */
+describe('demoLms — completions trend is a fixed 30-day window, independent of the selected range', () => {
+  it('always returns exactly 30 points regardless of how wide the selected range is', () => {
+    const lms = demoLms(FROM, TO, 'en')
+    expect(lms.completionTrend).toHaveLength(30)
+  })
+
+  it('the 30 dates are the real, current last 30 days, not derived from the selected range', () => {
+    const lms = demoLms(FROM, TO, 'en')
+    const today = new Date().toISOString().slice(0, 10)
+    const thirtyDaysAgo = new Date(Date.now() - 29 * 86_400_000).toISOString().slice(0, 10)
+    expect(lms.completionTrend[0].date).toBe(thirtyDaysAgo)
+    expect(lms.completionTrend[29].date).toBe(today)
+    // FROM ('2016-01-01') must never appear -- confirms the old
+    // range-derived generation is gone.
+    expect(lms.completionTrend.some(p => p.date.startsWith('2016'))).toBe(false)
+  })
+
+  it('a short selected range (e.g. 7 days) still produces the same fixed 30-day trend', () => {
+    const shortFrom = new Date(Date.now() - 6 * 86_400_000)
+    const shortTo = new Date()
+    const lms = demoLms(shortFrom, shortTo, 'en')
+    expect(lms.completionTrend).toHaveLength(30)
+  })
+})
