@@ -32,7 +32,6 @@ export const translations = {
     filterAll:       'All',
     last:            'last',
     days:            'days',
-    last30Days:      'Last 30 days',
 
     // ── Page titles / subtitles ──────────────────────────────
     overviewTitle:   'Global Overview',
@@ -101,13 +100,13 @@ export const translations = {
     useCaseCoverage:      'Use Case Coverage',
     avgSegmentsPerDoc:    'Avg Segments / Doc',
     enrolledUsers:        'Enrolled Users',
-    enrolledUsersInfo:    'Number of users enrolled in at least one LMS course.',
+    enrolledUsersInfo:    'Number of users enrolled in at least one LMS course',
     completionRate:       'Completion Rate',
-    completionRateInfo:   'Percentage of users who reached 100% completion.',
+    completionRateInfo:   'Percentage of users who reached 100% completion',
     avgQuizScore:         'Avg Quiz Score',
-    avgQuizScoreInfo:     'Average score of all graded quiz attempts in the LMS.',
-    modulesCompleted:     'Finished Modules',
-    modulesCompletedInfo: 'Total number of finished modules.',
+    avgQuizScoreInfo:     'Average score of all graded quiz attempts on the LMS',
+    modulesCompleted:     'Modules Finished',
+    modulesCompletedInfo: 'Total number of modules finished',
     // --- Solution journey ---
     navJourney:              'Journey',
     journeyTitle:            'Solution Journey',
@@ -265,30 +264,18 @@ export const translations = {
     // --- LMS (course progress) ---
     lmsNotConfigured:      'No LMS connected',
     lmsNotConfiguredHint:  'This client has no learning platform linked, so there is no course data to show.',
-<<<<<<< HEAD
     lmsCompletionTrend:    'Courses finished per day',
     lmsCompletionTrendSub: 'Last 30 days',
-=======
-    lmsCompletionTrend:    'Courses Completed per Day',
-    lmsCompletionTrendSub: 'Courses completed per day',
->>>>>>> 38d6a96 (LMS: KPI calculation fixes, labels, 30-day trend, course table updates)
     lmsEnrollmentStatus:   'Enrollment Status',
     lmsEnrollmentStatusSub:'Current state across all enrollments',
     lmsCourses:            'Courses',
-    lmsCoursesSub:         'courses with registrations',
+    lmsCoursesSub:         'courses with enrollments',
     lmsExportRawLabel:     'Export raw enrollments (CSV)',
     lmsStatusCompleted:    'Completed',
     lmsStatusInProgress:   'In Progress',
-<<<<<<< HEAD
     lmsStatusNotStarted:   'Enrolled',
-=======
-    lmsStatusNotStarted:   'Not Started',
-    lmsStatusNotEnrolled:  'Not Enrolled',
->>>>>>> 38d6a96 (LMS: KPI calculation fixes, labels, 30-day trend, course table updates)
     lmsColCourse:          'Course',
-    lmsColEnrolled:        'Registered',
-    lmsColRegistered:      'Registered',
-    lmsColUsers:           'Users',
+    lmsColEnrolled:        'Enrolled',
     lmsColCompleted:       'Completed',
     lmsColInProgress:      'In Progress',
     lmsColTotal:           'Users',
@@ -1210,7 +1197,6 @@ export const translations = {
     filterAll:       'Todos',
     last:            'últimos',
     days:            'días',
-    last30Days:      'Últimos 30 días',
 
     // ── Page titles / subtitles ──────────────────────────────
     overviewTitle:   'Resumen Global',
@@ -1279,7 +1265,6 @@ export const translations = {
     useCaseCoverage:      'Cobertura de Casos de Uso',
     avgSegmentsPerDoc:    'Prom. Segmentos / Doc',
     enrolledUsers:        'Usuarios Matriculados',
-<<<<<<< HEAD
     enrolledUsersInfo:    'Número de usuarios inscritos en al menos un curso de LMS',
     completionRate:       'Tasa de Finalización',
     completionRateInfo:   'Porcentaje de usuarios que alcanzaron el 100% de finalización',
@@ -1287,15 +1272,6 @@ export const translations = {
     avgQuizScoreInfo:     'Puntuación promedio de todos los intentos de cuestionarios calificados en el LMS',
     modulesCompleted:     'Módulos Terminados',
     modulesCompletedInfo: 'Número total de módulos terminados',
-=======
-    enrolledUsersInfo:    'Número de usuarios inscritos en al menos un curso del LMS.',
-    completionRate:       'Tasa de finalización',
-    completionRateInfo:   'Porcentaje de usuarios que alcanzaron el 100% de finalización.',
-    avgQuizScore:         'Puntuación Media de Cuestionario',
-    avgQuizScoreInfo:     'Puntuación promedio de todos los intentos de cuestionario calificados en el LMS.',
-    modulesCompleted:     'Módulos Finalizados',
-    modulesCompletedInfo: 'Número total de módulos finalizados.',
->>>>>>> 38d6a96 (LMS: KPI calculation fixes, labels, 30-day trend, course table updates)
     // --- Journey de soluciones ---
     navJourney:              'Recorrido',
     journeyTitle:            'Recorrido de Soluciones',
@@ -1447,7 +1423,6 @@ export const translations = {
     // --- LMS (progreso de cursos) ---
     lmsNotConfigured:      'Sin LMS conectado',
     lmsNotConfiguredHint:  'Este cliente no tiene una plataforma de aprendizaje vinculada, por lo que no hay datos de cursos que mostrar.',
-<<<<<<< HEAD
     lmsCompletionTrend:    'Cursos finalizados por día',
     lmsCompletionTrendSub: 'Últimos 30 días',
     lmsEnrollmentStatus:   'Estado de Matriculación',
@@ -1460,23 +1435,6 @@ export const translations = {
     lmsStatusNotStarted:   'Inscritos',
     lmsColCourse:          'Curso',
     lmsColEnrolled:        'Inscritos',
-=======
-    lmsCompletionTrend:    'Cursos completados por día',
-    lmsCompletionTrendSub: 'Cursos completados por día',
-    lmsEnrollmentStatus:   'Estado de Matriculación',
-    lmsEnrollmentStatusSub:'Estado actual de todas las matriculaciones',
-    lmsCourses:            'Cursos',
-    lmsCoursesSub:         'cursos con inscrcripciones',
-    lmsExportRawLabel:     'Exportar matrículas sin procesar (CSV)',
-    lmsStatusCompleted:    'Completado',
-    lmsStatusInProgress:   'En Progreso',
-    lmsStatusNotStarted:   'Sin Empezar',
-    lmsStatusNotEnrolled:  'No inscrito',
-    lmsColCourse:          'Curso',
-    lmsColEnrolled:        'Inscritos',
-    lmsColRegistered:      'Inscritos',
-    lmsColUsers:           'Usuarios',
->>>>>>> 38d6a96 (LMS: KPI calculation fixes, labels, 30-day trend, course table updates)
     lmsColCompleted:       'Completados',
     lmsColInProgress:      'En Progreso',
     lmsColTotal:           'Usuarios',
