@@ -992,6 +992,18 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
         return WidgetPreview(widget_id=w.id, ok=val is not None, value=val,
                              error=None if val is not None else "no raw_closing_data with intencion_movement in scope")
 
+    # ── Registered Users (full roster, distinct from "Active Users" =
+    # total_users below which only counts reps who actually have a
+    # session) -- a real, dedicated, unfiltered count, never conflated with
+    # the date-scoped/session-joined query _rolplay_app_kpi_metrics runs for
+    # total_users. Deliberately its own query rather than a metrics dict
+    # lookup: the module-category/date-range filters below apply to
+    # SESSIONS, not to whether someone merely has an account.
+    if w.metric_key == "total_roster":
+        rows = await _rolplay_app_sql(f"SELECT COUNT(*) n FROM r_user WHERE client_id={cid}")
+        val = int((rows[0] if rows else {}).get("n") or 0)
+        return WidgetPreview(widget_id=w.id, ok=val > 0, value=val)
+
     # ── Cesar's Group-1 KPIs (activation/weekly-frequency/MAU/practices-to-
     # mastery/delta-score/readiness) -- schema-only, no raw_closing_data
     # needed, so these work for any rolplay_app_sql tenant. ──

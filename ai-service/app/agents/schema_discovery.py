@@ -207,6 +207,19 @@ async def _rolplay_app_schema(svc, schema, log: LogFn) -> None:
         DiscoveredMetric(key="total_users", label="Active Users", type=MetricType.count,
                          source_kind=svc.kind, source_action="r_user",
                          business_question="How many reps are actively using the platform?"),
+        # Distinct from total_users/"Active Users" above (which only counts
+        # reps who actually have a session) -- this is the full registered
+        # roster, regardless of whether they've ever practiced. Found live
+        # on Chinoin: 581 real accounts (r_user), only 1 with any session --
+        # a manager reading only "Active Users: 1" had no way to see the
+        # other 580 people who have an account but haven't started using the
+        # platform yet, which reads as "the dashboard is broken/stale" when
+        # it's actually an accurate, if stark, adoption picture. Automatic
+        # for every rolplay_app_sql tenant via _heuristic() below -- no
+        # per-client change needed for this or any future client.
+        DiscoveredMetric(key="total_roster", label="Registered Users", type=MetricType.count,
+                         source_kind=svc.kind, source_action="r_user",
+                         business_question="How many people have an account on this platform, whether or not they've started using it?"),
         # Cesar KPI group 1 (dashboard_planning.py's _cesar_kpis_page) —
         # computed from r_user/r_user_session/SCORE_SQL alone
         # (preview_fetch.py's _rolplay_app_cesar_metrics), so real for ANY

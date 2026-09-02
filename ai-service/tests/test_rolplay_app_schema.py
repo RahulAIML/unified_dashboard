@@ -218,5 +218,50 @@ class CapabilityAndBusinessQuestionTests(unittest.TestCase):
         self.assertIn("How many practice sessions have reps completed?", keys["total_sessions"])
 
 
+class RegisteredUsersMetricTests(unittest.TestCase):
+    """Regression for the Chinoin finding: 581 real r_user accounts, only 1
+    with any session, and the dashboard had no tile showing the true
+    roster size -- only "Active Users" (total_users), which only counts
+    reps who actually have a session. total_roster/"Registered Users" is a
+    distinct, always-present metric so every rolplay_app_sql tenant (not
+    just Chinoin) gets a real adoption-gap tile automatically, since
+    dashboard_planning.py's _heuristic() builds a KPI tile from every
+    schema.metrics entry of type count/score/rate with no per-client code."""
+
+    def _run(self, client_id: int) -> NormalizedSchema:
+        async def fake_post_json(_url, payload):
+            if "GROUP BY sim.category" in payload["sql"]:
+                return 200, {"result": "success", "data": []}
+            return 200, {"result": "success", "data": [{"scored": 0}]}
+
+        schema = NormalizedSchema(company="Test Co", slug="test-co")
+        with patch("app.agents.schema_discovery.post_json", new=AsyncMock(side_effect=fake_post_json)):
+            asyncio.run(schema_discovery._rolplay_app_schema(_svc(client_id), schema, _noop_log))
+        return schema
+
+    def test_total_roster_metric_is_discovered(self) -> None:
+        schema = self._run(37)
+        by_key = {m.key: m for m in schema.metrics}
+        self.assertIn("total_roster", by_key)
+        self.assertEqual(by_key["total_roster"].label, "Registered Users")
+        self.assertEqual(by_key["total_roster"].source_action, "r_user")
+
+    def test_total_roster_is_distinct_from_active_users(self) -> None:
+        schema = self._run(37)
+        by_key = {m.key: m for m in schema.metrics}
+        self.assertIn("total_users", by_key)
+        self.assertEqual(by_key["total_users"].label, "Active Users")
+        self.assertNotEqual(by_key["total_roster"].business_question, by_key["total_users"].business_question)
+
+    def test_total_roster_has_no_client_id_gate(self) -> None:
+        """Unlike modules/date_range/capabilities, the static metrics list
+        (total_sessions/total_users/total_roster) is added regardless of
+        whether a client_id was resolved -- it's just never fetchable
+        without one. Locks in that total_roster follows the same rule as
+        its neighbors rather than being silently skipped."""
+        schema = self._run(0)
+        self.assertIn("total_roster", {m.key for m in schema.metrics})
+
+
 if __name__ == "__main__":
     unittest.main()
