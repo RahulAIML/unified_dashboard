@@ -5,6 +5,11 @@ export interface AuthUser {
   customer_id: number
   role: 'user' | 'admin'
   created_at: string
+  /** NULL = the first-time guided tour has not been dismissed (completed or
+   *  skipped) yet, so it should auto-show once. Non-null = don't auto-show
+   *  again; "Replay guided tour" in Settings re-opens it client-side without
+   *  touching this field until it's dismissed again. */
+  onboarding_completed_at: string | null
 }
 
 export interface JwtClaims {

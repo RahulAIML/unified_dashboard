@@ -8,6 +8,8 @@ export interface AuthUser {
   full_name: string
   customer_id: number
   role: 'user' | 'admin'
+  /** NULL = the first-time guided tour hasn't been dismissed yet. */
+  onboarding_completed_at: string | null
 }
 
 interface AuthContextType {
@@ -18,6 +20,9 @@ interface AuthContextType {
   setAuthenticated: (user: AuthUser) => void
   /** Call this on logout */
   clearAuth: () => void
+  /** Optimistic local update after POST /api/onboarding/complete succeeds,
+   *  so the tour doesn't re-open on this same page without a full refetch. */
+  markOnboardingComplete: () => void
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -87,8 +92,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState({ user: null, isLoading: false, isAuthenticated: false })
   }, [])
 
+  const markOnboardingComplete = useCallback(() => {
+    setState(prev => prev.user
+      ? { ...prev, user: { ...prev.user, onboarding_completed_at: new Date().toISOString() } }
+      : prev)
+  }, [])
+
   return (
-    <AuthContext.Provider value={{ ...state, setAuthenticated, clearAuth }}>
+    <AuthContext.Provider value={{ ...state, setAuthenticated, clearAuth, markOnboardingComplete }}>
       {children}
     </AuthContext.Provider>
   )

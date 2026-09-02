@@ -240,6 +240,27 @@ export const translations = {
     journeyPointsImprovement: 'point improvement',
     journeyTimelinePre:      'From ',
     journeyTimelinePost:     ' until ',
+
+    // ── First-time guided tour ────────────────────────────────
+    onboardingStepLabel:        'Step {current} of {total}',
+    onboardingSkip:             'Skip tour',
+    onboardingBack:             'Back',
+    onboardingNext:             'Next',
+    onboardingCloseAria:        'Close guided tour',
+    onboardingWelcomeTitle:     'Welcome to {platform}',
+    onboardingWelcomeBody:      'This is where you track your learning, practice, and performance, all in one place. Here is how it works.',
+    onboardingDiagnosticTitle:  'Start with your Diagnostic',
+    onboardingDiagnosticBody:   'First, discover your current level. Your results create your baseline and help personalize your learning journey.',
+    onboardingLearnTitle:       'Learn',
+    onboardingLearnBody:        'Build your knowledge with structured courses in the LMS, at your own pace.',
+    onboardingPracticeTitle:    'Practice with your Coach',
+    onboardingPracticeBody:     'Get real-time feedback on real scenarios with Master Coach before you are evaluated.',
+    onboardingSimulateTitle:    'Simulate',
+    onboardingSimulateBody:     'Apply what you have learned in realistic conversations with the Simulator.',
+    onboardingProgressTitle:    'Measure your progress',
+    onboardingProgressBody:     'Track how far you have come from your baseline through certification and ongoing sessions.',
+    onboardingStartDiagnostic:  'Start Diagnostic',
+
     // --- LMS (course progress) ---
     lmsNotConfigured:      'No LMS connected',
     lmsNotConfiguredHint:  'This client has no learning platform linked, so there is no course data to show.',
@@ -579,6 +600,8 @@ export const translations = {
     sbMessageTypesSub:      'Distribution of conversation types',
 
     // ── Settings page ─────────────────────────────────────────
+    settingsReplayTour:       'Replay guided tour',
+    settingsReplayTourDesc:   'Watch the platform walkthrough again from the beginning.',
     settingsBrandingSub:      'Customize your dashboard branding',
     settingsPlatformName:     'Platform Name',
     settingsPlatformNameDesc: 'Customize the name displayed in the header and navigation',
@@ -1304,6 +1327,27 @@ export const translations = {
     journeyPointsImprovement: 'puntos de mejora',
     journeyTimelinePre:      'Desde ',
     journeyTimelinePost:     ' hasta ',
+
+    // ── Recorrido guiado (primer inicio de sesión) ────────────
+    onboardingStepLabel:        'Paso {current} de {total}',
+    onboardingSkip:             'Omitir recorrido',
+    onboardingBack:             'Atrás',
+    onboardingNext:             'Siguiente',
+    onboardingCloseAria:        'Cerrar recorrido guiado',
+    onboardingWelcomeTitle:     'Bienvenido a {platform}',
+    onboardingWelcomeBody:      'Aquí puedes seguir tu aprendizaje, práctica y desempeño, todo en un solo lugar. Así es como funciona.',
+    onboardingDiagnosticTitle:  'Comienza con tu Diagnóstico',
+    onboardingDiagnosticBody:   'Primero descubre tu nivel actual. Tus resultados crean tu línea base y ayudan a personalizar tu recorrido de aprendizaje.',
+    onboardingLearnTitle:       'Aprende',
+    onboardingLearnBody:        'Refuerza tus conocimientos con cursos estructurados en el LMS, a tu propio ritmo.',
+    onboardingPracticeTitle:    'Practica con tu Coach',
+    onboardingPracticeBody:     'Recibe retroalimentación en tiempo real sobre escenarios reales con Master Coach antes de ser evaluado.',
+    onboardingSimulateTitle:    'Simula',
+    onboardingSimulateBody:     'Aplica lo aprendido en conversaciones realistas con el Simulador.',
+    onboardingProgressTitle:    'Mide tu progreso',
+    onboardingProgressBody:     'Da seguimiento a tu evolución desde tu línea base a través de la certificación y sesiones continuas.',
+    onboardingStartDiagnostic:  'Comenzar Diagnóstico',
+
     // --- LMS (progreso de cursos) ---
     lmsNotConfigured:      'Sin LMS conectado',
     lmsNotConfiguredHint:  'Este cliente no tiene una plataforma de aprendizaje vinculada, por lo que no hay datos de cursos que mostrar.',
@@ -1641,6 +1685,8 @@ export const translations = {
     sbMessageTypesSub:      'Distribución de tipos de conversación',
 
     // ── Settings page ─────────────────────────────────────────
+    settingsReplayTour:       'Repetir recorrido guiado',
+    settingsReplayTourDesc:   'Vuelve a ver el recorrido de la plataforma desde el principio.',
     settingsBrandingSub:      'Personaliza el diseño de tu panel',
     settingsPlatformName:     'Nombre de Plataforma',
     settingsPlatformNameDesc: 'Personaliza el nombre que se muestra en el encabezado y navegación',

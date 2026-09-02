@@ -100,6 +100,7 @@ export async function POST(request: NextRequest) {
         full_name: user.full_name,
         customer_id: customerId,
         role: user.role,
+        onboarding_completed_at: user.onboarding_completed_at,
       },
     })
 
