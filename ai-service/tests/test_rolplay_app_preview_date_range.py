@@ -309,6 +309,55 @@ class TrendSessionCountTests(unittest.TestCase):
         self.assertNotIn("sc IS NOT NULL", outer_query)
 
 
+class RegisteredUsersTests(unittest.TestCase):
+    """Regression for the Chinoin finding: 581 real r_user accounts, only 1
+    with any session -- total_roster is a dedicated, unfiltered roster
+    count, deliberately never joined to r_user_session or bounded by the
+    date range/category filters every other query in this connector uses
+    (those describe SESSIONS, not account existence)."""
+
+    def test_total_roster_query_is_unfiltered_by_date_or_category(self):
+        calls: list[str] = []
+
+        async def fake_sql(_url, payload):
+            calls.append(payload["sql"])
+            return 200, {"data": [{"n": 581}]}
+
+        widget = _widget(WidgetType.kpi_tile, "tile_total_roster", "total_roster")
+        with patch("app.preview_fetch.post_json", new=AsyncMock(side_effect=fake_sql)):
+            pv = _run(fetch_widget(_cfg(), widget))
+
+        self.assertEqual(len(calls), 1)
+        sql = calls[0]
+        self.assertIn("SELECT COUNT(*) n FROM r_user WHERE client_id=29", sql)
+        self.assertNotIn("BETWEEN", sql)
+        self.assertNotIn("r_user_session", sql)
+        self.assertTrue(pv.ok)
+        self.assertEqual(pv.value, 581)
+
+    def test_zero_registered_users_reports_not_ok(self):
+        async def fake_sql(_url, _payload):
+            return 200, {"data": [{"n": 0}]}
+
+        widget = _widget(WidgetType.kpi_tile, "tile_total_roster", "total_roster")
+        with patch("app.preview_fetch.post_json", new=AsyncMock(side_effect=fake_sql)):
+            pv = _run(fetch_widget(_cfg(), widget))
+
+        self.assertFalse(pv.ok)
+        self.assertEqual(pv.value, 0)
+
+    def test_no_rows_back_reports_zero_not_a_crash(self):
+        async def fake_sql(_url, _payload):
+            return 200, {"data": []}
+
+        widget = _widget(WidgetType.kpi_tile, "tile_total_roster", "total_roster")
+        with patch("app.preview_fetch.post_json", new=AsyncMock(side_effect=fake_sql)):
+            pv = _run(fetch_widget(_cfg(), widget))
+
+        self.assertFalse(pv.ok)
+        self.assertEqual(pv.value, 0)
+
+
 class PrevPeriodBoundaryTests(unittest.TestCase):
     """Regression: _prev_period used to return prev_to == frm exactly, and
     _sql_date_clause pads a date-only bound to a full day (00:00:00..
