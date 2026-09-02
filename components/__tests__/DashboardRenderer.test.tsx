@@ -588,6 +588,21 @@ describe('ReportsTable', () => {
     expect(screen.getAllByText('Reprobado').length).toBeGreaterThan(0)
   })
 
+  it('translates the "status" column\'s Active/Disabled data values (Organization page roster)', () => {
+    // Same fixed-vocabulary pattern as "result" above -- ai-service's
+    // preview_fetch.py emits literal 'Active'/'Disabled' from
+    // r_user.disabled for the Organization page's registered-users roster.
+    const statusRows = [
+      { name: 'Claudia Salinas', email: 'claudia@chinoin.com', status: 'Active' },
+      { name: 'Tester Chinoin', email: 'tester@chinoin.com', status: 'Disabled' },
+    ]
+    render(<ReportsTable rows={statusRows} searchable exportable filenamePrefix="organization" />)
+    expect(screen.queryByText('Active')).toBeNull()
+    expect(screen.queryByText('Disabled')).toBeNull()
+    expect(screen.getByText('Activo')).toBeInTheDocument()
+    expect(screen.getByText('Deshabilitado')).toBeInTheDocument()
+  })
+
   it('paginates real rows (25 per page)', () => {
     render(<ReportsTable rows={rows} searchable exportable filenamePrefix="reports" />)
     expect(screen.getAllByRole('row')).toHaveLength(1 + 25) // header + 25 body rows

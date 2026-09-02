@@ -10,7 +10,7 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useT, useLangStore } from '@/lib/lang-store'
-import { translateGeneratedText, translateColumnHeader, translateResultValue, translateLegend } from '@/lib/generated-content-i18n'
+import { translateGeneratedText, translateColumnHeader, translateResultValue, translateStatusValue, translateLegend } from '@/lib/generated-content-i18n'
 import { motion } from 'framer-motion'
 import { PlayCircle, Target, TrendingUp, TrendingDown, Minus, BadgeCheck, Trophy, AlertTriangle } from 'lucide-react'
 import {
@@ -680,7 +680,7 @@ export function MiniTable({ rows, idField }: { rows: Record<string, unknown>[]; 
             const id = idField ? r[idField] : null
             return (
               <tr key={i} className="border-t border-border/40">
-                {cols.map(c => <td key={c} className="py-1 pr-4 text-foreground">{c === 'result' ? translateResultValue(fmt(r[c]), lang) : fmt(r[c])}</td>)}
+                {cols.map(c => <td key={c} className="py-1 pr-4 text-foreground">{c === 'result' ? translateResultValue(fmt(r[c]), lang) : c === 'status' ? translateStatusValue(fmt(r[c]), lang) : fmt(r[c])}</td>)}
                 {idField && (
                   <td className="py-1 pr-4">
                     {id !== null && id !== undefined && (
@@ -761,7 +761,7 @@ export function ReportsTable({
               data={filtered}
               columns={allCols.map(c => ({
                 header: translateColumnHeader(c, lang),
-                value: (r: Record<string, unknown>) => c === 'result' ? translateResultValue(fmt(r[c]), lang) : r[c],
+                value: (r: Record<string, unknown>) => c === 'result' ? translateResultValue(fmt(r[c]), lang) : c === 'status' ? translateStatusValue(fmt(r[c]), lang) : r[c],
               }))}
               filename={csvFilename(filenamePrefix)}
               minWidth="min-w-[90px]"
@@ -782,7 +782,7 @@ export function ReportsTable({
               const id = idField ? r[idField] : null
               return (
                 <tr key={i} className="border-t border-border/40">
-                  {cols.map(c => <td key={c} className="py-1 pr-4 text-foreground">{c === 'result' ? translateResultValue(fmt(r[c]), lang) : fmt(r[c])}</td>)}
+                  {cols.map(c => <td key={c} className="py-1 pr-4 text-foreground">{c === 'result' ? translateResultValue(fmt(r[c]), lang) : c === 'status' ? translateStatusValue(fmt(r[c]), lang) : fmt(r[c])}</td>)}
                   {idField && (
                     <td className="py-1 pr-4">
                       {id !== null && id !== undefined && (
