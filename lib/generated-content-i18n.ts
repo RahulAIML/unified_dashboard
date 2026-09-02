@@ -40,6 +40,7 @@ const GENERATED_ES: Record<string, string> = {
   'Activity Tracking': 'Seguimiento de Actividad',
   'Practice Sessions': 'Sesiones de Práctica',
   'Coach Analytics': 'Analítica de Coach',
+  'Organization': 'Organización',
 
   // ── Row titles (dashboard_planning.py) ──────────────────────────────────
   'Leaderboard': 'Tabla de Posiciones',
@@ -47,10 +48,12 @@ const GENERATED_ES: Record<string, string> = {
   'Commercial Effectiveness & Impact': 'Efectividad Comercial e Impacto',
   'Per-Simulator Breakdown': 'Desglose por Simulador',
   'All Sessions': 'Todas las Sesiones',
+  'Full Roster': 'Plantilla Completa',
 
   // ── Widget titles shared across every connector (schema_discovery.py) ──
   'Total Sessions': 'Sesiones Totales',
   'Active Users': 'Usuarios Activos',
+  'Registered Users': 'Usuarios Registrados',
   'Average Score': 'Puntuación Promedio',
   'Pass Rate': 'Tasa de Aprobación',
   'Score Trend': 'Tendencia de Puntuación',
@@ -104,6 +107,7 @@ const GENERATED_ES: Record<string, string> = {
   // ── Business questions (subtitles) — schema_discovery.py, rolplay_app_sql ─
   'How many practice sessions have reps completed?': '¿Cuántas sesiones de práctica han completado los representantes?',
   'How many reps are actively using the platform?': '¿Cuántos representantes usan la plataforma activamente?',
+  'How many people have an account on this platform, whether or not they\'ve started using it?': '¿Cuántas personas tienen una cuenta en esta plataforma, hayan empezado a usarla o no?',
   'What % of enrolled reps have started at least one session?': '¿Qué % de representantes inscritos ha iniciado al menos una sesión?',
   'How many sessions run per active week, on average?': '¿Cuántas sesiones se ejecutan por semana activa, en promedio?',
   'What % of reps used the platform in the last 30 days?': '¿Qué % de representantes usó la plataforma en los últimos 30 días?',
@@ -124,6 +128,7 @@ const GENERATED_ES: Record<string, string> = {
   'Which simulators are used most, and how do they perform?': '¿Qué simuladores se usan más y cómo se desempeñan?',
   'Which individual sessions were run, by whom, and with what result?': '¿Qué sesiones individuales se ejecutaron, por quién y con qué resultado?',
   'How many sessions run per day, and how many pass?': '¿Cuántas sesiones se ejecutan por día y cuántas aprueban?',
+  'Who has an account on this platform, whether or not they\'ve started using it?': '¿Quién tiene una cuenta en esta plataforma, haya empezado a usarla o no?',
 }
 
 // "{X} — detail" / "{X} — Share" composite titles (dashboard_planning.py's
@@ -189,6 +194,11 @@ const COLUMN_HEADER_ES: Record<string, string> = {
   module: 'Módulo',
   label: 'Etiqueta',
   phase: 'Fase',
+  department: 'Departamento',
+  designation: 'Puesto',
+  created_on: 'Fecha de Registro',
+  last_loggedin: 'Último Inicio de Sesión',
+  status: 'Estado',
 }
 
 export function translateColumnHeader(column: string, lang: Lang): string {
@@ -207,6 +217,16 @@ const RESULT_VALUE_ES: Record<string, string> = { Passed: 'Aprobado', Failed: 'R
 
 export function translateResultValue(value: string, lang: Lang): string {
   if (lang === 'es' && RESULT_VALUE_ES[value]) return RESULT_VALUE_ES[value]
+  return value
+}
+
+// Same closed-vocabulary pattern as RESULT_VALUE_ES above, for the
+// Organization page's roster "status" column (ai-service's preview_fetch.py
+// emits literal 'Active'/'Disabled' from r_user.disabled).
+const STATUS_VALUE_ES: Record<string, string> = { Active: 'Activo', Disabled: 'Deshabilitado' }
+
+export function translateStatusValue(value: string, lang: Lang): string {
+  if (lang === 'es' && STATUS_VALUE_ES[value]) return STATUS_VALUE_ES[value]
   return value
 }
 

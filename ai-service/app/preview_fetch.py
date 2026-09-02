@@ -68,6 +68,16 @@ _BEST_PERFORMERS_LIMIT = 10
 # alongside a total) -- no new frontend component needed.
 DAILY_PASSFAIL_ID = "chart_daily_pass_fail"
 
+# Must match dashboard_planning.py's _auto_registered_users_widget id — the
+# full r_user roster (name/email/department/designation/created/last login),
+# not aggregated by anything. Distinct from every other table above: those
+# all describe SESSIONS; this one describes ACCOUNTS, so it deliberately
+# skips the r_user_session join and the date-range/category filters
+# entirely (found live on Chinoin: 581 accounts, only 1 with a session --
+# a manager asking "who are the other 580 people?" had nowhere to look).
+REGISTERED_USERS_TABLE_ID = "table_registered_users"
+_REGISTERED_USERS_ROW_LIMIT = 1000
+
 
 def _pass_rate_legend(cfg: DashboardConfig) -> str:
     return f"Passing threshold: {cfg.pass_threshold} pts"
@@ -864,6 +874,30 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
             "avg_score": float(r["avg_score"]) if r.get("avg_score") is not None else 0.0,
             "pass_rate": None if cfg.has_no_passing_criteria else
                 (round(100 * int(r.get("passed") or 0) / int(r["scored"]), 1) if r.get("scored") else 0.0),
+        } for r in rows]
+        return WidgetPreview(widget_id=w.id, ok=bool(out), rows=out)
+
+    # ── Organization: full registered roster, not aggregated by anything ──
+    # Must be checked before the generic table branch below claims every
+    # table-typed widget. Deliberately no join to r_user_session and no
+    # date-range/category filter -- an account's existence isn't scoped to
+    # when it happened to run a session. NEVER select u.password.
+    if w.id.endswith(REGISTERED_USERS_TABLE_ID):
+        rows = await _rolplay_app_sql(
+            "SELECT u.name name, u.email email, u.department department, "
+            "u.designation designation, u.created_on created_on, "
+            "u.last_loggedin last_loggedin, u.disabled disabled "
+            f"FROM r_user u WHERE u.client_id={cid} "
+            f"ORDER BY u.created_on DESC LIMIT {_REGISTERED_USERS_ROW_LIMIT}"
+        )
+        out = [{
+            "name": (r.get("name") or "").strip() or None,
+            "email": r.get("email"),
+            "department": (r.get("department") or "").strip() or None,
+            "designation": (r.get("designation") or "").strip() or None,
+            "created_on": str(r.get("created_on"))[:10] if r.get("created_on") else None,
+            "last_loggedin": str(r.get("last_loggedin"))[:10] if r.get("last_loggedin") else None,
+            "status": "Disabled" if int(r.get("disabled") or 0) else "Active",
         } for r in rows]
         return WidgetPreview(widget_id=w.id, ok=bool(out), rows=out)
 

@@ -18,6 +18,7 @@ from ..preview_fetch import (
     COMMERCIAL_DOMAIN_ID,
     DAILY_PASSFAIL_ID,
     MASTERY_DISTRIBUTION_ID,
+    REGISTERED_USERS_TABLE_ID,
     TOP_OPPORTUNITIES_ID,
     TOP_STRENGTHS_ID,
 )
@@ -164,6 +165,9 @@ def _assemble_pages(
     ranking_page = _ranking_page(schema)
     if ranking_page:
         pages.append(ranking_page)
+    organization_page = _organization_page(schema)
+    if organization_page:
+        pages.append(organization_page)
     activities_page = _activities_page(schema)
     if activities_page:
         pages.append(activities_page)
@@ -200,6 +204,41 @@ def _ranking_page(schema: NormalizedSchema) -> DashboardPage | None:
     )
     return DashboardPage(id="ranking", title="Ranking", rows=[
         DashboardRow(id="ranking_table", title="Leaderboard", widgets=[widget]),
+    ])
+
+
+def _organization_page(schema: NormalizedSchema) -> DashboardPage | None:
+    """A dedicated Organization page listing the tenant's full registered
+    roster (name, email, department, designation, joined date, last login,
+    account status) -- every real r_user row, not just the ones with a
+    session.
+
+    Found live on Chinoin: the roster is 581 real accounts, only 1 with any
+    session, and until now nothing on the dashboard showed WHO those 581
+    people are, only the bare count (total_roster/"Registered Users" on
+    Overview). A manager needing to know who hasn't started practicing yet
+    had nowhere to look.
+
+    rolplay_app_sql ONLY, same reason as every other auto-page here: it's
+    the one connector with a verified r_user roster shape for this.
+    """
+    if not any(m.key == "total_roster" for m in schema.metrics):
+        return None
+    src = next(m for m in schema.metrics if m.key == "total_roster")
+    widget = WidgetConfig(
+        id=f"organization_{REGISTERED_USERS_TABLE_ID}", type=WidgetType.table, title="Registered Users",
+        source_kind=src.source_kind, source_action="r_user", span=4,
+        # Same reason as _reports_page's table_reports: a full roster (581
+        # rows for Chinoin) is unusable in MiniTable's unpaginated 10-row/
+        # 5-column preview -- paginated=True routes DashboardRenderer.tsx to
+        # ReportsTable instead, which shows every column and supports
+        # search/CSV export, same as the Reports page already does for
+        # individual sessions.
+        paginated=True, searchable=True, exportable=True,
+        business_question="Who has an account on this platform, whether or not they've started using it?",
+    )
+    return DashboardPage(id="organization", title="Organization", rows=[
+        DashboardRow(id="organization_table", title="Full Roster", widgets=[widget]),
     ])
 
 
