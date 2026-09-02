@@ -317,7 +317,8 @@ export interface BusinessLinesApiResponse {
   data: BusinessLineRow[]
 }
 
-// ── Organization (pharma-sim tenants with a real members/admins source) ──────
+// ── Organization (pharma-sim tenants with a real members/admins source, and
+// rolplay_app_sql tenants with a real r_user roster + per-user activity) ─────
 
 export interface OrgMemberRow {
   id:          number
@@ -325,6 +326,22 @@ export interface OrgMemberRow {
   email:       string
   designation: string | null
   adminId:     number | null
+  // Real per-user account + activity fields -- populated only for connectors
+  // that can compute them (rolplay_app_sql today, via lib/bridge-rolplay-
+  // app.ts's rolplayAppOrganization). Left undefined for pharma's admin/
+  // member hierarchy, which has no session data of its own to report here --
+  // app/organization/page.tsx renders each one only when present, so pharma's
+  // existing rendering is unchanged.
+  department?:    string | null
+  status?:        'active' | 'disabled'
+  sessions?:      number
+  /** Which dashboard modules (Master Coach/Practice Simulator/Certification)
+   *  this user has a real session in, most-recent activity first. Empty for
+   *  a registered account that has never run a session. */
+  modulesUsed?:   string[]
+  lastSessionAt?: string | null
+  lastLoginAt?:   string | null
+  createdOn?:     string | null
 }
 
 export interface OrgAdminRow {
