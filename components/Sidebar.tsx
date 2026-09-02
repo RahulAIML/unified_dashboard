@@ -138,10 +138,17 @@ export function Sidebar() {
     // since the leaderboard itself is universal, not connector-specific.
     ...((access?.hasCoachData || access?.hasPharmaAccess || access?.hasBancoAccess || access?.hasRolplayAppAccess)
       ? [{ href: "/ranking", label: t.navRanking, icon: Trophy }] : []),
-    // Conversational is pharma-only (objection-handling data). Capability-gated
-    // so it appears exactly for the tenants that have it — no hardcoded list.
+    // Conversational is pharma-only (objection-handling data).
     ...(access?.hasPharmaAccess ? [
       { href: "/conversational", label: t.navConversational, icon: MessageSquare },
+    ] : []),
+    // Organization: real roster (+ per-user activity for rolplay-app) —
+    // /api/dashboard/organization has a real branch for both pharma (admin/
+    // member hierarchy) and rolplay-app (r_user roster, see
+    // lib/bridge-rolplay-app.ts's rolplayAppOrganization) tenants. Previously
+    // pharma-only, which left every rolplay-app tenant (e.g. Chinoin, 581
+    // real registered accounts) with no way to see their own roster at all.
+    ...(access?.hasPharmaAccess || access?.hasRolplayAppAccess ? [
       { href: "/organization",   label: t.navOrganization,   icon: Building2     },
     ] : []),
     // Business Segments: previously shown for every pharma-sim tenant

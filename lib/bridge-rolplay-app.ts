@@ -27,6 +27,7 @@ import type {
   OverviewApiResponse, ResultsApiResponse, EvaluationApiRow,
   TrendsApiResponse, ApiTrendPoint, UsecaseBreakdownApiResponse, UsecaseApiRow,
   BestPerformersApiResponse, BestPerformerRow,
+  OrganizationApiResponse, OrgMemberRow,
 } from './types'
 import { getOrSetCache } from './cache'
 import { computePassRate } from './kpi-builder'
@@ -948,6 +949,92 @@ async function _rolplayAppBestPerformersImpl(
     }
   })
   return { data }
+}
+
+// Inverse of SOLUTION_TO_CATEGORY -- turns r_simulator.category values back
+// into the dashboard's own module names, so "modules used" reads the same
+// vocabulary as the sidebar/journey (coach/simulator/certification), not a
+// raw DB category string a viewer has no context for.
+const CATEGORY_TO_SOLUTION: Record<string, string> = Object.fromEntries(
+  Object.entries(SOLUTION_TO_CATEGORY).map(([solution, cat]) => [cat, solution]),
+)
+
+/**
+ * Full registered roster for one rolplay-app tenant, each user annotated with
+ * their real activity: session count, average score, last session date, and
+ * which modules they've actually used -- all-time, deliberately unbounded by
+ * the dashboard's date-range filter, since "is this account real / has it
+ * ever done anything" isn't a time-windowed question.
+ *
+ * Found live on Chinoin: 581 real r_user rows, only 1 with any session --
+ * app/organization/page.tsx previously only rendered for pharma tenants
+ * (a different admin/member hierarchy with no session data of its own), so a
+ * rolplay-app tenant's Organization nav item never appeared at all and a
+ * manager had no way to see who the OTHER 580 registered people are, or
+ * confirm the 1 active user's own activity.
+ */
+export async function rolplayAppOrganization(clientId: number): Promise<OrganizationApiResponse> {
+  return getOrSetCache(cacheKey('organization', clientId), CACHE_TTL_SECONDS, () => _rolplayAppOrganizationImpl(clientId))
+}
+
+async function _rolplayAppOrganizationImpl(clientId: number): Promise<OrganizationApiResponse> {
+  const cid = tenantId(clientId)
+
+  const users = await remoteSelect<{
+    id: number | string; name: string | null; email: string
+    department: string | null; designation: string | null
+    created_on: string | null; last_loggedin: string | null; disabled: number | string
+  }>(
+    `SELECT u.ID AS id, u.name, u.email, u.department, u.designation,
+            u.created_on, u.last_loggedin, u.disabled
+       FROM r_user u
+      WHERE u.client_id = ${cid}
+      ORDER BY u.created_on DESC`,
+  )
+
+  // Deliberately its own query, all-time, never joined to the roster query
+  // above (which must return EVERY registered account, including the ones
+  // with zero rows here) -- a plain JOIN would silently drop every user who
+  // has never run a session, which is the exact population this page exists
+  // to surface.
+  const activity = await remoteSelect<{
+    user_id: number | string; sessions: number | string
+    avg: string | null; last_session: string | null; categories: string | null
+  }>(
+    `SELECT s.user_id, COUNT(*) AS sessions, ROUND(AVG(${SCORE_SQL}),2) AS avg,
+            MAX(s.date_created) AS last_session,
+            GROUP_CONCAT(DISTINCT sim.category) AS categories
+       FROM r_user_session s
+       JOIN r_user u ON u.ID = s.user_id
+       LEFT JOIN r_simulator sim ON sim.ID = s.simulator_id
+      WHERE u.client_id = ${cid}
+      GROUP BY s.user_id`,
+  )
+  const byUser = new Map(activity.map(a => [Number(a.user_id), a]))
+
+  const members: OrgMemberRow[] = users.map(u => {
+    const act = byUser.get(Number(u.id))
+    const categories = act?.categories ? act.categories.split(',').filter(Boolean) : []
+    const modulesUsed = Array.from(new Set(
+      categories.map(c => CATEGORY_TO_SOLUTION[c.toUpperCase()]).filter((s): s is string => !!s),
+    ))
+    return {
+      id: Number(u.id),
+      fullName: u.name?.trim() || '',
+      email: u.email,
+      designation: u.designation?.trim() || null,
+      adminId: null,
+      department: u.department?.trim() || null,
+      status: Number(u.disabled) ? 'disabled' : 'active',
+      sessions: act ? Number(act.sessions) : 0,
+      modulesUsed,
+      lastSessionAt: act?.last_session ?? null,
+      lastLoginAt: u.last_loggedin,
+      createdOn: u.created_on,
+    }
+  })
+
+  return { totalMembers: members.length, totalAdmins: 0, totalSupervisors: 0, members, admins: [] }
 }
 
 // ── Cesar KPIs (Sugerencia de KPI's Cesar.xlsx) ──────────────────────────────
