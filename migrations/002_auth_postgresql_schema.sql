@@ -40,7 +40,12 @@ CREATE TABLE IF NOT EXISTS users (
   -- Metadata
   last_login      TIMESTAMPTZ,
   created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-  updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+  updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+
+  -- First-time guided tour: NULL = not yet dismissed (completed or skipped),
+  -- so it auto-shows once. See app/api/auth/setup/route.ts for the actual
+  -- (idempotent, one-time-backfilled) migration this file only documents.
+  onboarding_completed_at TIMESTAMPTZ
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_email      ON users (email);

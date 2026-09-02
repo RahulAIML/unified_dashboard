@@ -29,6 +29,12 @@ interface UserRow {
   created_at:     Date | string
   is_active:      boolean
   last_login:     Date | string | null
+  onboarding_completed_at: Date | string | null
+}
+
+function toIso(v: Date | string | null): string | null {
+  if (v == null) return null
+  return typeof v === 'string' ? v : v.toISOString()
 }
 
 function rowToUser(row: UserRow): AuthUser {
@@ -41,6 +47,7 @@ function rowToUser(row: UserRow): AuthUser {
     created_at:     typeof row.created_at === 'string'
                       ? row.created_at
                       : row.created_at.toISOString(),
+    onboarding_completed_at: toIso(row.onboarding_completed_at ?? null),
   }
 }
 
@@ -52,7 +59,7 @@ function rowToUser(row: UserRow): AuthUser {
  */
 export async function findUserByEmail(email: string): Promise<AuthUser | null> {
   const rows = await authQuery<UserRow>(
-    `SELECT id, email, full_name, company_domain, customer_id, role, created_at, is_active, last_login
+    `SELECT id, email, full_name, company_domain, customer_id, role, created_at, is_active, last_login, onboarding_completed_at
        FROM users
       WHERE email = $1
       LIMIT 1`,
@@ -67,13 +74,25 @@ export async function findUserByEmail(email: string): Promise<AuthUser | null> {
  */
 export async function findUserById(userId: number): Promise<AuthUser | null> {
   const rows = await authQuery<UserRow>(
-    `SELECT id, email, full_name, company_domain, customer_id, role, created_at, is_active, last_login
+    `SELECT id, email, full_name, company_domain, customer_id, role, created_at, is_active, last_login, onboarding_completed_at
        FROM users
       WHERE id = $1
       LIMIT 1`,
     [userId]
   )
   return rows.length > 0 ? rowToUser(rows[0]) : null
+}
+
+/**
+ * Marks the first-time guided tour dismissed (completed OR skipped -- both
+ * cases behave identically: never auto-show again). Idempotent: calling it
+ * again (e.g. after a replay from Settings) just refreshes the timestamp.
+ */
+export async function completeOnboarding(userId: number): Promise<void> {
+  await authQuery(
+    `UPDATE users SET onboarding_completed_at = NOW(), updated_at = NOW() WHERE id = $1`,
+    [userId]
+  )
 }
 
 /**
@@ -93,7 +112,7 @@ export async function createUser(
        (email, password_hash, full_name, company_domain, customer_id, role, is_active, created_at, updated_at)
      VALUES
        ($1, $2, $3, $4, $5, $6, TRUE, NOW(), NOW())
-     RETURNING id, email, full_name, company_domain, customer_id, role, created_at, is_active, last_login`,
+     RETURNING id, email, full_name, company_domain, customer_id, role, created_at, is_active, last_login, onboarding_completed_at`,
     [email.toLowerCase().trim(), passwordHash, fullName.trim(), companyDomain, customerId, role]
   )
 
@@ -162,7 +181,7 @@ export async function setUserRole(email: string, role: 'user' | 'admin'): Promis
     `UPDATE users
         SET role = $2, updated_at = NOW()
       WHERE email = $1 AND is_active = TRUE
-      RETURNING id, email, full_name, company_domain, customer_id, role, created_at, is_active, last_login`,
+      RETURNING id, email, full_name, company_domain, customer_id, role, created_at, is_active, last_login, onboarding_completed_at`,
     [email.toLowerCase().trim(), role],
   )
   return rows.length > 0 ? rowToUser(rows[0]) : null
@@ -185,7 +204,7 @@ export async function promoteFirstAdmin(email: string): Promise<AuthUser | null>
         AND NOT EXISTS (SELECT 1 FROM users WHERE role = 'admin')
      RETURNING target.id, target.email, target.full_name, target.company_domain,
                target.customer_id, target.role, target.created_at, target.is_active,
-               target.last_login`,
+               target.last_login, target.onboarding_completed_at`,
     [email.toLowerCase().trim()],
   )
   return rows.length > 0 ? rowToUser(rows[0]) : null

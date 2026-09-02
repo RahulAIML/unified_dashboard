@@ -1,13 +1,14 @@
 'use client'
 
 import { useRef, useState, useEffect, useCallback } from 'react'
-import { Upload, RotateCcw, Check, Save, Palette, ChevronDown, ChevronUp, Sparkles } from 'lucide-react'
+import { Upload, RotateCcw, Check, Save, Palette, ChevronDown, ChevronUp, Sparkles, PlayCircle } from 'lucide-react'
 import { DashboardHeader } from '@/components/DashboardHeader'
 import { useClientBrand } from '@/lib/hooks/useClientBrand'
 import { usePlatformName } from '@/lib/hooks/usePlatformName'
 import { cn } from '@/lib/utils'
 import { DEFAULT_BRANDING_SETTINGS, type BrandingSettings } from '@/lib/branding'
 import { useT } from '@/lib/lang-store'
+import { useOnboardingStore } from '@/lib/onboarding-store'
 
 // ── Theme presets ─────────────────────────────────────────────────────────────
 
@@ -89,6 +90,7 @@ export default function SettingsPage() {
   const brand       = useClientBrand()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { platformName, setPlatformName, isLoaded: platformNameLoaded } = usePlatformName()
+  const openOnboardingTour = useOnboardingStore(s => s.open)
 
   // Local draft state (doesn't auto-save)
   const [draft,     setDraft]     = useState<BrandingSettings | null>(null)
@@ -231,6 +233,24 @@ export default function SettingsPage() {
       <DashboardHeader title={t.settingsTitle} subtitle={t.settingsBrandingSub} />
 
       <div className="px-4 sm:px-6 py-6 max-w-2xl space-y-6">
+
+        {/* ── Guided tour replay ────────────────────────────────────────────── */}
+        <section className="rounded-[16px] border border-border/60 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)] overflow-hidden">
+          <div className="h-[3px] bg-gradient-to-r from-primary to-accent" />
+          <div className="p-5 flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <h2 className="text-sm font-semibold">{t.settingsReplayTour}</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">{t.settingsReplayTourDesc}</p>
+            </div>
+            <button
+              onClick={() => openOnboardingTour()}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-border bg-muted hover:bg-muted/70 text-sm font-semibold transition-colors shrink-0"
+            >
+              <PlayCircle className="w-4 h-4" />
+              {t.settingsReplayTour}
+            </button>
+          </div>
+        </section>
 
         {/* ── Platform Name ─────────────────────────────────────────────────── */}
         <section className="rounded-[16px] border border-border/60 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)] overflow-hidden">

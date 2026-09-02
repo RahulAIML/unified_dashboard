@@ -86,6 +86,33 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // First-time guided tour: NULL = not yet dismissed (completed or
+    // skipped), so it auto-shows once. Backfill runs ONLY the very first
+    // time this column is added (checked before the ALTER, since ADD COLUMN
+    // IF NOT EXISTS is itself idempotent) -- an unconditional
+    // "WHERE onboarding_completed_at IS NULL" backfill would incorrectly
+    // re-stamp genuinely new users (who are also NULL) as already toured if
+    // this endpoint is ever re-run later for an unrelated table.
+    const existing = await authExec(`
+      SELECT column_name FROM information_schema.columns
+       WHERE table_name = 'users' AND column_name = 'onboarding_completed_at'
+    `)
+    const columnAlreadyExisted = existing.rows.length > 0
+    await authExec(`
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS onboarding_completed_at TIMESTAMPTZ
+    `)
+    if (!columnAlreadyExisted) {
+      // Every account that already exists at migration time has necessarily
+      // "already used the platform" -- must not suddenly see the tour.
+      await authExec(`UPDATE users SET onboarding_completed_at = NOW() WHERE onboarding_completed_at IS NULL`)
+    }
+    steps.onboarding_column = 'created or already exists ✓'
+  } catch (err) {
+    steps.onboarding_column = `FAILED: ${(err as Error).message}`
+  }
+
+  try {
     await authExec(`CREATE INDEX IF NOT EXISTS idx_users_email       ON users (email)`)
     await authExec(`CREATE INDEX IF NOT EXISTS idx_users_customer_id ON users (customer_id)`)
     steps.users_indexes = 'created or already exist ✓'
