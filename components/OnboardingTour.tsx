@@ -18,7 +18,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
+import { useReducedMotion } from "framer-motion"
 import { X, Check, Sparkles, Target, BookOpen, BrainCircuit, Gamepad2, Trophy, ChevronLeft, ChevronRight } from "lucide-react"
 import { useT } from "@/lib/lang-store"
 import { useAuthContext } from "@/components/AuthProvider"
@@ -119,13 +119,19 @@ export function OnboardingTour() {
   }, [close, markOnboardingComplete, router])
 
   const goNext = useCallback(() => {
-    setDirection(1)
-    setStep(s => Math.min(LAST_STEP, s + 1))
+    setStep(s => {
+      if (s >= LAST_STEP) return s
+      setDirection(1)
+      return s + 1
+    })
   }, [])
 
   const goBack = useCallback(() => {
-    setDirection(-1)
-    setStep(s => Math.max(0, s - 1))
+    setStep(s => {
+      if (s <= 0) return s
+      setDirection(-1)
+      return s - 1
+    })
   }, [])
 
   // Keyboard support: Escape skips (same as the close button); arrow keys
@@ -147,37 +153,46 @@ export function OnboardingTour() {
     if (isOpen) primaryButtonRef.current?.focus()
   }, [isOpen, step])
 
-  if (!isOpen) return null
-
   const current = STEPS[step]
   const Icon = current.icon
   const isLast = step === LAST_STEP
 
-  const slideVariants = {
-    enter: (dir: number) => (prefersReducedMotion ? { opacity: 0 } : { opacity: 0, x: dir > 0 ? 24 : -24 }),
-    center: { opacity: 1, x: 0 },
-    exit: (dir: number) => (prefersReducedMotion ? { opacity: 0 } : { opacity: 0, x: dir > 0 ? -24 : 24 }),
-  }
+  if (!isOpen) return null
 
+  // Deliberately plain conditional rendering + CSS keyframes, NOT
+  // framer-motion's AnimatePresence, anywhere in this component. Two real
+  // bugs traced back to it, confirmed live in the browser (not just in
+  // mocked tests):
+  //  1) A production crash ("Failed to execute 'insertBefore' ... not a
+  //     child of this node") whenever an unrelated re-render (a theme
+  //     toggle, a route change from a sidebar click) landed while
+  //     framer-motion still held a reference to a node it was mid-exit on
+  //     -- traced to gating the whole modal's presence with a bare
+  //     `if (!isOpen) return null` above an AnimatePresence, which unmounts
+  //     it directly via React instead of letting it manage its own exit.
+  //  2) `AnimatePresence mode="wait"` around the step content (title/icon/
+  //     body) desynced from the step counter and nav buttons on the very
+  //     first transition, every time, independent of nesting or click
+  //     speed -- confirmed by removing AnimatePresence entirely and seeing
+  //     the same content update correctly on every click. Whatever the
+  //     exact framer-motion/React interaction is, it isn't reliable here.
+  // Plain `key`-based remounts (proven correct above) plus the
+  // `.animate-step-in-left/right` and `.animate-fade-in` CSS keyframes
+  // (app/globals.css) give the same visual polish without either failure
+  // mode: no framer-motion node to leak on close, no exit/enter choreography
+  // to get stuck mid-cycle.
   return (
-    <AnimatePresence>
-      <motion.div
-        key="onboarding-backdrop"
+      <div
         className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        initial={prefersReducedMotion ? false : { opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.2 }}
       >
-        <motion.div
-          className="relative w-full max-w-md sm:max-w-lg max-h-[88vh] overflow-y-auto rounded-2xl border border-border bg-card shadow-2xl"
-          initial={prefersReducedMotion ? false : { opacity: 0, scale: 0.96, y: 8 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.96, y: 8 }}
-          transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
+        <div
+          className={cn(
+            "relative w-full max-w-md sm:max-w-lg max-h-[88vh] overflow-y-auto rounded-2xl border border-border bg-card shadow-2xl",
+            !prefersReducedMotion && "animate-fade-in"
+          )}
         >
           <div className="h-[3px] w-full rounded-t-2xl bg-gradient-to-r from-primary to-accent" />
 
@@ -196,15 +211,9 @@ export function OnboardingTour() {
               {t.onboardingStepLabel.replace("{current}", String(step + 1)).replace("{total}", String(STEPS.length))}
             </p>
 
-            <AnimatePresence mode="wait" custom={direction} initial={false}>
-              <motion.div
+              <div
                 key={step}
-                custom={direction}
-                variants={slideVariants}
-                initial="enter"
-                animate="center"
-                exit="exit"
-                transition={{ duration: 0.22, ease: "easeOut" }}
+                className={!prefersReducedMotion ? (direction > 0 ? "animate-step-in-right" : "animate-step-in-left") : undefined}
               >
                 <div className="relative w-12 h-12 rounded-2xl bg-gradient-to-br from-primary/15 to-accent/10 text-primary flex items-center justify-center mb-4">
                   <Icon className="w-6 h-6" />
@@ -216,8 +225,7 @@ export function OnboardingTour() {
                 <p className="text-sm text-muted-foreground leading-relaxed mb-8">
                   {t[current.bodyKey]}
                 </p>
-              </motion.div>
-            </AnimatePresence>
+              </div>
 
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <button
@@ -259,8 +267,7 @@ export function OnboardingTour() {
               </div>
             </div>
           </div>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
+        </div>
+      </div>
   )
 }

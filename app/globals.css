@@ -307,6 +307,14 @@
   .animate-slide-up {
     animation: slideUp 0.4s ease-out forwards;
   }
+
+  .animate-step-in-right {
+    animation: stepSlideInRight 0.22s ease-out forwards;
+  }
+
+  .animate-step-in-left {
+    animation: stepSlideInLeft 0.22s ease-out forwards;
+  }
   
   .transition-smooth {
     transition: all 0.2s ease;
@@ -329,6 +337,21 @@
 @keyframes slideUp {
   from { opacity: 0; transform: translateY(16px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* Onboarding tour step content (components/OnboardingTour.tsx): entrance
+   only, direction-aware. Plain keyed remount + CSS, not framer-motion --
+   AnimatePresence mode="wait" proved unreliable here (see that file's
+   comment), so this trades the exit half of the cross-fade for guaranteed
+   correctness: the new step's real content is what's on screen the instant
+   it renders, never a stale previous step frozen mid-animation. */
+@keyframes stepSlideInRight {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes stepSlideInLeft {
+  from { opacity: 0; transform: translateX(-24px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
 /* ── Skeleton shimmer animation ─────────────────────────────────────────────── */

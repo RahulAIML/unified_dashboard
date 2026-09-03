@@ -15,10 +15,6 @@ const pushMock = vi.fn()
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: pushMock }) }))
 
 vi.mock('framer-motion', () => ({
-  motion: {
-    div: ({ children, ...p }: React.HTMLAttributes<HTMLDivElement>) => <div {...p}>{children}</div>,
-  },
-  AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useReducedMotion: () => false,
 }))
 
@@ -126,6 +122,22 @@ describe('OnboardingTour — journey map and navigation', () => {
     expect(screen.getByText('Step 2 of 6')).toBeInTheDocument()
     fireEvent.click(screen.getByText('Back'))
     expect(screen.getByText('Step 1 of 6')).toBeInTheDocument()
+  })
+
+  it('stays in sync even under back-to-back clicks with no settling time between them', () => {
+    // Regression: an earlier version wrapped this transition in
+    // framer-motion's AnimatePresence mode="wait", which desynced the
+    // title/body from the step counter and nav buttons -- confirmed live in
+    // the browser, not just here. Plain keyed remounts render correctly on
+    // every click, no matter how fast; there is nothing left to desync.
+    render(<OnboardingTour />)
+    const next = () => screen.getByText('Next')
+    fireEvent.click(next())
+    fireEvent.click(next())
+    fireEvent.click(next())
+
+    expect(screen.getByText('Step 4 of 6')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Practice with your Coach' })).toBeInTheDocument()
   })
 })
 
