@@ -11,11 +11,53 @@
  *   - Auto-increment: SERIAL column named "id"
  */
 
+import type { QueryResultRow } from 'pg'
 import type { AuthUser } from './auth-types'
 import { authQuery, AuthDbError } from './db-auth'
 
 // Re-export so callers can import DbError from here (backward compat)
 export { AuthDbError as DbError } from './db-auth'
+
+/**
+ * Every query below asks for `onboarding_completed_at`, a column added long
+ * after `users` itself -- it only exists once someone re-runs
+ * GET /api/auth/setup against that specific database (this project's schema
+ * "migration" is a manual, idempotent endpoint call, not an automatic
+ * runner -- see app/api/auth/setup/route.ts). A fresh deploy of this CODE
+ * does not by itself add the column to an already-provisioned production
+ * DB, so naively selecting it there throws ("column ... does not exist" ->
+ * lib/db-auth.ts classifies this as AuthDbError) and previously took down
+ * login/me/register entirely until an operator remembered to re-run setup.
+ *
+ * This wrapper retries once, stripping the column, so every one of those
+ * routes keeps working exactly as before this feature shipped -- the tour
+ * simply won't auto-show (rowToUser's `?? null` already treats a missing
+ * field as "not toured yet") until the column is actually migrated in.
+ */
+async function authQueryOnboardingSafe<T extends QueryResultRow>(
+  sql: string,
+  params: unknown[] = []
+): Promise<T[]> {
+  try {
+    return await authQuery<T>(sql, params)
+  } catch (err) {
+    // lib/db-auth.ts collapses BOTH "relation users does not exist" and
+    // "column onboarding_completed_at does not exist" into the same generic
+    // TABLE_MISSING message (the real Postgres detail, which would have
+    // named the column, is discarded there) -- so this can't distinguish
+    // them by message text. Retrying with the column stripped is safe
+    // either way: if the whole table really is missing, the retry fails
+    // with that identical error (no infinite loop, same 503 as before this
+    // feature existed); if only the column is missing, it now succeeds.
+    if (err instanceof AuthDbError && err.code === 'TABLE_MISSING') {
+      // Handles both bare "onboarding_completed_at" and a qualified
+      // "target.onboarding_completed_at" (promoteFirstAdmin's RETURNING).
+      const strippedSql = sql.replace(/,\s*(?:\w+\.)?onboarding_completed_at/gi, '')
+      if (strippedSql !== sql) return await authQuery<T>(strippedSql, params)
+    }
+    throw err
+  }
+}
 
 // ── Row shape from PostgreSQL ──────────────────────────────────────────────────
 
@@ -58,7 +100,7 @@ function rowToUser(row: UserRow): AuthUser {
  * Returns null if not found, throws AuthDbError on DB failure.
  */
 export async function findUserByEmail(email: string): Promise<AuthUser | null> {
-  const rows = await authQuery<UserRow>(
+  const rows = await authQueryOnboardingSafe<UserRow>(
     `SELECT id, email, full_name, company_domain, customer_id, role, created_at, is_active, last_login, onboarding_completed_at
        FROM users
       WHERE email = $1
@@ -73,7 +115,7 @@ export async function findUserByEmail(email: string): Promise<AuthUser | null> {
  * Returns null if not found, throws AuthDbError on DB failure.
  */
 export async function findUserById(userId: number): Promise<AuthUser | null> {
-  const rows = await authQuery<UserRow>(
+  const rows = await authQueryOnboardingSafe<UserRow>(
     `SELECT id, email, full_name, company_domain, customer_id, role, created_at, is_active, last_login, onboarding_completed_at
        FROM users
       WHERE id = $1
@@ -107,7 +149,7 @@ export async function createUser(
   customerId:     number,
   role:           'user' | 'admin' = 'user'
 ): Promise<AuthUser> {
-  const rows = await authQuery<UserRow>(
+  const rows = await authQueryOnboardingSafe<UserRow>(
     `INSERT INTO users
        (email, password_hash, full_name, company_domain, customer_id, role, is_active, created_at, updated_at)
      VALUES
@@ -177,7 +219,7 @@ export async function listUsers(): Promise<UserSummary[]> {
  * updateUserCustomerId above.
  */
 export async function setUserRole(email: string, role: 'user' | 'admin'): Promise<AuthUser | null> {
-  const rows = await authQuery<UserRow>(
+  const rows = await authQueryOnboardingSafe<UserRow>(
     `UPDATE users
         SET role = $2, updated_at = NOW()
       WHERE email = $1 AND is_active = TRUE
@@ -192,7 +234,7 @@ export async function setUserRole(email: string, role: 'user' | 'admin'): Promis
  * The advisory lock makes concurrent bootstrap attempts deterministic.
  */
 export async function promoteFirstAdmin(email: string): Promise<AuthUser | null> {
-  const rows = await authQuery<UserRow>(
+  const rows = await authQueryOnboardingSafe<UserRow>(
     `WITH bootstrap_lock AS MATERIALIZED (
        SELECT pg_advisory_xact_lock(4815162342)
      )
