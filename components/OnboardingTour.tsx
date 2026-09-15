@@ -220,7 +220,22 @@ export function OnboardingTour() {
                 </div>
 
                 <h2 id={titleId} className="text-xl font-bold text-foreground mb-2">
-                  {t[current.titleKey].replace("{platform}", platformName)}
+                  {/* Chrome's translate feature "corrects" brand names it
+                      doesn't recognize (Rolplay -> Roleplay) unless the
+                      element carries translate="no" -- see
+                      components/HtmlLangSync.tsx's docstring. Only the
+                      welcome step interpolates {platform} at all; the
+                      split+span keeps that protection scoped to just the
+                      brand name, not the whole (already-translated)
+                      sentence around it. */}
+                  {t[current.titleKey].includes("{platform}")
+                    ? t[current.titleKey].split("{platform}").map((part, i, arr) => (
+                        <span key={i}>
+                          {part}
+                          {i < arr.length - 1 && <span translate="no">{platformName}</span>}
+                        </span>
+                      ))
+                    : t[current.titleKey]}
                 </h2>
                 <p className="text-sm text-muted-foreground leading-relaxed mb-8">
                   {t[current.bodyKey]}

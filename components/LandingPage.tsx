@@ -1,27 +1,23 @@
 'use client'
 
+/**
+ * Public, unauthenticated landing page. Deliberately styled after
+ * hub.rolplay.ai (the company's own marketing site) rather than the app's
+ * per-tenant theme system -- a visitor hasn't picked/entered a tenant yet,
+ * so there is no branding to apply. Fixed dark + red, like the reference
+ * site defaults to, not wired to ThemeProvider (this page never was).
+ */
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import {
-  BarChart3, Brain, TrendingUp, FileDown, Palette, Zap,
-  ShieldCheck, ArrowRight, CheckCircle, BookOpen, Gamepad2,
-  BrainCircuit, BadgeCheck, Database, Users
-} from 'lucide-react'
+import { ArrowRight, Check, Mic } from 'lucide-react'
 import { APP_NAME } from '@/lib/constants'
-import { useT } from '@/lib/lang-store'
+import { useT, useLangStore } from '@/lib/lang-store'
+import { RolplayLogo } from '@/components/RolplayLogo'
 
-// ── Animation helpers ─────────────────────────────────────────────────────────
 const fadeUp = (delay = 0) => ({
   initial:    { opacity: 0, y: 20 },
   animate:    { opacity: 1, y: 0 },
   transition: { duration: 0.55, delay, ease: "easeInOut" as const },
-})
-
-const fadeIn = (delay = 0) => ({
-  initial:    { opacity: 0 },
-  whileInView:{ opacity: 1 },
-  viewport:   { once: true },
-  transition: { duration: 0.5, delay },
 })
 
 const slideUp = (delay = 0) => ({
@@ -31,86 +27,230 @@ const slideUp = (delay = 0) => ({
   transition: { duration: 0.5, delay, ease: "easeInOut" as const },
 })
 
-// ── Mock dashboard preview ────────────────────────────────────────────────────
-function DashboardPreview() {
+// ── Header ─────────────────────────────────────────────────────────────────────
+function Header() {
   const t = useT()
-  const bars = [65, 80, 55, 90, 72, 88, 60, 95, 70, 85]
+  const { lang, toggle } = useLangStore()
+
   return (
-    <div className="relative rounded-2xl border border-slate-200/80 bg-white shadow-2xl overflow-hidden">
-      {/* Gradient top bar */}
-      <div className="h-1.5 w-full bg-gradient-to-r from-red-500 to-blue-500" />
+    <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-black/90 backdrop-blur-sm">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+        <Link href="/" className="flex items-center gap-2 shrink-0">
+          <RolplayLogo className="h-5 w-auto text-white" />
+        </Link>
 
-      {/* Header row */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+        <nav className="hidden md:flex items-center gap-1">
+          <a href="#journey"       className="px-3 py-1.5 text-sm text-white/70 hover:text-white rounded-lg transition-colors">{t.landingNavJourney}</a>
+          <a href="#conversations" className="px-3 py-1.5 text-sm text-white/70 hover:text-white rounded-lg transition-colors">{t.landingNavConversations}</a>
+          <a href="#progress"      className="px-3 py-1.5 text-sm text-white/70 hover:text-white rounded-lg transition-colors">{t.landingNavProgress}</a>
+        </nav>
+
         <div className="flex items-center gap-2">
-          <div className="w-2.5 h-2.5 rounded-full bg-red-400" />
-          <div className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-          <div className="w-2.5 h-2.5 rounded-full bg-green-400" />
+          <button
+            onClick={toggle}
+            className="px-2.5 py-1.5 text-xs font-semibold rounded-full border border-white/15 text-white/70 hover:text-white hover:border-white/30 transition-colors"
+            aria-label="Toggle language"
+          >
+            {lang === "en" ? "ES" : "EN"}
+          </button>
+          <Link
+            href="/auth/login"
+            className="px-4 sm:px-5 py-2 text-sm font-semibold rounded-lg text-white shadow-sm hover:opacity-90 transition-opacity"
+            style={{ background: '#E51F26' }}
+          >
+            {t.landingNavSignIn}
+          </Link>
         </div>
-        <div className="h-2 w-32 rounded bg-slate-100" />
-        <div className="h-2 w-12 rounded bg-slate-100" />
+      </div>
+    </header>
+  )
+}
+
+// ── Hero: live-session chat mock ──────────────────────────────────────────────
+function ChatMock() {
+  const t = useT()
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: '#E51F26' }}>
+            <RolplayLogo className="h-3.5 w-auto text-white" />
+          </div>
+          <span className="font-semibold text-white text-sm">{t.landingChatCoachName}</span>
+        </div>
+        <span className="flex items-center gap-1.5 text-xs text-white/50">
+          <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#E51F26' }} />
+          {t.landingChatStatus}
+        </span>
       </div>
 
-      {/* KPI row */}
-      <div className="grid grid-cols-4 gap-2 p-3">
-        {[
-          { label: t.sessionsLabel,       value: '2,847', color: 'text-red-600'  },
-          { label: t.passRate,            value: '78%',   color: 'text-blue-600' },
-          { label: t.avgScore,            value: '84 pts', color: 'text-teal-600' },
-          { label: t.landingKpiCertified, value: '1,203', color: 'text-violet-600' },
-        ].map(({ label, value, color }) => (
-          <div key={label} className="rounded-lg border border-slate-100 bg-slate-50 p-2">
-            <p className="text-[9px] text-slate-400 mb-1 uppercase tracking-wide">{label}</p>
-            <p className={`text-sm font-bold tabular-nums ${color}`}>{value}</p>
-            <div className="mt-1.5 h-0.5 w-full bg-slate-200 rounded">
-              <div className={`h-full rounded bg-current ${color}`} style={{ width: '65%', opacity: 0.4 }} />
-            </div>
-          </div>
-        ))}
+      <div className="px-5 py-5 space-y-4 min-h-[200px]">
+        <div>
+          <p className="text-[11px] text-white/40 mb-1">{t.landingChatCoachLabel}</p>
+          <p className="text-sm text-white/90 leading-relaxed border-l-2 pl-3" style={{ borderColor: '#E51F26' }}>
+            {t.landingChatMsg1}
+          </p>
+        </div>
+        <div>
+          <p className="text-[11px] text-white/40 mb-1">{t.landingChatUserLabel}</p>
+          <p className="text-sm text-white/60 leading-relaxed border-l-2 border-white/15 pl-3">
+            {t.landingChatMsg2}
+          </p>
+        </div>
+        <div>
+          <p className="text-[11px] text-white/40 mb-1">{t.landingChatCoachLabel}</p>
+          <p className="text-sm text-white/90 leading-relaxed border-l-2 pl-3" style={{ borderColor: '#E51F26' }}>
+            {t.landingChatMsg3}
+          </p>
+        </div>
       </div>
 
-      {/* Chart area */}
-      <div className="px-3 pb-3">
-        <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-          <div className="flex items-center justify-between mb-3">
-            <div className="h-2 w-24 rounded bg-slate-200" />
-            <div className="flex gap-2">
-              <div className="h-1.5 w-1.5 rounded-full bg-red-400" />
-              <div className="h-1.5 w-1.5 rounded-full bg-blue-400" />
-            </div>
-          </div>
-          {/* Bar chart */}
-          <div className="flex items-end gap-1 h-16">
-            {bars.map((h, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
+      <div className="flex items-center gap-2 px-5 py-3.5 border-t border-white/10 text-xs text-white/50">
+        <Mic className="w-3.5 h-3.5" />
+        {t.landingChatListening}
+      </div>
+    </div>
+  )
+}
+
+// ── Journey timeline ───────────────────────────────────────────────────────────
+function JourneySection() {
+  const t = useT()
+  const steps = [
+    { title: t.landingJourneyStep1Title, desc: t.landingJourneyStep1Desc },
+    { title: t.landingJourneyStep2Title, desc: t.landingJourneyStep2Desc },
+    { title: t.landingJourneyStep3Title, desc: t.landingJourneyStep3Desc },
+    { title: t.landingJourneyStep4Title, desc: t.landingJourneyStep4Desc },
+    { title: t.landingJourneyStep5Title, desc: t.landingJourneyStep5Desc },
+  ]
+  return (
+    <section id="journey" className="py-20 sm:py-28 bg-black">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        <motion.div {...slideUp()} className="mb-14">
+          <h2 className="text-3xl sm:text-4xl font-bold text-white mb-3">{t.landingJourneyTitle}</h2>
+          <p className="text-lg text-white/50">{t.landingJourneySub}</p>
+        </motion.div>
+
+        <div className="space-y-0">
+          {steps.map((s, i) => (
+            <motion.div key={i} {...slideUp(i * 0.08)} className="flex gap-6">
+              <div className="flex flex-col items-center shrink-0">
                 <div
-                  className="w-full rounded-sm"
-                  style={{
-                    height: `${h * 0.6}%`,
-                    background: i % 3 === 0
-                      ? 'linear-gradient(180deg, #EF4444 0%, #DC2626 100%)'
-                      : 'linear-gradient(180deg, #60A5FA 0%, #3B82F6 100%)',
-                    opacity: 0.85,
-                  }}
-                />
+                  className="w-11 h-11 rounded-full flex items-center justify-center font-bold text-white shrink-0"
+                  style={{ background: '#E51F26' }}
+                >
+                  {i + 1}
+                </div>
+                {i < steps.length - 1 && <div className="w-0.5 flex-1 my-1" style={{ background: '#E51F26', opacity: 0.35 }} />}
+              </div>
+              <div className={i < steps.length - 1 ? "pb-10" : ""}>
+                <h3 className="text-xl font-bold text-white mb-2 pt-1.5">{s.title}</h3>
+                <p className="text-white/55 leading-relaxed max-w-xl">{s.desc}</p>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ── Two conversations (full-bleed red) ────────────────────────────────────────
+function ConversationsSection() {
+  const t = useT()
+  const cards = [
+    {
+      label: t.landingConvCoachLabel, title: t.landingConvCoachTitle, desc: t.landingConvCoachDesc,
+      bullets: [t.landingConvCoachBullet1, t.landingConvCoachBullet2, t.landingConvCoachBullet3],
+    },
+    {
+      label: t.landingConvSimLabel, title: t.landingConvSimTitle, desc: t.landingConvSimDesc,
+      bullets: [t.landingConvSimBullet1, t.landingConvSimBullet2, t.landingConvSimBullet3],
+    },
+  ]
+  return (
+    <section id="conversations" className="py-20 sm:py-28" style={{ background: '#E51F26' }}>
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        <motion.div {...slideUp()} className="mb-16 max-w-2xl">
+          <h2 className="text-3xl sm:text-4xl font-bold text-white mb-3">{t.landingConvTitle}</h2>
+          <p className="text-lg text-white/85">{t.landingConvSub}</p>
+        </motion.div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-12 sm:gap-16">
+          {cards.map((c, i) => (
+            <motion.div key={i} {...slideUp(i * 0.1)}>
+              <p className="text-sm font-semibold text-white/70 mb-1">{c.label}</p>
+              <h3 className="text-2xl font-bold text-white mb-4">{c.title}</h3>
+              <p className="text-white/85 leading-relaxed mb-6">{c.desc}</p>
+              <ul className="space-y-3">
+                {c.bullets.map(b => (
+                  <li key={b} className="flex items-start gap-2.5 text-sm text-white/90">
+                    <Check className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>{b}</span>
+                  </li>
+                ))}
+              </ul>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ── Progress / mastery card ────────────────────────────────────────────────────
+function ProgressSection() {
+  const t = useT()
+  const categories = [
+    { label: t.landingProgressCatProduct,    value: 82 },
+    { label: t.landingProgressCatCompliance, value: 64 },
+    { label: t.landingProgressCatDiscovery,  value: 91 },
+    { label: t.landingProgressCatObjections, value: 58 },
+    { label: t.landingProgressCatClosing,    value: 77 },
+    { label: t.landingProgressCatEthics,     value: 95 },
+  ]
+  const global = Math.round(categories.reduce((s, c) => s + c.value, 0) / categories.length)
+  const bullets = [t.landingProgressBullet1, t.landingProgressBullet2, t.landingProgressBullet3]
+
+  return (
+    <section id="progress" className="py-20 sm:py-28 bg-black">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 lg:grid-cols-2 gap-14 items-start">
+        <motion.div {...slideUp()}>
+          <h2 className="text-3xl sm:text-4xl font-bold text-white mb-3">{t.landingProgressTitle}</h2>
+          <p className="text-lg text-white/50 mb-8">{t.landingProgressSub}</p>
+          <ul className="space-y-3">
+            {bullets.map(b => (
+              <li key={b} className="flex items-start gap-2.5 text-sm text-white/75">
+                <Check className="w-4 h-4 shrink-0 mt-0.5" style={{ color: '#E51F26' }} />
+                <span>{b}</span>
+              </li>
+            ))}
+          </ul>
+        </motion.div>
+
+        <motion.div {...slideUp(0.15)} className="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="font-bold text-white">{t.landingProgressCardTitle}</h3>
+            <span className="text-sm text-white/50">
+              {t.landingProgressGlobal} <span className="font-bold" style={{ color: '#E51F26' }}>{global}%</span>
+            </span>
+          </div>
+          <div className="space-y-4">
+            {categories.map(c => (
+              <div key={c.label}>
+                <div className="flex items-center justify-between mb-1.5 text-sm">
+                  <span className="text-white/80">{c.label}</span>
+                  <span className="text-white/50 tabular-nums">{c.value}%</span>
+                </div>
+                <div className="h-1.5 w-full rounded-full bg-white/10 overflow-hidden">
+                  <div className="h-full rounded-full" style={{ width: `${c.value}%`, background: '#E51F26' }} />
+                </div>
               </div>
             ))}
           </div>
-          {/* X axis */}
-          <div className="flex gap-1 mt-1">
-            {bars.map((_, i) => (
-              <div key={i} className="flex-1 h-1 rounded bg-slate-200" />
-            ))}
-          </div>
-        </div>
+        </motion.div>
       </div>
-
-      {/* Live badge */}
-      <div className="absolute top-8 right-4 flex items-center gap-1.5 bg-green-50 border border-green-200 rounded-full px-2.5 py-1 text-[10px] font-semibold text-green-700">
-        <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-        {t.landingLive}
-      </div>
-    </div>
+    </section>
   )
 }
 
@@ -118,378 +258,76 @@ function DashboardPreview() {
 export function LandingPage() {
   const t = useT()
 
-  const features = [
-    {
-      icon: BarChart3, color: 'bg-red-50 text-red-600',
-      title: t.landingFeat1Title,
-      description: t.landingFeat1Desc,
-    },
-    {
-      icon: Zap, color: 'bg-blue-50 text-blue-600',
-      title: t.landingFeat2Title,
-      description: t.landingFeat2Desc,
-    },
-    {
-      icon: Brain, color: 'bg-violet-50 text-violet-600',
-      title: t.landingFeat3Title,
-      description: t.landingFeat3Desc,
-    },
-    {
-      icon: TrendingUp, color: 'bg-teal-50 text-teal-600',
-      title: t.landingFeat4Title,
-      description: t.landingFeat4Desc,
-    },
-    {
-      icon: FileDown, color: 'bg-amber-50 text-amber-600',
-      title: t.landingFeat5Title,
-      description: t.landingFeat5Desc,
-    },
-    {
-      icon: Palette, color: 'bg-pink-50 text-pink-600',
-      title: t.landingFeat6Title,
-      description: t.landingFeat6Desc,
-    },
-  ]
-
-  const stats = [
-    { value: t.landingStatVal1, label: t.landingStatLbl1, color: 'from-red-500 to-red-600'       },
-    { value: t.landingStatVal2, label: t.landingStatLbl2, color: 'from-blue-500 to-blue-600'     },
-    { value: t.landingStatVal3, label: t.landingStatLbl3, color: 'from-teal-500 to-teal-600'     },
-    { value: t.landingStatVal4, label: t.landingStatLbl4, color: 'from-violet-500 to-violet-600' },
-  ]
-
-  const modules = [
-    { icon: BrainCircuit, label: t.landingModAiCoach,  color: 'bg-red-100 text-red-700'       },
-    { icon: BookOpen,     label: 'LMS',                color: 'bg-blue-100 text-blue-700'     },
-    { icon: Gamepad2,     label: t.moduleSimulator,    color: 'bg-teal-100 text-teal-700'     },
-    { icon: BadgeCheck,   label: t.moduleCertification,color: 'bg-violet-100 text-violet-700' },
-    { icon: Database,     label: 'Second Brain',       color: 'bg-amber-100 text-amber-700'   },
-    { icon: Brain,        label: t.landingModCustomAi, color: 'bg-pink-100 text-pink-700'     },
-  ]
-
-  const steps = [
-    { step: '01', title: t.landingStep1Title, description: t.landingStep1Desc, color: 'from-red-500 to-red-600'   },
-    { step: '02', title: t.landingStep2Title, description: t.landingStep2Desc, color: 'from-blue-500 to-blue-600' },
-    { step: '03', title: t.landingStep3Title, description: t.landingStep3Desc, color: 'from-teal-500 to-teal-600' },
-  ]
-
-  const secBadges = [
-    t.landingSec1, t.landingSec2, t.landingSec3, t.landingSec4, t.landingSec5,
-  ]
-
-  const trustBullets = [t.landingTrust1, t.landingTrust2, t.landingTrust3]
-
   return (
-    <div className="w-screen min-h-screen bg-white overflow-x-hidden">
+    <div className="w-screen min-h-screen bg-black overflow-x-hidden">
+      <Header />
 
-      {/* ── Sticky Header ──────────────────────────────────────────────────── */}
-      <header className="w-full border-b border-slate-200/80 bg-white/95 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white text-sm shadow-sm"
-              style={{ background: 'linear-gradient(135deg, #DC2626 0%, #3B82F6 100%)' }}
-            >
-              RP
-            </div>
-            <span className="font-bold text-slate-900 text-[15px]" translate="no">{APP_NAME} <span className="font-light text-slate-400">Analytics</span></span>
-          </div>
-          <nav className="hidden sm:flex items-center gap-1">
-            <a href="#features"     className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-50 transition-colors">{t.landingNavFeatures}</a>
-            <a href="#modules"      className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-50 transition-colors">{t.landingNavModules}</a>
-            <a href="#how-it-works" className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-50 transition-colors">{t.landingNavHowItWorks}</a>
-          </nav>
-          <div className="flex items-center gap-2">
-            <Link
-              href="/auth/login"
-              className="px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 rounded-lg hover:bg-slate-50 transition-colors hidden sm:block"
-            >
-              {t.landingNavSignIn}
-            </Link>
-            <Link
-              href="/auth/register"
-              className="px-4 py-2 text-sm font-semibold rounded-lg text-white shadow-sm transition-all hover:shadow-md hover:opacity-90"
-              style={{ background: 'linear-gradient(135deg, #DC2626 0%, #3B82F6 100%)' }}
-            >
-              {t.landingNavGetStarted}
-            </Link>
-          </div>
-        </div>
-      </header>
-
-      {/* ── Hero ───────────────────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden bg-white">
-        {/* Background grid */}
-        <div
-          className="absolute inset-0 opacity-[0.03]"
-          style={{
-            backgroundImage: `linear-gradient(#64748b 1px, transparent 1px), linear-gradient(to right, #64748b 1px, transparent 1px)`,
-            backgroundSize: '40px 40px',
-          }}
-        />
-        {/* Gradient blobs */}
-        <div className="absolute -top-24 -right-24 w-96 h-96 bg-red-500/8 rounded-full blur-3xl" />
-        <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-blue-500/8 rounded-full blur-3xl" />
+      {/* ── Hero ─────────────────────────────────────────────────────────── */}
+      <section className="relative overflow-hidden bg-black">
+        <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full blur-3xl" style={{ background: '#E51F26', opacity: 0.08 }} />
 
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-20 sm:pt-24 sm:pb-28">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
-
-            {/* Left: copy */}
             <motion.div {...fadeUp(0)}>
-              {/* Badge */}
-              <div className="inline-flex items-center gap-2 bg-gradient-to-r from-red-50 to-blue-50 border border-red-100 rounded-full px-3.5 py-1.5 mb-6">
-                <span className="w-2 h-2 rounded-full bg-gradient-to-r from-red-500 to-blue-500" />
-                <span className="text-xs font-semibold text-slate-700">{t.landingBadge}</span>
-              </div>
-
-              <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-slate-900 mb-5 leading-[1.1]">
-                {t.landingHeroTitle1}{' '}
-                <span className="bg-gradient-to-r from-red-600 to-blue-600 bg-clip-text text-transparent">
-                  {t.landingHeroTitle2}
-                </span>
+              <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-white mb-5 leading-[1.1]">
+                {t.landingHeroTitleV2}
               </h1>
-
-              <p className="text-lg text-slate-600 mb-8 leading-relaxed max-w-lg">
-                {t.landingHeroPara}
+              <p className="text-lg text-white/60 mb-8 leading-relaxed max-w-lg">
+                {t.landingHeroParaV2}
               </p>
-
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-8">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
                 <Link
-                  href="/auth/register"
-                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-white shadow-sm hover:shadow-md transition-all hover:opacity-90 text-sm"
-                  style={{ background: 'linear-gradient(135deg, #DC2626 0%, #3B82F6 100%)' }}
+                  href="/auth/login"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-white shadow-sm hover:opacity-90 transition-opacity text-sm"
+                  style={{ background: '#E51F26' }}
                 >
-                  {t.landingCta1}
+                  {t.landingNavSignIn}
                   <ArrowRight className="w-4 h-4" />
                 </Link>
                 <Link
-                  href="/auth/login"
-                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-slate-700 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-all text-sm"
+                  href="/auth/register"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-white border border-white/20 hover:bg-white/5 transition-colors text-sm"
                 >
-                  {t.landingCta2}
+                  {t.landingHeroCtaSecondary}
                 </Link>
-              </div>
-
-              {/* Trust bullets */}
-              <div className="flex flex-col gap-2">
-                {trustBullets.map(bullet => (
-                  <div key={bullet} className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
-                    <span className="text-sm text-slate-600">{bullet}</span>
-                  </div>
-                ))}
               </div>
             </motion.div>
 
-            {/* Right: mock dashboard */}
             <motion.div
               initial={{ opacity: 0, x: 30 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.7, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
-              className="relative"
             >
-              <DashboardPreview />
-              {/* Floating stat chips */}
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.6 }}
-                className="absolute -left-6 top-1/4 bg-white rounded-xl border border-slate-200 shadow-lg px-3 py-2 hidden lg:flex items-center gap-2"
-              >
-                <div className="w-8 h-8 rounded-lg bg-green-50 flex items-center justify-center">
-                  <TrendingUp className="w-4 h-4 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-[10px] text-slate-400">{t.passRate}</p>
-                  <p className="text-sm font-bold text-green-600">↑ 14%</p>
-                </div>
-              </motion.div>
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.75 }}
-                className="absolute -right-4 bottom-1/4 bg-white rounded-xl border border-slate-200 shadow-lg px-3 py-2 hidden lg:flex items-center gap-2"
-              >
-                <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
-                  <Users className="w-4 h-4 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-[10px] text-slate-400">{t.totalUsers}</p>
-                  <p className="text-sm font-bold text-blue-600">2,847</p>
-                </div>
-              </motion.div>
+              <ChatMock />
+              <p className="text-sm text-white/40 mt-4 max-w-md">{t.landingChatCaption}</p>
             </motion.div>
-
           </div>
         </div>
       </section>
 
-      {/* ── Stats bar ──────────────────────────────────────────────────────── */}
-      <section className="border-y border-slate-100 bg-slate-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 sm:gap-10">
-            {stats.map((stat, i) => (
-              <motion.div key={i} {...slideUp(i * 0.08)} className="text-center">
-                <p className={`text-2xl sm:text-3xl font-extrabold bg-gradient-to-r ${stat.color} bg-clip-text text-transparent`}>
-                  {stat.value}
-                </p>
-                <p className="text-sm text-slate-500 mt-1">{stat.label}</p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
+      <JourneySection />
+      <ConversationsSection />
+      <ProgressSection />
 
-      {/* ── Features ───────────────────────────────────────────────────────── */}
-      <section id="features" className="py-20 sm:py-28 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div {...fadeIn()} className="text-center mb-14">
-            <div className="inline-flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-full px-3.5 py-1.5 mb-4">
-              <Zap className="w-3.5 h-3.5 text-blue-600" />
-              <span className="text-xs font-semibold text-blue-700">{t.landingFeatBadge}</span>
-            </div>
-            <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-4">
-              {t.landingFeatTitle}
-            </h2>
-            <p className="text-lg text-slate-500 max-w-2xl mx-auto">
-              {t.landingFeatPara}
-            </p>
-          </motion.div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {features.map((f, i) => (
-              <motion.div
-                key={i}
-                {...slideUp(i * 0.07)}
-                className="group rounded-2xl border border-slate-200 bg-white p-6 hover:border-blue-200 hover:shadow-lg transition-all duration-300"
+      {/* ── Final CTA ──────────────────────────────────────────────────────── */}
+      <section className="py-20 sm:py-28 bg-black border-t border-white/10">
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 text-center">
+          <motion.div {...slideUp()}>
+            <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">{t.landingFinalCtaTitle}</h2>
+            <p className="text-lg text-white/55 mb-9">{t.landingFinalCtaSub}</p>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+              <a
+                href="mailto:info@rolplay.ai"
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-white shadow-sm hover:opacity-90 transition-opacity text-sm"
+                style={{ background: '#E51F26' }}
               >
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-4 ${f.color}`}>
-                  <f.icon className="w-5 h-5" />
-                </div>
-                <h3 className="font-semibold text-slate-900 mb-2 text-[15px]">{f.title}</h3>
-                <p className="text-sm text-slate-500 leading-relaxed">{f.description}</p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Modules ────────────────────────────────────────────────────────── */}
-      <section id="modules" className="py-20 sm:py-28 bg-slate-50 border-y border-slate-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div {...fadeIn()} className="text-center mb-14">
-            <div className="inline-flex items-center gap-2 bg-red-50 border border-red-100 rounded-full px-3.5 py-1.5 mb-4">
-              <BarChart3 className="w-3.5 h-3.5 text-red-600" />
-              <span className="text-xs font-semibold text-red-700">{t.landingModBadge}</span>
-            </div>
-            <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-4">
-              {t.landingModTitle}
-            </h2>
-            <p className="text-lg text-slate-500 max-w-xl mx-auto">
-              {t.landingModPara}
-            </p>
-          </motion.div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-            {modules.map((m, i) => (
-              <motion.div
-                key={i}
-                {...slideUp(i * 0.06)}
-                className="flex flex-col items-center gap-3 bg-white rounded-2xl border border-slate-200 p-5 hover:border-slate-300 hover:shadow-sm transition-all"
-              >
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${m.color}`}>
-                  <m.icon className="w-6 h-6" />
-                </div>
-                <span className="text-sm font-semibold text-slate-700 text-center">{m.label}</span>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── How it works ───────────────────────────────────────────────────── */}
-      <section id="how-it-works" className="py-20 sm:py-28 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div {...fadeIn()} className="text-center mb-14">
-            <div className="inline-flex items-center gap-2 bg-teal-50 border border-teal-100 rounded-full px-3.5 py-1.5 mb-4">
-              <CheckCircle className="w-3.5 h-3.5 text-teal-600" />
-              <span className="text-xs font-semibold text-teal-700">{t.landingHowBadge}</span>
-            </div>
-            <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-4">
-              {t.landingHowTitle}
-            </h2>
-            <p className="text-lg text-slate-500 max-w-xl mx-auto">
-              {t.landingHowPara}
-            </p>
-          </motion.div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 relative">
-            {/* Connector line */}
-            <div className="hidden sm:block absolute top-10 left-1/3 right-1/3 h-0.5 bg-gradient-to-r from-red-200 via-blue-200 to-teal-200" />
-
-            {steps.map((s, i) => (
-              <motion.div key={i} {...slideUp(i * 0.1)} className="text-center">
-                <div className={`w-20 h-20 rounded-2xl mx-auto mb-5 flex items-center justify-center bg-gradient-to-br ${s.color} shadow-md`}>
-                  <span className="text-2xl font-extrabold text-white">{s.step}</span>
-                </div>
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">{s.title}</h3>
-                <p className="text-sm text-slate-500 leading-relaxed max-w-xs mx-auto">{s.description}</p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Security badge strip ────────────────────────────────────────────── */}
-      <section className="border-y border-slate-100 bg-slate-50 py-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-10">
-            {secBadges.map(label => (
-              <div key={label} className="flex items-center gap-2 text-sm text-slate-600">
-                <ShieldCheck className="w-4 h-4 text-green-500 shrink-0" />
-                <span>{label}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── CTA ────────────────────────────────────────────────────────────── */}
-      <section className="py-20 sm:py-28 relative overflow-hidden">
-        <div
-          className="absolute inset-0"
-          style={{ background: 'linear-gradient(135deg, #DC2626 0%, #7C3AED 50%, #2563EB 100%)' }}
-        />
-        {/* Mesh overlay */}
-        <div className="absolute inset-0 opacity-10"
-          style={{
-            backgroundImage: `radial-gradient(circle at 2px 2px, white 1px, transparent 0)`,
-            backgroundSize: '32px 32px',
-          }}
-        />
-        <div className="relative max-w-3xl mx-auto px-4 sm:px-6 text-center">
-          <motion.div {...fadeIn()}>
-            <h2 className="text-3xl sm:text-5xl font-extrabold text-white mb-5 leading-tight">
-              {t.landingCtaTitle1}<br className="hidden sm:block" /> {t.landingCtaTitle2}
-            </h2>
-            <p className="text-lg text-red-100 mb-10 max-w-xl mx-auto">
-              {t.landingCtaPara.split('{APP_NAME}')[0]}
-              <span translate="no">{APP_NAME}</span>
-              {t.landingCtaPara.split('{APP_NAME}')[1]}
-            </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link
-                href="/auth/register"
-                className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl font-bold text-red-600 bg-white hover:bg-red-50 transition-all hover:shadow-xl text-sm"
-              >
-                {t.landingCtaBtn1}
-                <ArrowRight className="w-4 h-4" />
-              </Link>
+                {t.landingFinalCtaBtn1}
+              </a>
               <Link
                 href="/auth/login"
-                className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl font-semibold text-white border border-white/30 hover:bg-white/10 transition-all text-sm"
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-white border border-white/20 hover:bg-white/5 transition-colors text-sm"
               >
-                {t.landingCtaBtn2}
+                {t.landingFinalCtaBtn2}
               </Link>
             </div>
           </motion.div>
@@ -497,84 +335,41 @@ export function LandingPage() {
       </section>
 
       {/* ── Footer ─────────────────────────────────────────────────────────── */}
-      <footer className="border-t border-slate-200 bg-white py-14">
+      <footer className="border-t border-white/10 py-14" style={{ background: '#0A0A18' }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10 mb-10">
-
-            {/* Brand */}
-            <div className="sm:col-span-2 lg:col-span-1">
-              <div className="flex items-center gap-2 mb-4">
-                <div
-                  className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white text-sm"
-                  style={{ background: 'linear-gradient(135deg, #DC2626 0%, #3B82F6 100%)' }}
-                >
-                  RP
-                </div>
-                <span className="font-bold text-slate-900" translate="no">{APP_NAME}</span>
-              </div>
-              <p className="text-sm text-slate-500 mb-4 leading-relaxed">
-                {t.landingFooterDesc}
-              </p>
-              <div className="flex gap-2.5">
-                <a href="https://www.linkedin.com/company/rolplay" target="_blank" rel="noopener noreferrer"
-                  className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-blue-100 flex items-center justify-center transition-colors" aria-label="LinkedIn">
-                  <svg className="w-4 h-4 text-slate-600" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
-                  </svg>
-                </a>
-                <a href="https://www.facebook.com/rolplay" target="_blank" rel="noopener noreferrer"
-                  className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-blue-100 flex items-center justify-center transition-colors" aria-label="Facebook">
-                  <svg className="w-4 h-4 text-slate-600" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-                  </svg>
-                </a>
-              </div>
-            </div>
-
-            {/* Platform links */}
-            <div>
-              <h4 className="font-semibold text-slate-900 mb-4 text-sm">{t.landingFooterPlatform}</h4>
-              <ul className="space-y-2.5">
-                <li><Link href="/auth/login"    className="text-sm text-slate-500 hover:text-slate-900 transition-colors">{t.landingNavSignIn}</Link></li>
-                <li><Link href="/auth/register" className="text-sm text-slate-500 hover:text-slate-900 transition-colors">{t.landingFooterCreateAccount}</Link></li>
-                <li><a href="#features"         className="text-sm text-slate-500 hover:text-slate-900 transition-colors">{t.landingFooterFeatures}</a></li>
-                <li><a href="#modules"          className="text-sm text-slate-500 hover:text-slate-900 transition-colors">{t.landingFooterModules}</a></li>
-              </ul>
-            </div>
-
-            {/* Contact */}
-            <div>
-              <h4 className="font-semibold text-slate-900 mb-4 text-sm">{t.landingFooterContact}</h4>
-              <ul className="space-y-2.5">
-                <li><a href="https://rolplay.ai" target="_blank" rel="noopener noreferrer" className="text-sm text-slate-500 hover:text-red-600 transition-colors">rolplay.ai</a></li>
-                <li><a href="mailto:info@rolplay.ai" className="text-sm text-slate-500 hover:text-red-600 transition-colors">info@rolplay.ai</a></li>
-                <li><a href="tel:+525550937376" className="text-sm text-slate-500 hover:text-red-600 transition-colors">+52 (55) 5093 7376</a></li>
-              </ul>
-            </div>
-
-            {/* Locations */}
-            <div>
-              <h4 className="font-semibold text-slate-900 mb-4 text-sm">{t.landingFooterLocations}</h4>
-              <ul className="space-y-2">
-                <li className="text-sm text-slate-500">{t.landingLocationToronto}</li>
-                <li className="text-sm text-slate-500">{t.landingLocationMonterrey}</li>
-                <li className="text-sm text-slate-500">{t.landingLocationMexicoCity}</li>
-              </ul>
-            </div>
-
+          <div className="flex items-center gap-2 mb-10">
+            <RolplayLogo className="h-5 w-auto text-white" />
           </div>
 
-          <div className="border-t border-slate-100 pt-8 flex flex-col sm:flex-row justify-between items-center gap-4">
-            <p className="text-xs text-slate-400">© 2026 <span translate="no">{APP_NAME}</span>. {t.landingFooterRights}</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-8 mb-10">
+            <div>
+              <h4 className="font-semibold text-white mb-4 text-sm">{t.landingFooterProduct}</h4>
+              <ul className="space-y-2.5">
+                <li><a href="#journey"       className="text-sm text-white/50 hover:text-white transition-colors">{t.landingNavJourney}</a></li>
+                <li><a href="#conversations" className="text-sm text-white/50 hover:text-white transition-colors">{t.landingNavConversations}</a></li>
+                <li><a href="#progress"      className="text-sm text-white/50 hover:text-white transition-colors">{t.landingNavProgress}</a></li>
+                <li><Link href="/auth/login" className="text-sm text-white/50 hover:text-white transition-colors">{t.landingNavSignIn}</Link></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="font-semibold text-white mb-4 text-sm">{t.landingFooterRolplay}</h4>
+              <ul className="space-y-2.5">
+                <li><a href="https://rolplay.ai" target="_blank" rel="noopener noreferrer" className="text-sm text-white/50 hover:text-white transition-colors">rolplay.ai</a></li>
+                <li><a href="mailto:info@rolplay.ai" className="text-sm text-white/50 hover:text-white transition-colors">{t.landingFooterContact}</a></li>
+                <li><Link href="/auth/register" className="text-sm text-white/50 hover:text-white transition-colors">{t.landingHeroCtaSecondary}</Link></li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="border-t border-white/10 pt-8 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <p className="text-xs text-white/35">© 2026 <span translate="no">{APP_NAME}</span>. {t.landingFooterRights}</p>
             <div className="flex items-center gap-5">
-              <Link href="/privacy" className="text-xs text-slate-400 hover:text-slate-600 transition-colors">{t.landingFooterPrivacy}</Link>
-              <Link href="/terms"   className="text-xs text-slate-400 hover:text-slate-600 transition-colors">{t.landingFooterTerms}</Link>
-              <a href="mailto:info@rolplay.ai" className="text-xs text-slate-400 hover:text-slate-600 transition-colors">{t.landingFooterSupport}</a>
+              <Link href="/privacy" className="text-xs text-white/35 hover:text-white/60 transition-colors">{t.landingFooterPrivacy}</Link>
+              <span className="text-xs text-white/35">{t.landingFooterOwnedBy}</span>
             </div>
           </div>
         </div>
       </footer>
-
     </div>
   )
 }

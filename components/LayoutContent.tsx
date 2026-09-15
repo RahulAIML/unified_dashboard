@@ -7,6 +7,7 @@ import { DashboardFooter } from '@/components/DashboardFooter'
 import { OnboardingTour } from '@/components/OnboardingTour'
 import { useAuthContext } from '@/components/AuthProvider'
 import { useSnapDateRange } from '@/lib/hooks/useSnapDateRange'
+import { cn } from '@/lib/utils'
 
 const AUTH_ROUTES = ['/auth/login', '/auth/register']
 
@@ -30,7 +31,17 @@ export function LayoutContent({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-full min-h-screen overflow-hidden">
       {showSidebar && <Sidebar />}
-      <div className="flex-1 flex flex-col bg-muted/30 overflow-x-hidden overflow-y-auto md:pt-0 pt-14 relative z-0">
+      <div className={cn(
+        "flex-1 flex flex-col overflow-x-hidden overflow-y-auto relative z-0",
+        // pt-14 clears the sidebar's own mobile hamburger bar; bg-muted/30
+        // tints the dashboard chrome. Neither applies without a sidebar --
+        // the landing/auth pages manage their own full-bleed background and
+        // have no hamburger bar to clear, so this used to leave a stray
+        // ~56px band of bg-muted showing above unauthenticated pages on
+        // mobile-width viewports (invisible on the old white landing page,
+        // visible now that it's dark).
+        showSidebar && "bg-muted/30 md:pt-0 pt-14"
+      )}>
         <main className="flex-1 pb-6 md:pb-10 w-full">
           {children}
         </main>
