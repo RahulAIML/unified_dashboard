@@ -9,7 +9,7 @@
  */
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { ArrowRight, Check, Mic } from 'lucide-react'
+import { ArrowRight, Check, RefreshCw } from 'lucide-react'
 import { APP_NAME } from '@/lib/constants'
 import { useT, useLangStore } from '@/lib/lang-store'
 import { RolplayLogo } from '@/components/RolplayLogo'
@@ -66,9 +66,21 @@ function Header() {
   )
 }
 
-// ── Hero: live-session chat mock ──────────────────────────────────────────────
-function ChatMock() {
+// ── Hero: real KPI dashboard mock ─────────────────────────────────────────────
+// Illustrative only (this is a public, unauthenticated page -- there is no
+// real tenant to fetch for), but the tile labels and shape mirror an actual
+// generated dashboard's "Resumen" page (see app/api/dashboard/overview and
+// the Dashboard Builder's own preview), not invented KPI names.
+function DashboardMock() {
   const t = useT()
+  const tiles = [
+    { label: t.landingChatCoachLabel, value: '1,890' },
+    { label: t.landingChatUserLabel,  value: '360'   },
+    { label: t.landingChatMsg1,       value: '78%'   },
+    { label: t.landingChatMsg2,       value: '43.66' },
+  ]
+  const bars = [55, 72, 60, 88, 65, 90, 78, 95, 70, 84]
+
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
       <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
@@ -84,29 +96,25 @@ function ChatMock() {
         </span>
       </div>
 
-      <div className="px-5 py-5 space-y-4 min-h-[200px]">
-        <div>
-          <p className="text-[11px] text-white/40 mb-1">{t.landingChatCoachLabel}</p>
-          <p className="text-sm text-white/90 leading-relaxed border-l-2 pl-3" style={{ borderColor: '#E51F26' }}>
-            {t.landingChatMsg1}
-          </p>
-        </div>
-        <div>
-          <p className="text-[11px] text-white/40 mb-1">{t.landingChatUserLabel}</p>
-          <p className="text-sm text-white/60 leading-relaxed border-l-2 border-white/15 pl-3">
-            {t.landingChatMsg2}
-          </p>
-        </div>
-        <div>
-          <p className="text-[11px] text-white/40 mb-1">{t.landingChatCoachLabel}</p>
-          <p className="text-sm text-white/90 leading-relaxed border-l-2 pl-3" style={{ borderColor: '#E51F26' }}>
-            {t.landingChatMsg3}
-          </p>
+      <div className="grid grid-cols-2 gap-3 p-5">
+        {tiles.map(tile => (
+          <div key={tile.label} className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+            <p className="text-[10px] text-white/40 uppercase tracking-wide mb-1">{tile.label}</p>
+            <p className="text-xl font-bold text-white tabular-nums">{tile.value}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="px-5 pb-5">
+        <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 flex items-end gap-1 h-16">
+          {bars.map((h, i) => (
+            <div key={i} className="flex-1 rounded-sm" style={{ height: `${h}%`, background: '#E51F26', opacity: 0.5 + (h / 200) }} />
+          ))}
         </div>
       </div>
 
       <div className="flex items-center gap-2 px-5 py-3.5 border-t border-white/10 text-xs text-white/50">
-        <Mic className="w-3.5 h-3.5" />
+        <RefreshCw className="w-3.5 h-3.5" />
         {t.landingChatListening}
       </div>
     </div>
@@ -121,7 +129,6 @@ function JourneySection() {
     { title: t.landingJourneyStep2Title, desc: t.landingJourneyStep2Desc },
     { title: t.landingJourneyStep3Title, desc: t.landingJourneyStep3Desc },
     { title: t.landingJourneyStep4Title, desc: t.landingJourneyStep4Desc },
-    { title: t.landingJourneyStep5Title, desc: t.landingJourneyStep5Desc },
   ]
   return (
     <section id="journey" className="py-20 sm:py-28 bg-black">
@@ -298,7 +305,7 @@ export function LandingPage() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.7, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
             >
-              <ChatMock />
+              <DashboardMock />
               <p className="text-sm text-white/40 mt-4 max-w-md">{t.landingChatCaption}</p>
             </motion.div>
           </div>
