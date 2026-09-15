@@ -798,18 +798,21 @@ export const translations = {
     // ── Landing page v2 ───────────────────────────────────────────
     // Visual theme (dark + red, real logo) is copied from hub.rolplay.ai --
     // the company's own marketing site for the Hub (the learner-facing
-    // coaching/practice product). The COPY below is deliberately different:
-    // this app is Rolplay Analytics, the dashboard/reporting layer built on
-    // top of real rolplay_app_sql session data, aimed at admins and
-    // managers, not learners. Key names below are inherited from the first
-    // draft (which wrongly copied the Hub's own pitch) -- kept as-is to
-    // avoid churn, but every value now describes the analytics product.
+    // coaching/practice product). This app is Rolplay Analytics, the
+    // dashboard/reporting layer built on real rolplay_app_sql session data.
+    // IMPORTANT: this page's audience is the person who logs in and views
+    // THEIR OWN dashboard (a rep, a manager at the client company) -- NOT
+    // the internal admin who runs the Dashboard Builder. An earlier draft
+    // wrote this section from the builder/admin's point of view ("name the
+    // client", "we read the schema", "you publish") -- wrong audience for a
+    // page whose own primary CTA is "Sign in". Rewritten to describe what a
+    // logged-in user sees and does, not how an admin builds it for them.
     landingNavJourney:        'How it works',
     landingNavConversations:  'KPIs that matter',
     landingNavProgress:       'Platform',
     landingHeroCtaSecondary:  'Create account',
     landingHeroTitleV2:       'See the real story behind every training session.',
-    landingHeroParaV2:        'Real-time dashboards for LMS, coaching, certification, and simulators. Rolplay Analytics turns your team’s real session data into clear, exportable KPIs, automatically, with nothing fabricated.',
+    landingHeroParaV2:        'Real-time dashboards for LMS, coaching, certification, and simulators. Rolplay Analytics turns your own real session data into clear KPIs, automatically, with nothing fabricated.',
     landingChatCoachName:     'Resumen Global',
     landingChatStatus:        'Datos en vivo',
     landingChatCoachLabel:    'Sesiones Totales',
@@ -819,18 +822,18 @@ export const translations = {
     landingChatMsg3:          'Usuarios Registrados',
     landingChatListening:     'Refreshed automatically from your real sessions',
     landingChatCaption:       'A real dashboard, built from real rolplay_app_sql session data — not a mockup with placeholder numbers.',
-    landingJourneyTitle:      'How your dashboard gets built',
-    landingJourneySub:        'Four steps, in order. Nothing goes live until it’s validated against real data.',
-    landingJourneyStep1Title: 'Name the client',
-    landingJourneyStep1Desc:  'Type an existing client with real activity, or a new company. The platform locates their real data — no manual setup, no spreadsheets.',
-    landingJourneyStep2Title: 'We read the real schema',
-    landingJourneyStep2Desc:  'The builder discovers which modules that client actually has data for — LMS, coaching, simulator, certification, Second Brain — and reads their real session records.',
-    landingJourneyStep3Title: 'You validate before anything goes live',
-    landingJourneyStep3Desc:  'Every KPI and chart is checked against the real data before you see the preview. Nothing is invented to fill a gap — an honest empty state beats a fabricated number.',
-    landingJourneyStep4Title: 'Publish, once you’re sure',
-    landingJourneyStep4Desc:  'The client logs in and sees their real dashboard. The published layout stays stable — new data updates the numbers, not the design.',
+    landingJourneyTitle:      'What you get when you sign in',
+    landingJourneySub:        'Your dashboard is ready before you even ask for it.',
+    landingJourneyStep1Title: 'Sign in with your work email',
+    landingJourneyStep1Desc:  'If your team already uses Rolplay, your dashboard is waiting for you — no setup, no new password to configure with IT.',
+    landingJourneyStep2Title: 'See your real numbers, right away',
+    landingJourneyStep2Desc:  'Sessions, average score, approval rate — your team’s real results, refreshed automatically. Nothing to export by hand.',
+    landingJourneyStep3Title: 'Go deeper, by module or by person',
+    landingJourneyStep3Desc:  'Coach, Simulator, LMS, Certification — each with its own KPIs, and its own people, not one number for everything.',
+    landingJourneyStep4Title: 'Track how you’re actually progressing',
+    landingJourneyStep4Desc:  'What improved, what’s still hard, and where you stand against the goal — session over session, not a guess.',
     landingConvTitle:         'KPIs that matter, organized by what they answer',
-    landingConvSub:           'Every dashboard groups its KPIs around the questions a manager actually asks — not a wall of undifferentiated numbers.',
+    landingConvSub:           'Your dashboard groups its KPIs around the questions that actually come up — not a wall of undifferentiated numbers.',
     landingConvCoachLabel:    'Adoption & readiness',
     landingConvCoachTitle:    'Is the team actually using it?',
     landingConvCoachDesc:     'Activation rate, weekly practice frequency, recurring adoption, and how much a rep’s score improves session over session.',
@@ -843,11 +846,11 @@ export const translations = {
     landingConvSimBullet1:    'Score by commercial domain — discovery, objections, closing, and more',
     landingConvSimBullet2:    'Top real strengths, ranked by what the team consistently gets right',
     landingConvSimBullet3:    'Top real opportunity areas, ranked by what actually fails most often',
-    landingProgressTitle:     'Built to be trusted, not just to look good',
-    landingProgressSub:       'A dashboard a manager can act on has to tell the truth about what it doesn’t know, not just what it does.',
+    landingProgressTitle:     'What you see is real',
+    landingProgressSub:       'A dashboard you can actually act on has to tell the truth about what it doesn’t know, not just what it does.',
     landingProgressBullet1:   'A missing metric shows an honest empty state — never a fabricated number',
-    landingProgressBullet2:   'A configurable pass-rate threshold per client, visible right in the KPI',
-    landingProgressBullet3:   'Published dashboards stay stable — new data updates numbers, not layout',
+    landingProgressBullet2:   'Your team’s pass-rate goal, visible right in the KPI, not buried in a spec',
+    landingProgressBullet3:   'Your dashboard’s layout stays stable — new data updates the numbers, not the design',
     landingProgressCardTitle: 'Mastery by domain',
     landingProgressGlobal:    'Overall',
     landingProgressCatProduct:    'Product',
@@ -856,8 +859,8 @@ export const translations = {
     landingProgressCatObjections: 'Objections',
     landingProgressCatClosing:    'Closing',
     landingProgressCatEthics:     'Ethics',
-    landingFinalCtaTitle:     'Want to see it with your own data?',
-    landingFinalCtaSub:       'We’ll build a real preview from your team’s actual sessions — not a demo with placeholder numbers.',
+    landingFinalCtaTitle:     'Your team isn’t here yet?',
+    landingFinalCtaSub:       'If your company works with Rolplay, ask your administrator for access — or reach out and we’ll get you set up.',
     landingFinalCtaBtn1:      'Talk to Rolplay',
     landingFinalCtaBtn2:      'I already have an account',
     landingFooterProduct:     'Product',
@@ -1951,17 +1954,23 @@ export const translations = {
 
     // ── Landing page v2 ───────────────────────────────────────────
     // Tema visual (oscuro + rojo, logo real) copiado de hub.rolplay.ai --
-    // el sitio de marketing del Hub (el producto de práctica/coaching para
-    // el usuario final). El CONTENIDO de abajo es deliberadamente distinto:
-    // esta app es Rolplay Analytics, la capa de dashboards/reportes sobre
-    // datos reales de rolplay_app_sql, dirigida a administradores y
-    // gerentes, no a usuarios en práctica.
+    // el sitio de marketing del Hub. Esta app es Rolplay Analytics, la capa
+    // de dashboards/reportes sobre datos reales de rolplay_app_sql.
+    // IMPORTANTE: el público de esta página es la persona que inicia sesión
+    // y ve SU PROPIO dashboard (un vendedor, un gerente en la empresa
+    // cliente) — NO el administrador interno que usa el Generador de
+    // Dashboards. Un borrador anterior escribió esta sección desde el punto
+    // de vista del administrador ("nombra al cliente", "leemos el esquema",
+    // "publicas") — público equivocado para una página cuyo propio CTA
+    // principal es "Iniciar sesión". Reescrito para describir lo que ve y
+    // hace un usuario ya autenticado, no cómo un administrador se lo
+    // construye.
     landingNavJourney:        'Cómo funciona',
     landingNavConversations:  'KPIs que importan',
     landingNavProgress:       'Plataforma',
     landingHeroCtaSecondary:  'Crear cuenta',
     landingHeroTitleV2:       'Ve la historia real detrás de cada sesión de entrenamiento.',
-    landingHeroParaV2:        'Dashboards en tiempo real para LMS, coaching, certificación y simuladores. Rolplay Analytics convierte los datos reales de las sesiones de tu equipo en KPIs claros y exportables, automáticamente, sin nada inventado.',
+    landingHeroParaV2:        'Dashboards en tiempo real para LMS, coaching, certificación y simuladores. Rolplay Analytics convierte tus propios datos reales de sesión en KPIs claros, automáticamente, sin nada inventado.',
     landingChatCoachName:     'Resumen Global',
     landingChatStatus:        'Datos en vivo',
     landingChatCoachLabel:    'Sesiones Totales',
@@ -1971,18 +1980,18 @@ export const translations = {
     landingChatMsg3:          'Usuarios Registrados',
     landingChatListening:     'Actualizado automáticamente con tus sesiones reales',
     landingChatCaption:       'Un dashboard real, construido con datos reales de sesiones de rolplay_app_sql — no una maqueta con números de ejemplo.',
-    landingJourneyTitle:      'Así se construye tu dashboard',
-    landingJourneySub:        'Cuatro pasos, en orden. Nada se publica sin antes validarse contra datos reales.',
-    landingJourneyStep1Title: 'Nombra al cliente',
-    landingJourneyStep1Desc:  'Escribe un cliente existente con actividad real, o una empresa nueva. La plataforma localiza sus datos reales — sin configuración manual, sin hojas de cálculo.',
-    landingJourneyStep2Title: 'Leemos el esquema real',
-    landingJourneyStep2Desc:  'El generador descubre para qué módulos ese cliente realmente tiene datos — LMS, coaching, simulador, certificación, Second Brain — y lee sus registros de sesión reales.',
-    landingJourneyStep3Title: 'Validas antes de que nada se publique',
-    landingJourneyStep3Desc:  'Cada KPI y gráfico se verifica contra los datos reales antes de que veas la vista previa. Nada se inventa para llenar un vacío — un estado vacío honesto es mejor que un número fabricado.',
-    landingJourneyStep4Title: 'Publicas, cuando estés seguro',
-    landingJourneyStep4Desc:  'El cliente inicia sesión y ve su dashboard real. El diseño publicado se mantiene estable — los datos nuevos actualizan los números, no el diseño.',
+    landingJourneyTitle:      'Lo que obtienes al iniciar sesión',
+    landingJourneySub:        'Tu dashboard está listo antes de que lo pidas.',
+    landingJourneyStep1Title: 'Inicia sesión con tu correo de trabajo',
+    landingJourneyStep1Desc:  'Si tu equipo ya usa Rolplay, tu dashboard te está esperando — sin configuración, sin una contraseña nueva que pedirle a sistemas.',
+    landingJourneyStep2Title: 'Ve tus números reales, de inmediato',
+    landingJourneyStep2Desc:  'Sesiones, puntuación promedio, tasa de aprobación — los resultados reales de tu equipo, actualizados automáticamente. Nada que exportar a mano.',
+    landingJourneyStep3Title: 'Profundiza por módulo o por persona',
+    landingJourneyStep3Desc:  'Coach, Simulador, LMS, Certificación — cada uno con sus propios KPIs y su propia gente, no un solo número para todo.',
+    landingJourneyStep4Title: 'Sigue tu progreso real',
+    landingJourneyStep4Desc:  'Lo que mejoró, lo que sigue costando trabajo, y dónde estás frente a la meta — sesión tras sesión, no una suposición.',
     landingConvTitle:         'KPIs que importan, organizados por lo que responden',
-    landingConvSub:           'Cada dashboard agrupa sus KPIs alrededor de las preguntas que un gerente realmente hace — no un muro de números sin diferenciar.',
+    landingConvSub:           'Tu dashboard agrupa sus KPIs alrededor de las preguntas que realmente surgen — no un muro de números sin diferenciar.',
     landingConvCoachLabel:    'Adopción y preparación',
     landingConvCoachTitle:    '¿El equipo realmente lo está usando?',
     landingConvCoachDesc:     'Tasa de activación, frecuencia de práctica semanal, adopción recurrente, y cuánto mejora la puntuación de un vendedor sesión tras sesión.',
@@ -1995,11 +2004,11 @@ export const translations = {
     landingConvSimBullet1:    'Puntuación por dominio comercial — descubrimiento, objeciones, cierre y más',
     landingConvSimBullet2:    'Principales fortalezas reales, según lo que el equipo hace bien consistentemente',
     landingConvSimBullet3:    'Principales áreas de oportunidad reales, según lo que más falla en la práctica',
-    landingProgressTitle:     'Construido para generar confianza, no solo para verse bien',
-    landingProgressSub:       'Un dashboard que un gerente pueda usar para decidir tiene que decir la verdad sobre lo que no sabe, no solo sobre lo que sí.',
+    landingProgressTitle:     'Lo que ves es real',
+    landingProgressSub:       'Un dashboard que realmente puedas usar tiene que decir la verdad sobre lo que no sabe, no solo sobre lo que sí.',
     landingProgressBullet1:   'Una métrica faltante muestra un estado vacío honesto — nunca un número fabricado',
-    landingProgressBullet2:   'Un umbral de aprobación configurable por cliente, visible directamente en el KPI',
-    landingProgressBullet3:   'Los dashboards publicados se mantienen estables — los datos nuevos actualizan números, no el diseño',
+    landingProgressBullet2:   'La meta de aprobación de tu equipo, visible directamente en el KPI, no escondida en una ficha técnica',
+    landingProgressBullet3:   'El diseño de tu dashboard se mantiene estable — los datos nuevos actualizan los números, no el diseño',
     landingProgressCardTitle: 'Dominio por área',
     landingProgressGlobal:    'Global',
     landingProgressCatProduct:    'Producto',
@@ -2008,8 +2017,8 @@ export const translations = {
     landingProgressCatObjections: 'Objeciones',
     landingProgressCatClosing:    'Cierre',
     landingProgressCatEthics:     'Ética',
-    landingFinalCtaTitle:     '¿Lo vemos con tus propios datos?',
-    landingFinalCtaSub:       'Construimos una vista previa real con las sesiones reales de tu equipo — no una demo con números de ejemplo.',
+    landingFinalCtaTitle:     '¿Tu equipo todavía no está aquí?',
+    landingFinalCtaSub:       'Si tu empresa trabaja con Rolplay, pide acceso a tu administrador — o contáctanos y te ayudamos a configurarlo.',
     landingFinalCtaBtn1:      'Hablar con Rolplay',
     landingFinalCtaBtn2:      'Ya tengo cuenta',
     landingFooterProduct:     'Producto',
