@@ -295,12 +295,39 @@ function DashboardBuilder() {
   useEffect(() => () => stopPoll(), [])
   useEffect(() => { logEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [job?.logs?.length])
 
+  // Real live generation got stuck once with the UI frozen at a fixed
+  // percent forever, no error shown, no further log lines -- traced to
+  // this loop's `if (!res.ok) return`: ANY failed poll (a 404 because the
+  // job was lost, a 502, a network blip) was silently ignored and polling
+  // just continued unbounded, so a backend that stopped answering produced
+  // no different a screen than one still genuinely working. The backend
+  // now has its own watchdog (ai-service/app/jobs.py's
+  // _GENERATION_TIMEOUT_SECONDS) that guarantees a real job reaches
+  // done/error within a bounded time -- this is the client-side half of
+  // the same guarantee, for the case where the backend can't answer AT ALL
+  // (a restart mid-job loses the in-memory job entirely). Counts
+  // CONSECUTIVE failures, reset on any successful poll, so one transient
+  // blip never trips it.
+  const MAX_CONSECUTIVE_POLL_FAILURES = 45 // ~45s at the 1s interval below
   const poll = useCallback((jobId: string) => {
     stopPoll()
+    let consecutiveFailures = 0
     pollRef.current = setInterval(async () => {
       try {
         const res = await fetch(`/api/ai/status/${jobId}`, { cache: 'no-store' })
-        if (!res.ok) return
+        if (!res.ok) {
+          consecutiveFailures += 1
+          if (consecutiveFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
+            stopPoll()
+            setJob(prev => prev && ({
+              ...prev,
+              phase: 'error',
+              error: `Lost contact with the generation job after ${MAX_CONSECUTIVE_POLL_FAILURES}s of failed status checks (last HTTP ${res.status}). It may have been interrupted by a service restart -- try again.`,
+            }))
+          }
+          return
+        }
+        consecutiveFailures = 0
         const j: JobState = await res.json()
         setJob(j)
         // Pause polling while waiting on a manager decision — resumed by
@@ -308,7 +335,17 @@ function DashboardBuilder() {
         if (j.phase === 'done' || j.phase === 'error' || j.phase === 'needs_ids' || j.phase === 'review_services') {
           stopPoll()
         }
-      } catch { /* keep polling */ }
+      } catch {
+        consecutiveFailures += 1
+        if (consecutiveFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
+          stopPoll()
+          setJob(prev => prev && ({
+            ...prev,
+            phase: 'error',
+            error: `Lost contact with the generation job after ${MAX_CONSECUTIVE_POLL_FAILURES}s of failed status checks. Check your connection and try again.`,
+          }))
+        }
+      }
     }, 1000)
   }, [])
 
