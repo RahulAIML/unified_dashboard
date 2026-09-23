@@ -77,6 +77,16 @@ class GeminiJsonRequestShapeTests(unittest.TestCase):
             result = _run(llm.gemini_json("system", "user"))
         self.assertIsNone(result)
 
+    def test_treats_whitespace_only_api_keys_as_unavailable(self):
+        from app import llm
+
+        fake_settings = Settings(gemini_api_key="   \n\t  ")
+        with patch.object(llm, "get_settings", return_value=fake_settings), \
+             patch.object(httpx.AsyncClient, "post", new=AsyncMock(side_effect=AssertionError("must not call Gemini"))):
+            self.assertFalse(llm.llm_available())
+            result = _run(llm.gemini_json("system", "user"))
+        self.assertIsNone(result)
+
 
 if __name__ == "__main__":
     unittest.main()

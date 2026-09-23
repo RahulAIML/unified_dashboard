@@ -391,18 +391,17 @@ async function ensureDynamicTenantsLoaded(): Promise<void> {
  * (pipeline) and resolveRolplayAppAccess (authorization). Use
  * resolvePharmaTenantAccess() anywhere tenant data is actually served.
  */
-export async function resolvePharmaTenant(email: string): Promise<PharmaTenant | null> {
-  await ensureDynamicTenantsLoaded()
+export function resolvePharmaTenantFast(email: string): PharmaTenant | null {
   const userDomain = email.toLowerCase().split('@')[1] ?? ''
   if (!userDomain) return null
   const key = domainMap().get(userDomain)
   if (!key) return null
-  // Guard: a domain can be mapped (e.g. via PHARMA_TENANT_DOMAINS env) while its
-  // TENANT_CONFIG entry is absent — e.g. a client that hasn't been onboarded via
-  // the admin wizard yet. Treat that as "not a pharma tenant" (clean empty
-  // dashboard) rather than returning a key with no config (which would crash
-  // downstream on cfg.url).
   return TENANT_CONFIG[key] ? key : null
+}
+
+export async function resolvePharmaTenant(email: string): Promise<PharmaTenant | null> {
+  await ensureDynamicTenantsLoaded()
+  return resolvePharmaTenantFast(email)
 }
 
 // ── Authorization (tenant isolation) ─────────────────────────────────────────

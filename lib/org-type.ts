@@ -14,8 +14,8 @@
  *
  * Second Brain is probed separately (API call) and does not affect org type.
  */
-import { resolvePharmaTenantAccess } from './pharma-tenant'
-import { resolveRolplayAppClientIdAsync } from './bridge-rolplay-app'
+import { resolvePharmaTenantAccess, resolvePharmaTenantFast } from './pharma-tenant'
+import { resolveRolplayAppClientId, resolveRolplayAppClientIdAsync } from './bridge-rolplay-app'
 
 /**
  * Returns true when the given email belongs to the Banco organization.
@@ -59,15 +59,27 @@ export async function resolveOrgType(
   email: string,
   customerId: number,
 ): Promise<'banco' | 'pharma' | 'rolplay-app' | 'analytics' | 'none'> {
+  // Early exit: once a real analytics customerId is present and the email is
+  // not already tied to a pharma/rolplay-app tenant via a known static domain,
+  // there is no value in probing every external connector. Those probes can
+  // trigger expensive SQL/bridge lookups on unknown domains and stall the whole
+  // login flow. See the org-type regression tests for the exact failure mode.
+  if (await resolveBancoAccess(email)) return 'banco'
+
+  const staticPharmaMatch = resolvePharmaTenantFast(email)
+  const staticRolplayMatch = resolveRolplayAppClientId(email)
+  if (customerId > 0 && !staticPharmaMatch && !staticRolplayMatch) {
+    return 'analytics'
+  }
+
   // Both branches below are ACCESS checks, not just domain matches. A domain
   // squatter (registration is open) falls through them and ends at 'none',
   // which serves no tenant data anywhere -- the correct outcome. See
   // docs/PRODUCTION_READINESS_AUDIT.md (S1).
-  if (await resolveBancoAccess(email))          return 'banco'
-  if (await resolvePharmaTenantAccess(email))   return 'pharma'
+  if (await resolvePharmaTenantAccess(email)) return 'pharma'
   // Before analytics: rolplay-app clients can share a domain with a coach_app
   // analytics customer (audioweb.com.mx), so the explicit login map wins.
   if (await resolveRolplayAppClientIdAsync(email)) return 'rolplay-app'
-  if (customerId > 0)                    return 'analytics'
+  if (customerId > 0) return 'analytics'
   return 'none'
 }
