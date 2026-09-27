@@ -1,7 +1,6 @@
 "use client"
 
 import { useMemo, useEffect, useReducer, useRef, useState } from "react"
-import { motion, AnimatePresence } from "framer-motion"
 import { Target, PlayCircle, TrendingUp, TrendingDown, BadgeCheck, BarChart2, AlertTriangle, Trophy, MessageSquare, Users, Search, FileText, Lightbulb, CheckCircle2 } from "lucide-react"
 import { DashboardHeader }    from "@/components/DashboardHeader"
 import { SummaryCard }        from "@/components/SummaryCard"
@@ -602,17 +601,13 @@ export function DashboardContent() {
 
       <div className="w-full px-4 sm:px-6 lg:px-8 py-5 sm:py-8 space-y-6 sm:space-y-8 max-w-[1600px] mx-auto">
 
-        {/* Active solution badge */}
-        <AnimatePresence>
-          {selectedSolution && (
-            <motion.div
-              key="solution-badge"
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.2 }}
-              className="flex items-center gap-2 text-sm font-medium text-primary"
-            >
+        {/* Active solution badge -- plain conditional + CSS keyframe, not
+            framer-motion's AnimatePresence (see ai-assistant.tsx and
+            DataTable.tsx for the full story: an unrelated re-render landing
+            while framer-motion holds a reference to a node mid-exit throws
+            insertBefore/NotFoundError and crashes the whole app). */}
+        {selectedSolution && (
+            <div className="flex items-center gap-2 text-sm font-medium text-primary animate-fade-in">
               <span className="inline-block w-2 h-2 rounded-full bg-primary" />
               {t.themeShowing}{" "}
               <span className="capitalize font-bold">
@@ -624,9 +619,8 @@ export function DashboardContent() {
               >
                 {t.themeClear}
               </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
+            </div>
+        )}
 
         {/* API error banners */}
         {overviewError && <ErrorBanner message={`${t.errorLoading}: ${overviewError}`} />}

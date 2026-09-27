@@ -300,8 +300,12 @@
 
 /* ── Animation Utilities ────────────────────────────────────────────────────── */
 @layer utilities {
+  /* "both" (not just "forwards"): DataTable.tsx staggers rows with an
+     animation-delay per row -- without "backwards" too, a delayed row would
+     render at full opacity during its own delay window, then visibly flash
+     to invisible the instant the animation actually starts. */
   .animate-fade-in {
-    animation: fadeIn 0.3s ease-out forwards;
+    animation: fadeIn 0.3s ease-out both;
   }
   
   .animate-slide-up {

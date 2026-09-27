@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { motion, AnimatePresence } from "framer-motion"
 import { ArrowUpDown, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useT } from "@/lib/lang-store"
@@ -106,26 +105,31 @@ export function DataTable<T extends object>({
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
-              <AnimatePresence mode="wait">
-                {paged.map((row, i) => (
-                  <motion.tr
-                    key={i}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ delay: i * 0.02 }}
-                    className="hover:bg-muted/30 transition-colors"
-                  >
-                    {columns.map(col => (
-                      <td key={String(col.key)} className={cn("px-4 sm:px-5 py-3.5 text-foreground/90", col.className)}>
-                        {col.render
-                          ? col.render(row)
-                          : String((row as Record<string, unknown>)[String(col.key)] ?? "—")}
-                      </td>
-                    ))}
-                  </motion.tr>
-                ))}
-              </AnimatePresence>
+              {/* Plain <tr> + CSS animation, NOT framer-motion's
+                  AnimatePresence mode="wait" -- that exact combination
+                  (mode="wait" cross-fading a list whose items change) is the
+                  one already root-caused as unreliable in OnboardingTour.tsx
+                  (see that file's comment #2: it desynced independent of
+                  nesting or click speed). Here it also carries the same
+                  insertBefore/NotFoundError crash risk on an unrelated
+                  re-render landing mid-exit -- confirmed live: a real dark/
+                  light toggle click crashed a page with a DataTable mounted.
+                  animation-delay reproduces the original per-row stagger. */}
+              {paged.map((row, i) => (
+                <tr
+                  key={i}
+                  className="hover:bg-muted/30 transition-colors animate-fade-in"
+                  style={{ animationDelay: `${i * 20}ms` }}
+                >
+                  {columns.map(col => (
+                    <td key={String(col.key)} className={cn("px-4 sm:px-5 py-3.5 text-foreground/90", col.className)}>
+                      {col.render
+                        ? col.render(row)
+                        : String((row as Record<string, unknown>)[String(col.key)] ?? "—")}
+                    </td>
+                  ))}
+                </tr>
+              ))}
               {paged.length === 0 && (
                 <tr>
                   <td colSpan={columns.length} className="px-4 py-12 text-center">
