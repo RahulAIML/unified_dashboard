@@ -7,7 +7,7 @@
  * the user left off.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, act } from '@testing-library/react'
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
 import { OnboardingTour } from '../OnboardingTour'
 import { useOnboardingStore } from '@/lib/onboarding-store'
 
@@ -21,6 +21,29 @@ vi.mock('framer-motion', () => ({
 vi.mock('@/lib/hooks/usePlatformName', () => ({
   usePlatformName: () => ({ platformName: 'Test Platform' }),
 }))
+
+// Full module set by default (matches every existing "all 6 steps" test);
+// narrowed per-test below for the module/journey-gating tests.
+let mockModules: string[] = ['lms', 'coach', 'simulator', 'certification', 'second-brain']
+vi.mock('@/lib/hooks/useAvailableModules', () => ({
+  useAvailableModules: () => ({ modules: mockModules, loading: false }),
+}))
+
+// Desktop by default (matchMedia isn't implemented in jsdom) — the spotlight
+// layout itself is covered separately; these existing tests exercise the
+// step walk/dismiss/replay logic, which is identical either way.
+let mockIsDesktop = true
+const mediaQueryList = {
+  get matches() { return mockIsDesktop },
+  addEventListener: vi.fn(),
+  removeEventListener: vi.fn(),
+}
+vi.stubGlobal('matchMedia', vi.fn().mockImplementation(() => mediaQueryList))
+
+// jsdom has no ResizeObserver — the spotlight-position tracker only needs
+// observe/disconnect to exist, never to actually fire in these tests (no
+// Sidebar is mounted here, so there's never a real target to observe).
+vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} unobserve() {} })
 
 const T = {
   onboardingStepLabel: 'Step {current} of {total}',
@@ -41,6 +64,7 @@ const T = {
   onboardingProgressTitle: 'Measure your progress',
   onboardingProgressBody: 'progress body',
   onboardingStartDiagnostic: 'Start Diagnostic',
+  onboardingFinish: 'Finish',
 }
 vi.mock('@/lib/lang-store', () => ({ useT: () => T }))
 
@@ -56,6 +80,8 @@ vi.stubGlobal('fetch', fetchMock)
 beforeEach(() => {
   useOnboardingStore.setState({ isOpen: false })
   mockUser = null
+  mockModules = ['lms', 'coach', 'simulator', 'certification', 'second-brain']
+  mockIsDesktop = true
   pushMock.mockClear()
   markOnboardingComplete.mockClear()
   fetchMock.mockClear()
@@ -190,5 +216,102 @@ describe('OnboardingTour — replay from Settings', () => {
     act(() => useOnboardingStore.getState().open())
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByText('Step 1 of 6')).toBeInTheDocument()
+  })
+})
+
+describe('OnboardingTour — never points at UI this tenant does not have', () => {
+  beforeEach(() => {
+    mockUser = { id: 1, onboarding_completed_at: null }
+  })
+
+  it('skips the Learn/Practice/Simulate steps for a tenant with only Coach', () => {
+    // hasJourney() needs >=2 real stages -- Coach alone isn't a journey, so
+    // the Diagnostic/Progress steps (gated on journeyGate) drop too. Only
+    // Welcome + Practice should remain: a step for a module this tenant
+    // doesn't have would otherwise point at a sidebar item that isn't there.
+    mockModules = ['coach']
+    render(<OnboardingTour />)
+    expect(screen.getByText('Step 1 of 2')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('Next'))
+    expect(screen.getByRole('heading', { name: 'Practice with your Coach' })).toBeInTheDocument()
+    expect(screen.getByText('Step 2 of 2')).toBeInTheDocument()
+    // No real Journey for this tenant -- the closing CTA can't claim to
+    // "Start Diagnostic" (nothing found from onboardingStartDiagnostic).
+    expect(screen.getByText('Finish')).toBeInTheDocument()
+    expect(screen.queryByText('Start Diagnostic')).not.toBeInTheDocument()
+  })
+
+  it('a two-module tenant (a real journey) keeps the matching steps plus Diagnostic/Progress', () => {
+    mockModules = ['lms', 'simulator']
+    render(<OnboardingTour />)
+    // Welcome, Diagnostic, Learn, Simulate, Progress -- Practice (Coach) is skipped.
+    expect(screen.getByText('Step 1 of 5')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('Next'))
+    expect(screen.getByRole('heading', { name: 'Start with your Diagnostic' })).toBeInTheDocument()
+    fireEvent.click(screen.getByText('Next'))
+    expect(screen.getByRole('heading', { name: 'Learn' })).toBeInTheDocument()
+    fireEvent.click(screen.getByText('Next'))
+    expect(screen.getByRole('heading', { name: 'Simulate' })).toBeInTheDocument()
+    fireEvent.click(screen.getByText('Next'))
+    expect(screen.getByRole('heading', { name: 'Measure your progress' })).toBeInTheDocument()
+    expect(screen.getByText('Start Diagnostic')).toBeInTheDocument()
+  })
+})
+
+describe('OnboardingTour — spotlight targeting (desktop, real nav item on screen)', () => {
+  beforeEach(() => {
+    mockUser = { id: 1, onboarding_completed_at: null }
+  })
+
+  it('spotlights the real sidebar nav link instead of the centered card, once one is on screen', async () => {
+    // Stand in for Sidebar.tsx's own data-tour="nav-lms" link.
+    const navLink = document.createElement('a')
+    navLink.setAttribute('data-tour', 'nav-lms')
+    Object.defineProperty(navLink, 'offsetParent', { get: () => document.body })
+    navLink.getBoundingClientRect = () => ({
+      top: 100, left: 0, width: 256, height: 40, right: 256, bottom: 140, x: 0, y: 100, toJSON() {},
+    })
+    document.body.appendChild(navLink)
+
+    render(<OnboardingTour />)
+    fireEvent.click(screen.getByText('Next')) // -> Diagnostic (journey, no sidebar stand-in) or Learn depending on order
+    fireEvent.click(screen.getByText('Next')) // -> Learn (lms)
+    expect(screen.getByRole('heading', { name: 'Learn' })).toBeInTheDocument()
+
+    // Positioning is measured on a requestAnimationFrame, not synchronously.
+    // Spotlight mode drops the shared journey-map/step-counter centered card
+    // chrome entirely in favor of the floating card next to the target --
+    // its click-blocker is a bare dialog with no visible border styling.
+    await waitFor(() => expect(document.querySelector('.pointer-events-none')).toBeTruthy())
+
+    document.body.removeChild(navLink)
+  })
+
+  it('falls back to the centered card when the real nav item is not on screen (e.g. mobile drawer closed)', () => {
+    // No stand-in element appended -- querySelector finds nothing for any step.
+    render(<OnboardingTour />)
+    fireEvent.click(screen.getByText('Next'))
+    fireEvent.click(screen.getByText('Next'))
+    expect(screen.getByRole('heading', { name: 'Learn' })).toBeInTheDocument()
+    expect(document.querySelector('.pointer-events-none')).toBeFalsy()
+  })
+
+  it('never spotlights below the desktop breakpoint, even with a real target on screen', () => {
+    mockIsDesktop = false
+    const navLink = document.createElement('a')
+    navLink.setAttribute('data-tour', 'nav-lms')
+    Object.defineProperty(navLink, 'offsetParent', { get: () => document.body })
+    navLink.getBoundingClientRect = () => ({
+      top: 100, left: 0, width: 256, height: 40, right: 256, bottom: 140, x: 0, y: 100, toJSON() {},
+    })
+    document.body.appendChild(navLink)
+
+    render(<OnboardingTour />)
+    fireEvent.click(screen.getByText('Next'))
+    fireEvent.click(screen.getByText('Next'))
+    expect(screen.getByRole('heading', { name: 'Learn' })).toBeInTheDocument()
+    expect(document.querySelector('.pointer-events-none')).toBeFalsy()
+
+    document.body.removeChild(navLink)
   })
 })

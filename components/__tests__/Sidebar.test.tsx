@@ -15,8 +15,8 @@ import { Sidebar } from '../Sidebar'
 // ── Next.js mocks ─────────────────────────────────────────────────────────────
 
 vi.mock('next/link', () => ({
-  default: ({ href, children }: { href: string; children: React.ReactNode }) => (
-    <a href={href}>{children}</a>
+  default: ({ href, children, ...rest }: { href: string; children: React.ReactNode } & Record<string, unknown>) => (
+    <a href={href} {...rest}>{children}</a>
   ),
 }))
 vi.mock('next/navigation', () => ({
@@ -125,5 +125,25 @@ describe('Sidebar', () => {
   it('renders the mobile hamburger button', () => {
     render(<Sidebar />)
     expect(screen.getByLabelText(/toggle menu/i)).toBeInTheDocument()
+  })
+
+  it('tags the LMS/Coach/Simulator/Journey nav links with the data-tour hooks OnboardingTour spotlights', () => {
+    // Regression-proofing: OnboardingTour looks these links up by
+    // [data-tour="..."] (see lib/nav-tour-targets.ts) to spotlight the real
+    // nav item a step describes. If a nav href here ever changes without
+    // updating its data-tour, the tour silently stops finding it and falls
+    // back to the plain centered card -- this pins the attribute to the
+    // actual rendered link, not just the constant in isolation.
+    render(<Sidebar />)
+    const targets: Record<string, string> = {
+      '/journey': 'nav-journey', '/lms': 'nav-lms', '/coach': 'nav-coach', '/simulator': 'nav-simulator',
+    }
+    for (const [href, tourKey] of Object.entries(targets)) {
+      const links = screen.getAllByRole('link').filter(l => l.getAttribute('href') === href)
+      expect(links.length).toBeGreaterThan(0)
+      for (const link of links) {
+        expect(link.getAttribute('data-tour')).toBe(tourKey)
+      }
+    }
   })
 })

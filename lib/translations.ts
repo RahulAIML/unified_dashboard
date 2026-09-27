@@ -260,6 +260,10 @@ export const translations = {
     onboardingProgressTitle:    'Measure your progress',
     onboardingProgressBody:     'Track how far you have come from your baseline through certification and ongoing sessions.',
     onboardingStartDiagnostic:  'Start Diagnostic',
+    // Shown instead of "Start Diagnostic" only for a tenant with no Journey
+    // (single-solution tenant, hasJourney() false) -- the final step then has
+    // nowhere real to send you, so it just closes the tour.
+    onboardingFinish:           'Finish',
 
     // --- LMS (course progress) ---
     lmsNotConfigured:      'No LMS connected',
@@ -1419,6 +1423,7 @@ export const translations = {
     onboardingProgressTitle:    'Mide tu progreso',
     onboardingProgressBody:     'Da seguimiento a tu evolución desde tu línea base a través de la certificación y sesiones continuas.',
     onboardingStartDiagnostic:  'Comenzar Diagnóstico',
+    onboardingFinish:           'Finalizar',
 
     // --- LMS (progreso de cursos) ---
     lmsNotConfigured:      'Sin LMS conectado',

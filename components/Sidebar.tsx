@@ -18,6 +18,7 @@ import { useAuthContext } from "./AuthProvider"
 import { useApi } from "@/lib/hooks/useApi"
 import { useAvailableModules } from "@/lib/hooks/useAvailableModules"
 import { hasJourney } from "@/lib/journey"
+import { NAV_TOUR_TARGETS } from "@/lib/nav-tour-targets"
 import type { Module } from "@/lib/types"
 
 // Minimal capability shape from /api/auth/access-status (only the flag we need).
@@ -219,8 +220,12 @@ export function Sidebar() {
       <nav className="flex-1 px-3 py-4 space-y-0.5">
         {nav.map(({ href, label, icon: Icon }) => {
           const active = pathname === href
+          // Stable hook for OnboardingTour to spotlight the real nav item a
+          // step talks about, instead of a fragile text/position selector —
+          // see NAV_TOUR_TARGETS in OnboardingTour.tsx.
+          const tourTarget = NAV_TOUR_TARGETS[href]
           return (
-            <Link key={href} href={href}>
+            <Link key={href} href={href} data-tour={tourTarget}>
               <motion.div
                 whileHover={{ x: 2 }}
                 className={cn(
