@@ -76,14 +76,8 @@ export default function LoginPage() {
         className="w-full max-w-md"
       >
         {/* Logo */}
-        <div className="flex items-center justify-center mb-8">
-          <div
-            className="w-12 h-12 rounded-lg flex items-center justify-center font-bold text-white text-lg"
-            style={{ background: 'linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--accent)) 100%)' }}
-          >
-            RP
-          </div>
-          <span className="ml-3 font-bold text-xl text-foreground" translate="no">{APP_NAME}</span>
+        <div className="flex justify-center mb-8">
+          <img src="/logo_rolplay.png" alt="Rolplay" className="h-12 object-contain" />
         </div>
 
         {/* Card */}
