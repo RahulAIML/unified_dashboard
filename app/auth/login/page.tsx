@@ -76,8 +76,8 @@ export default function LoginPage() {
         className="w-full max-w-md"
       >
         {/* Logo */}
-        <div className="flex justify-center mb-8">
-          <img src="/logo_rolplay.png" alt="Rolplay" className="h-12 object-contain" />
+        <div className="flex justify-center mb-12">
+          <img src="/logo_rolplay.png" alt="Rolplay" className="h-14 object-contain drop-shadow-lg" />
         </div>
 
         {/* Card */}
