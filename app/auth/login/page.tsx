@@ -68,7 +68,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-muted/40 to-background flex items-center justify-center px-4 py-12">
+    <div className="min-h-screen bg-gradient-to-br from-rose-950 to-slate-900 flex items-center justify-center px-4 py-12">
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -81,10 +81,10 @@ export default function LoginPage() {
         </div>
 
         {/* Card */}
-        <div className="bg-card rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_1px_2px_rgba(0,0,0,0.02)] border border-border/60 p-8">
+        <div className="bg-slate-800/50 backdrop-blur rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_1px_2px_rgba(0,0,0,0.02)] border border-rose-400/20 p-8">
           <div className="mb-8">
-            <h1 className="text-2xl font-bold text-foreground mb-2">{t.loginTitle}</h1>
-            <p className="text-sm text-muted-foreground">{t.loginSubtitle}</p>
+            <h1 className="text-2xl font-bold text-white mb-2">{t.loginTitle}</h1>
+            <p className="text-sm text-slate-300">{t.loginSubtitle}</p>
           </div>
 
           {/* Error Banner */}
@@ -114,7 +114,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder={t.loginEmailPh}
-                className="w-full rounded-lg border border-border/60 bg-muted px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full rounded-lg border border-rose-400/30 bg-slate-700/50 px-4 py-2.5 text-sm text-white placeholder:text-slate-400 transition-colors focus:outline-none focus:ring-2 focus:ring-rose-500"
               />
             </div>
 
@@ -131,7 +131,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full rounded-lg border border-border/60 bg-muted px-4 py-2.5 pr-10 text-sm text-foreground placeholder:text-muted-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="w-full rounded-lg border border-rose-400/30 bg-slate-700/50 px-4 py-2.5 pr-10 text-sm text-white placeholder:text-slate-400 transition-colors focus:outline-none focus:ring-2 focus:ring-rose-500"
                 />
                 <button
                   type="button"
@@ -152,7 +152,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-2.5 rounded-lg font-semibold text-primary-foreground bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="w-full py-2.5 rounded-lg font-semibold text-white bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {isLoading ? t.loginSubmitting : t.loginSubmit}
             </button>
