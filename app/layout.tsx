@@ -35,6 +35,10 @@ const fontVars = {
 export const metadata: Metadata = {
   title: "Panel de Analítica",
   description: "Panel de analítica unificado",
+  // Paired with the <html translate="no"> / notranslate class below --
+  // this is the half that opts out of Google's translate service itself
+  // (the address-bar prompt, not just the inline DOM attribute).
+  other: { google: "notranslate" },
 };
 
 export default function RootLayout({
@@ -45,8 +49,25 @@ export default function RootLayout({
   return (
     <html
       lang="es"
+      // Root cause of the "Failed to execute 'insertBefore'/'removeChild' on
+      // Node: ... is not a child of this node" crash reported live (and
+      // independently confirmed via Sentry on a DIFFERENT, unrelated app in
+      // the same org -- same error, different codebase/React version,
+      // meaning it was never an app bug): Chrome's page-translate feature
+      // rewrites the DOM by wrapping translated text nodes in extra <font>
+      // elements outside React's control. The very next time React tries to
+      // update that subtree (any click that re-renders anything -- a theme
+      // toggle, a nav click), its virtual DOM no longer matches the real
+      // DOM and insertBefore/removeChild throws, crashing the whole page
+      // until a hard reload resets the DOM. HtmlLangSync.tsx already keeps
+      // <html lang> correct so Chrome doesn't AUTO-offer translation, but
+      // that never stopped a user from manually triggering it (likely here:
+      // Spanish-speaking users on a bilingual EN/ES app) -- translate="no"
+      // + notranslate opts the whole app out, which is the only fix that
+      // actually prevents the DOM rewrite instead of reacting to it.
+      translate="no"
+      className={`h-full notranslate ${inter.variable}`}
       suppressHydrationWarning
-      className={`h-full ${inter.variable}`}
       style={fontVars as CSSProperties}
     >
       <body className="h-full antialiased">
