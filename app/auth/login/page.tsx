@@ -68,7 +68,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-rose-950 to-slate-900 flex items-center justify-center px-4 py-12">
+    <div className="min-h-screen flex items-center justify-center px-4 py-12" style={{ background: 'linear-gradient(135deg, #0f1c3f 0%, #162040 50%, #1a2744 100%)' }}>
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -76,15 +76,15 @@ export default function LoginPage() {
         className="w-full max-w-md"
       >
         {/* Logo */}
-        <div className="flex justify-center mb-12">
-          <img src="/logo_rolplay.png" alt="Rolplay" className="h-14 object-contain drop-shadow-lg" />
+        <div className="flex justify-center mb-10">
+          <img src="/logo_rolplay.png" alt="Rolplay" className="h-16 object-contain" />
         </div>
 
         {/* Card */}
-        <div className="bg-slate-800/50 backdrop-blur rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_1px_2px_rgba(0,0,0,0.02)] border border-rose-400/20 p-8">
-          <div className="mb-8">
-            <h1 className="text-2xl font-bold text-white mb-2">{t.loginTitle}</h1>
-            <p className="text-sm text-slate-300">{t.loginSubtitle}</p>
+        <div className="rounded-xl shadow-2xl p-8" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)' }}>
+          <div className="mb-7">
+            <h1 className="text-2xl font-bold text-white mb-1">{t.loginTitle}</h1>
+            <p className="text-sm text-slate-400">{t.loginSubtitle}</p>
           </div>
 
           {/* Error Banner */}
@@ -93,7 +93,8 @@ export default function LoginPage() {
               role="alert"
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mb-6 flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+              className="mb-5 flex items-start gap-3 rounded-lg p-3 text-sm text-red-400"
+              style={{ background: 'rgba(220,38,38,0.1)', border: '1px solid rgba(220,38,38,0.3)' }}
             >
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <span>{error}</span>
@@ -104,7 +105,7 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Email */}
             <div>
-              <label htmlFor="login-email" className="block text-sm font-medium text-foreground mb-2">
+              <label htmlFor="login-email" className="block text-sm font-medium text-slate-300 mb-1.5">
                 {t.loginEmailLabel}
               </label>
               <input
@@ -114,13 +115,14 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder={t.loginEmailPh}
-                className="w-full rounded-lg border border-rose-400/30 bg-slate-700/50 px-4 py-2.5 text-sm text-white placeholder:text-slate-400 transition-colors focus:outline-none focus:ring-2 focus:ring-rose-500"
+                className="w-full rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-slate-500 transition-all focus:outline-none focus:ring-2 focus:ring-red-500"
+                style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.15)' }}
               />
             </div>
 
             {/* Password */}
             <div>
-              <label htmlFor="login-password" className="block text-sm font-medium text-foreground mb-2">
+              <label htmlFor="login-password" className="block text-sm font-medium text-slate-300 mb-1.5">
                 {t.loginPasswordLabel}
               </label>
               <div className="relative">
@@ -131,19 +133,16 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full rounded-lg border border-rose-400/30 bg-slate-700/50 px-4 py-2.5 pr-10 text-sm text-white placeholder:text-slate-400 transition-colors focus:outline-none focus:ring-2 focus:ring-rose-500"
+                  className="w-full rounded-lg px-4 py-2.5 pr-10 text-sm text-white placeholder:text-slate-500 transition-all focus:outline-none focus:ring-2 focus:ring-red-500"
+                  style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.15)' }}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   aria-label={showPassword ? t.loginHidePassword : t.loginShowPassword}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors"
                 >
-                  {showPassword ? (
-                    <EyeOff className="w-4 h-4" />
-                  ) : (
-                    <Eye className="w-4 h-4" />
-                  )}
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
             </div>
@@ -152,7 +151,8 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-2.5 rounded-lg font-semibold text-white bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="w-full py-2.5 rounded-lg font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              style={{ background: 'linear-gradient(135deg, #cc1f1f 0%, #e53e3e 100%)' }}
             >
               {isLoading ? t.loginSubmitting : t.loginSubmit}
             </button>
@@ -161,30 +161,31 @@ export default function LoginPage() {
           {/* Divider */}
           <div className="relative my-6">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border" />
+              <div className="w-full" style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }} />
             </div>
             <div className="relative flex justify-center text-xs">
-              <span className="px-2 bg-card text-muted-foreground">{t.loginNewTo} <span translate="no">{APP_NAME}</span>?</span>
+              <span className="px-2 text-slate-400" style={{ background: 'transparent' }}>{t.loginNewTo} <span translate="no">{APP_NAME}</span>?</span>
             </div>
           </div>
 
           {/* Sign Up Link */}
           <Link
             href="/auth/register"
-            className="block w-full py-2.5 rounded-lg font-semibold text-center border border-border/60 text-foreground hover:bg-muted transition-colors"
+            className="block w-full py-2.5 rounded-lg font-semibold text-center text-slate-300 hover:text-white transition-colors"
+            style={{ border: '1px solid rgba(255,255,255,0.15)' }}
           >
             {t.loginCreateAccount}
           </Link>
         </div>
 
         {/* Footer */}
-        <p className="text-center text-xs text-muted-foreground mt-6">
+        <p className="text-center text-xs text-slate-500 mt-6">
           {t.loginTermsText}{' '}
-          <a href="#" className="font-medium text-primary hover:underline">
+          <a href="#" className="font-medium text-red-400 hover:text-red-300 hover:underline">
             {t.loginTermsService}
           </a>
           {' '}{t.loginAnd}{' '}
-          <Link href="/privacy" className="font-medium text-primary hover:underline">
+          <Link href="/privacy" className="font-medium text-red-400 hover:text-red-300 hover:underline">
             {t.loginPrivacyPolicy}
           </Link>
         </p>
