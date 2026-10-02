@@ -64,28 +64,26 @@ export default function LoginPage() {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center px-4 py-10"
-      style={{
-        background: 'linear-gradient(160deg, #060d1a 0%, #0a1628 50%, #0d1f3c 100%)',
-      }}
+      className="min-h-screen flex flex-col items-center justify-center px-4 py-12"
+      style={{ background: 'linear-gradient(160deg, #f0f4f8 0%, #e8eef6 100%)' }}
     >
       <motion.div
-        initial={{ opacity: 0, scale: 0.97 }}
-        animate={{ opacity: 1, scale: 1 }}
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
         className="w-full"
         style={{ maxWidth: 420 }}
       >
-        {/* Logo */}
-        <div className="flex justify-center" style={{ marginBottom: 32 }}>
+        {/* Brand header */}
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <div
             style={{
-              width: 72,
-              height: 72,
-              borderRadius: 18,
+              width: 88,
+              height: 88,
+              borderRadius: 22,
               overflow: 'hidden',
-              border: '1px solid rgba(255,255,255,0.12)',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+              margin: '0 auto 16px',
+              boxShadow: '0 8px 28px rgba(0,0,0,0.18)',
             }}
           >
             <img
@@ -94,24 +92,30 @@ export default function LoginPage() {
               style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
             />
           </div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: '#0f172a', letterSpacing: '-0.5px', lineHeight: 1.1 }}>
+            <span style={{ color: '#dc2626' }}>Rol</span>
+            <span translate="no">Play</span>
+          </div>
+          <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
+            Sales Intelligence Platform
+          </div>
         </div>
 
         {/* Card */}
         <div
           style={{
-            background: 'rgba(255,255,255,0.06)',
-            border: '1px solid rgba(255,255,255,0.1)',
-            borderRadius: 20,
-            boxShadow: '0 32px 80px rgba(0,0,0,0.6), 0 1px 0 rgba(255,255,255,0.06) inset',
-            padding: '36px 36px 28px',
+            background: '#fff',
+            border: '1px solid #e2e8f0',
+            borderRadius: 16,
+            boxShadow: '0 4px 32px rgba(0,0,0,0.08)',
+            padding: '32px 32px 28px',
           }}
         >
-          {/* Heading */}
-          <div style={{ marginBottom: 28 }}>
-            <h1 style={{ fontSize: 24, fontWeight: 700, color: '#fff', margin: 0, lineHeight: 1.2, letterSpacing: '-0.3px' }}>
+          <div style={{ marginBottom: 24 }}>
+            <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', margin: 0, lineHeight: 1.2 }}>
               {t.loginTitle}
             </h1>
-            <p style={{ fontSize: 14, color: '#94a3b8', margin: '8px 0 0', lineHeight: 1.5 }}>
+            <p style={{ fontSize: 14, color: '#64748b', margin: '6px 0 0' }}>
               {t.loginSubtitle}
             </p>
           </div>
@@ -120,31 +124,30 @@ export default function LoginPage() {
           {error && (
             <motion.div
               role="alert"
-              initial={{ opacity: 0, y: -8 }}
+              initial={{ opacity: 0, y: -6 }}
               animate={{ opacity: 1, y: 0 }}
               style={{
                 display: 'flex',
                 alignItems: 'flex-start',
                 gap: 10,
-                padding: '12px 14px',
+                padding: '11px 14px',
                 borderRadius: 10,
-                background: 'rgba(220,38,38,0.12)',
-                border: '1px solid rgba(220,38,38,0.3)',
-                marginBottom: 22,
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                marginBottom: 20,
               }}
             >
-              <AlertCircle size={15} style={{ color: '#f87171', flexShrink: 0, marginTop: 1 }} />
-              <span style={{ fontSize: 13, color: '#f87171', lineHeight: 1.5 }}>{error}</span>
+              <AlertCircle size={15} style={{ color: '#dc2626', flexShrink: 0, marginTop: 1 }} />
+              <span style={{ fontSize: 13, color: '#dc2626', lineHeight: 1.5 }}>{error}</span>
             </motion.div>
           )}
 
           {/* Form */}
-          <form onSubmit={handleSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            {/* Email */}
+          <form onSubmit={handleSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
             <div>
               <label
                 htmlFor="login-email"
-                style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#cbd5e1', marginBottom: 8 }}
+                style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 7 }}
               >
                 {t.loginEmailLabel}
               </label>
@@ -158,33 +161,34 @@ export default function LoginPage() {
                 disabled={isLoading}
                 style={{
                   width: '100%',
-                  height: 48,
+                  height: 44,
                   padding: '0 14px',
-                  borderRadius: 10,
-                  border: '1.5px solid rgba(255,255,255,0.1)',
-                  background: 'rgba(15,28,60,0.6)',
-                  color: '#fff',
+                  borderRadius: 9,
+                  border: '1.5px solid #e2e8f0',
+                  background: '#f8fafc',
+                  color: '#0f172a',
                   fontSize: 14,
                   outline: 'none',
                   boxSizing: 'border-box',
                   transition: 'border-color 0.15s, box-shadow 0.15s',
                 }}
                 onFocus={(e) => {
-                  e.target.style.borderColor = 'rgba(220,38,38,0.7)'
-                  e.target.style.boxShadow = '0 0 0 3px rgba(220,38,38,0.15)'
+                  e.target.style.borderColor = '#dc2626'
+                  e.target.style.boxShadow = '0 0 0 3px rgba(220,38,38,0.1)'
+                  e.target.style.background = '#fff'
                 }}
                 onBlur={(e) => {
-                  e.target.style.borderColor = 'rgba(255,255,255,0.1)'
+                  e.target.style.borderColor = '#e2e8f0'
                   e.target.style.boxShadow = 'none'
+                  e.target.style.background = '#f8fafc'
                 }}
               />
             </div>
 
-            {/* Password */}
             <div>
               <label
                 htmlFor="login-password"
-                style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#cbd5e1', marginBottom: 8 }}
+                style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 7 }}
               >
                 {t.loginPasswordLabel}
               </label>
@@ -199,24 +203,26 @@ export default function LoginPage() {
                   disabled={isLoading}
                   style={{
                     width: '100%',
-                    height: 48,
+                    height: 44,
                     padding: '0 46px 0 14px',
-                    borderRadius: 10,
-                    border: '1.5px solid rgba(255,255,255,0.1)',
-                    background: 'rgba(15,28,60,0.6)',
-                    color: '#fff',
+                    borderRadius: 9,
+                    border: '1.5px solid #e2e8f0',
+                    background: '#f8fafc',
+                    color: '#0f172a',
                     fontSize: 14,
                     outline: 'none',
                     boxSizing: 'border-box',
                     transition: 'border-color 0.15s, box-shadow 0.15s',
                   }}
                   onFocus={(e) => {
-                    e.target.style.borderColor = 'rgba(220,38,38,0.7)'
-                    e.target.style.boxShadow = '0 0 0 3px rgba(220,38,38,0.15)'
+                    e.target.style.borderColor = '#dc2626'
+                    e.target.style.boxShadow = '0 0 0 3px rgba(220,38,38,0.1)'
+                    e.target.style.background = '#fff'
                   }}
                   onBlur={(e) => {
-                    e.target.style.borderColor = 'rgba(255,255,255,0.1)'
+                    e.target.style.borderColor = '#e2e8f0'
                     e.target.style.boxShadow = 'none'
+                    e.target.style.background = '#f8fafc'
                   }}
                 />
                 <button
@@ -226,37 +232,36 @@ export default function LoginPage() {
                   disabled={isLoading}
                   style={{
                     position: 'absolute',
-                    right: 14,
+                    right: 13,
                     top: '50%',
                     transform: 'translateY(-50%)',
                     background: 'none',
                     border: 'none',
                     padding: 0,
                     cursor: 'pointer',
-                    color: '#64748b',
+                    color: '#94a3b8',
                     display: 'flex',
                     alignItems: 'center',
                     transition: 'color 0.15s',
                   }}
-                  onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.color = '#94a3b8')}
-                  onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.color = '#64748b')}
+                  onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.color = '#475569')}
+                  onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.color = '#94a3b8')}
                 >
                   {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
                 </button>
               </div>
             </div>
 
-            {/* Submit */}
             <button
               type="submit"
               disabled={isLoading}
               style={{
                 width: '100%',
-                height: 48,
-                borderRadius: 10,
+                height: 46,
+                borderRadius: 9,
                 border: 'none',
                 background: isLoading
-                  ? 'rgba(185,28,28,0.5)'
+                  ? 'rgba(220,38,38,0.5)'
                   : 'linear-gradient(135deg, #b91c1c 0%, #dc2626 60%, #ef4444 100%)',
                 color: '#fff',
                 fontSize: 15,
@@ -268,9 +273,8 @@ export default function LoginPage() {
                 gap: 8,
                 transition: 'opacity 0.15s',
                 marginTop: 4,
-                letterSpacing: '0.2px',
               }}
-              onMouseEnter={(e) => { if (!isLoading) (e.currentTarget as HTMLButtonElement).style.opacity = '0.88' }}
+              onMouseEnter={(e) => { if (!isLoading) (e.currentTarget as HTMLButtonElement).style.opacity = '0.9' }}
               onMouseLeave={(e) => { if (!isLoading) (e.currentTarget as HTMLButtonElement).style.opacity = '1' }}
             >
               {isLoading ? (
@@ -284,41 +288,33 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* Footer */}
-          <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid rgba(255,255,255,0.07)', textAlign: 'center' }}>
-            <p style={{ fontSize: 13, color: '#64748b', margin: '0 0 10px' }}>
-              {t.loginNewTo} <span translate="no">{APP_NAME}</span>?
-            </p>
-            <Link
-              href="/auth/register"
-              style={{ fontSize: 13, fontWeight: 600, color: '#f87171', textDecoration: 'none' }}
-              onMouseEnter={(e) => ((e.currentTarget as HTMLAnchorElement).style.textDecoration = 'underline')}
-              onMouseLeave={(e) => ((e.currentTarget as HTMLAnchorElement).style.textDecoration = 'none')}
-            >
-              {t.loginCreateAccount}
-            </Link>
-          </div>
+          <p style={{ fontSize: 12, color: '#94a3b8', marginTop: 20, lineHeight: 1.6 }}>
+            Access is granted by the administrator. If you have no account or lost your password, ask the dashboard administrator for one.
+          </p>
         </div>
 
-        {/* Terms */}
-        <p style={{ textAlign: 'center', fontSize: 12, color: '#475569', marginTop: 20 }}>
+        {/* Footer */}
+        <p style={{ textAlign: 'center', fontSize: 13, color: '#64748b', marginTop: 20 }}>
+          {t.loginNewTo} <span translate="no">{APP_NAME}</span>?{' '}
+          <Link
+            href="/auth/register"
+            style={{ color: '#dc2626', fontWeight: 600, textDecoration: 'none' }}
+            onMouseEnter={(e) => ((e.currentTarget as HTMLAnchorElement).style.textDecoration = 'underline')}
+            onMouseLeave={(e) => ((e.currentTarget as HTMLAnchorElement).style.textDecoration = 'none')}
+          >
+            {t.loginCreateAccount}
+          </Link>
+        </p>
+
+        <p style={{ textAlign: 'center', fontSize: 12, color: '#94a3b8', marginTop: 10 }}>
           {t.loginTermsText}{' '}
-          <a href="#" style={{ color: '#f87171', fontWeight: 500 }}>{t.loginTermsService}</a>
+          <a href="#" style={{ color: '#dc2626' }}>{t.loginTermsService}</a>
           {' '}{t.loginAnd}{' '}
-          <Link href="/privacy" style={{ color: '#f87171', fontWeight: 500 }}>{t.loginPrivacyPolicy}</Link>
+          <Link href="/privacy" style={{ color: '#dc2626' }}>{t.loginPrivacyPolicy}</Link>
         </p>
       </motion.div>
 
-      <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-        input:-webkit-autofill,
-        input:-webkit-autofill:hover,
-        input:-webkit-autofill:focus {
-          -webkit-box-shadow: 0 0 0 1000px rgba(15,28,60,0.95) inset !important;
-          -webkit-text-fill-color: #fff !important;
-          caret-color: #fff;
-        }
-      `}</style>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   )
 }
