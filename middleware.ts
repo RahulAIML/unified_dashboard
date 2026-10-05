@@ -82,8 +82,19 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
+  // Root cause of a real bug found live: every file under public/ (logo.jpg,
+  // *.svg, etc.) is served at the URL root with no distinguishing prefix, so
+  // only excluding _next/static|_next/image|favicon.ico left every OTHER
+  // static asset subject to the SAME auth gate as a real page below --
+  // requesting /logo.jpg while logged out doesn't 404 or serve the image, it
+  // 302s to /auth/login (an HTML page, content-type text/html, status 200),
+  // and the browser's <img> tag just renders nothing. This silently broke
+  // the logo on the login page itself: the one page every logged-out
+  // visitor by definition sees, needing an asset middleware was redirecting
+  // away from. Excluding common static file extensions fixes every such
+  // asset at once instead of special-casing each filename.
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico).*)',
+    '/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:ico|png|jpe?g|svg|webp|gif|css|js|woff2?|ttf|map)$).*)',
   ],
 }
 
