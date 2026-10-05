@@ -87,14 +87,16 @@ export default function LoginPage() {
             }}
           >
             <img
-              src="/logo_rolplay.png"
-              alt="RolPlay"
+              src="/logo.jpg"
+              alt="Rolplay"
               style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
             />
           </div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: '#0f172a', letterSpacing: '-0.5px', lineHeight: 1.1 }}>
-            <span style={{ color: '#dc2626' }}>Rol</span>
-            <span translate="no">Play</span>
+          <div
+            style={{ fontSize: 26, fontWeight: 800, color: '#0f172a', letterSpacing: '-0.5px', lineHeight: 1.1 }}
+            translate="no"
+          >
+            Rolplay
           </div>
           <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
             Sales Intelligence Platform
