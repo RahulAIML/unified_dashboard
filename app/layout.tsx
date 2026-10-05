@@ -8,6 +8,20 @@ import { AuthProvider } from "@/components/AuthProvider";
 import { LayoutContent } from "@/components/LayoutContent"
 import { HtmlLangSync } from "@/components/HtmlLangSync";
 
+// Every page in this app is an authenticated, per-user client-rendered
+// dashboard -- there is no real "static content" to prerender, and nothing
+// here should ever be served from Next's static/ISR cache. Root cause of a
+// real bug found live: "/" was being served with `x-nextjs-cache: HIT` and
+// `x-nextjs-prerender: 1, 1` (response headers confirmed on production),
+// cached for up to a year -- the HTML shell it served referenced an OLD
+// build's JS chunks, so two translation strings fixed in a later commit
+// (the date-range "All" preset, the language-toggle aria-label) kept
+// rendering in English for real users even though the current source has
+// always had the correct Spanish values; a fresh local build never
+// reproduced it. Inherited by every nested page/layout unless a route
+// explicitly opts back in, which none should need to.
+export const dynamic = "force-dynamic"
+
 // ── Inter — primary SaaS font ─────────────────────────────────────────────────
 const inter = Inter({
   subsets: ["latin"],
