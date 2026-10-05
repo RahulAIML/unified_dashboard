@@ -37,6 +37,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     coachActivityIds: number[]
     authHeaderName: string
     authHeaderValue: string
+    passThreshold: number | null
+    hasNoPassingCriteria: boolean
   }>
   try {
     body = await request.json()
@@ -46,6 +48,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   if (body.kind && !['sale_exercises', 'kpi', 'exceltis_rest'].includes(body.kind)) {
     return buildApiError("kind must be one of: sale_exercises, kpi, exceltis_rest", 400)
+  }
+  if (body.passThreshold != null && (!Number.isInteger(body.passThreshold) || body.passThreshold < 1 || body.passThreshold > 100)) {
+    return buildApiError('passThreshold must be an integer between 1 and 100', 400)
   }
 
   try {
@@ -64,6 +69,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       coachActivityIds: body.coachActivityIds !== undefined ? body.coachActivityIds : existing.coachActivityIds,
       authHeaderName: body.authHeaderName !== undefined ? body.authHeaderName : existing.authHeaderName,
       authHeaderValue: body.authHeaderValue !== undefined ? body.authHeaderValue : existing.authHeaderValue,
+      // Same tri-state contract as hasLms/hasSimulator: the DB column is
+      // COALESCE-protected (see db-tenants.ts's upsertTenant), so there is
+      // no dedicated "clear back to unconfigured" -- an admin who wants to
+      // undo a configured threshold sets it explicitly to 70
+      // (LEGACY_PASS_THRESHOLD) rather than un-setting it. Omitted or
+      // explicit null both mean "keep whatever is already configured".
+      passThreshold: body.passThreshold ?? existing.passThreshold,
+      hasNoPassingCriteria: body.hasNoPassingCriteria ?? existing.hasNoPassingCriteria,
       createdBy: admin.userId,
     })
 

@@ -6,7 +6,7 @@
  * admin through the builder's own admin-gated proxy. This route lets any
  * authenticated user view it, but ONLY if their resolved tenant actually owns
  * the slug — verified via the exact same functions every other route in this
- * app already uses for isolation (resolvePharmaTenant, resolveRolplayAppAccess),
+ * app already uses for isolation (resolvePharmaTenantAccess, resolveRolplayAppAccess),
  * never a new ad hoc rule. These tests assert the GATE, mirroring
  * ai-proxy-auth.test.ts's pattern for the sibling admin-only proxy.
  */
@@ -16,7 +16,7 @@ import { NextRequest } from 'next/server'
 const getAuthContextFromRequest = vi.fn()
 const authQuery = vi.fn()
 const findUserById = vi.fn()
-const resolvePharmaTenant = vi.fn()
+const resolvePharmaTenantAccess = vi.fn()
 const resolveRolplayAppAccess = vi.fn()
 const fetchSpy = vi.fn()
 
@@ -30,7 +30,7 @@ vi.mock('@/lib/db-users', () => ({
   findUserById: (...a: unknown[]) => findUserById(...a),
 }))
 vi.mock('@/lib/pharma-tenant', () => ({
-  resolvePharmaTenant: (...a: unknown[]) => resolvePharmaTenant(...a),
+  resolvePharmaTenantAccess: (...a: unknown[]) => resolvePharmaTenantAccess(...a),
 }))
 vi.mock('@/lib/bridge-rolplay-app', () => ({
   resolveRolplayAppAccess: (...a: unknown[]) => resolveRolplayAppAccess(...a),
@@ -46,9 +46,9 @@ function req() {
 }
 const ctx = (slug: string) => ({ params: Promise.resolve({ slug }) })
 
-function mockPublishedConfig(connector: string, connectorHandle: Record<string, unknown> = {}) {
+function mockPublishedConfig(connector: string, connectorHandle: Record<string, unknown> = {}, authorizedEmails?: string[]) {
   authQuery.mockResolvedValue([
-    { config: JSON.stringify({ connector, connector_handle: connectorHandle }) },
+    { config: JSON.stringify({ connector, connector_handle: connectorHandle, authorized_emails: authorizedEmails }) },
   ])
 }
 
@@ -56,7 +56,7 @@ beforeEach(() => {
   getAuthContextFromRequest.mockReset()
   authQuery.mockReset()
   findUserById.mockReset()
-  resolvePharmaTenant.mockReset()
+  resolvePharmaTenantAccess.mockReset()
   resolveRolplayAppAccess.mockReset()
   fetchSpy.mockReset()
   findUserById.mockResolvedValue({ role: 'user' })
@@ -126,7 +126,7 @@ describe('GET /api/dashboard-view/[slug]', () => {
   it('denies a pharma viewer whose resolved tenant does not match the slug', async () => {
     getAuthContextFromRequest.mockResolvedValue({ userId: 1, email: 'a@takeda.com', customerId: 0 })
     mockPublishedConfig('pharma_kpi')
-    resolvePharmaTenant.mockResolvedValue('takeda') // resolves to a DIFFERENT tenant than the slug below
+    resolvePharmaTenantAccess.mockResolvedValue('takeda') // resolves to a DIFFERENT tenant than the slug below
     const { GET } = await loadRoute()
 
     const res = await GET(req(), ctx('apotex'))
@@ -138,7 +138,7 @@ describe('GET /api/dashboard-view/[slug]', () => {
   it('allows a pharma viewer whose resolved tenant matches the slug', async () => {
     getAuthContextFromRequest.mockResolvedValue({ userId: 1, email: 'a@apotex.com', customerId: 0 })
     mockPublishedConfig('pharma_kpi')
-    resolvePharmaTenant.mockResolvedValue('apotex')
+    resolvePharmaTenantAccess.mockResolvedValue('apotex')
     const { GET } = await loadRoute()
 
     const res = await GET(req(), ctx('apotex'))
@@ -212,6 +212,72 @@ describe('GET /api/dashboard-view/[slug]', () => {
 
     const res = await GET(req(), ctx('siigo'))
     expect(res.status).toBe(200)
+  })
+
+  it('denies a real, tenant-verified user who is not on the dashboard\'s authorized_emails allowlist', async () => {
+    getAuthContextFromRequest.mockResolvedValue({ userId: 1, email: 'real@siigo.com', customerId: 0 })
+    mockPublishedConfig('rolplay_app_sql', { client_id: 29 }, ['admin@siigo.com'])
+    resolveRolplayAppAccess.mockResolvedValue(29) // a genuine, verified real user of this tenant
+    const { GET } = await loadRoute()
+
+    const res = await GET(req(), ctx('siigo'))
+
+    // The tenant check alone would have let this user in -- the allowlist,
+    // when configured, narrows access further on top of it.
+    expect(res.status).toBe(403)
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('allows a real, tenant-verified user who IS on the authorized_emails allowlist', async () => {
+    getAuthContextFromRequest.mockResolvedValue({ userId: 1, email: 'Admin@Siigo.com  ', customerId: 0 })
+    mockPublishedConfig('rolplay_app_sql', { client_id: 29 }, ['admin@siigo.com'])
+    resolveRolplayAppAccess.mockResolvedValue(29)
+    const { GET } = await loadRoute()
+
+    const res = await GET(req(), ctx('siigo'))
+
+    // Case/whitespace must not matter -- the same normalization as every
+    // other email comparison in this codebase (lowercase, trim).
+    expect(res.status).toBe(200)
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('applies no extra restriction when authorized_emails is empty/absent (default, unchanged behavior)', async () => {
+    getAuthContextFromRequest.mockResolvedValue({ userId: 1, email: 'real@siigo.com', customerId: 0 })
+    mockPublishedConfig('rolplay_app_sql', { client_id: 29 }, [])
+    resolveRolplayAppAccess.mockResolvedValue(29)
+    const { GET } = await loadRoute()
+
+    const res = await GET(req(), ctx('siigo'))
+
+    expect(res.status).toBe(200)
+  })
+
+  it('still lets an admin view a dashboard even when they are not on its authorized_emails allowlist', async () => {
+    getAuthContextFromRequest.mockResolvedValue({ userId: 99, email: 'admin@rolplay.ai', customerId: 0 })
+    findUserById.mockResolvedValue({ role: 'admin' })
+    mockPublishedConfig('rolplay_app_sql', { client_id: 29 }, ['someone-else@siigo.com'])
+    const { GET } = await loadRoute()
+
+    const res = await GET(req(), ctx('siigo'))
+
+    expect(res.status).toBe(200)
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('denies a domain squatter with a lookalike email even if the allowlist would otherwise be irrelevant', async () => {
+    // The allowlist can only NARROW access -- it never substitutes for the
+    // tenant check. A non-tenant-verified email must still be denied even if
+    // it happens to appear on some other dashboard's allowlist by coincidence.
+    getAuthContextFromRequest.mockResolvedValue({ userId: 1, email: 'admin@siigo.com', customerId: 0 })
+    mockPublishedConfig('rolplay_app_sql', { client_id: 29 }, ['admin@siigo.com'])
+    resolveRolplayAppAccess.mockResolvedValue(null) // NOT a verified real user of this tenant
+    const { GET } = await loadRoute()
+
+    const res = await GET(req(), ctx('siigo'))
+
+    expect(res.status).toBe(403)
+    expect(fetchSpy).not.toHaveBeenCalled()
   })
 
   it('sends X-Internal-Auth to the ai-service when configured', async () => {

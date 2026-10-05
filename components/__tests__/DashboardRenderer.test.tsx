@@ -23,9 +23,10 @@
  * alongside a much larger 129, since that's what makes it legible via the
  * label once recharts actually draws it.
  */
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, fireEvent, screen } from '@testing-library/react'
 import { MiniChart, MiniDonut, MiniJourney, MiniTable, ReportsTable, DashboardRenderer, humanizeConnector } from '../DashboardRenderer'
+import { useLangStore } from '@/lib/lang-store'
 
 vi.mock('recharts', () => {
   const Pass = ({ children }: { children?: React.ReactNode }) => <>{children}</>
@@ -167,8 +168,11 @@ describe('MiniDonut', () => {
     )
     const pieData = JSON.parse(container.querySelector('[data-testid="pie"]')?.getAttribute('data-points') ?? '[]')
     const byLabel = new Map(pieData.map((d: { label: string; value: number }) => [d.label, d.value]))
-    expect(byLabel.get('Passed')).toBe(9)
-    expect(byLabel.get('Failed')).toBe(6)
+    // Default test language is Spanish (SSR_LANG='es') -- these backend enum
+    // labels now go through translateGeneratedText like every other
+    // generated string, so the split is checked by its translated labels.
+    expect(byLabel.get('Aprobado')).toBe(9)
+    expect(byLabel.get('Reprobado')).toBe(6)
   })
 
   it('collapses a long tail into a single "Other" slice so it stays legible', () => {
@@ -196,10 +200,12 @@ describe('MiniJourney', () => {
         { module: 'certification', label: 'Certification', phase: 'validation', total_sessions: 3, pass_rate: 66.7 },
       ]} />,
     )
-    expect(getByText('Practice Simulator')).toBeTruthy()
+    // Default test language is Spanish (SSR_LANG='es') -- a stage's module
+    // name is now translated the same as every other generated string.
+    expect(getByText('Simulador de Práctica')).toBeTruthy()
     expect(getByText('144')).toBeTruthy()
-    expect(getByText('36.8% pass rate')).toBeTruthy()
-    expect(getByText('Certification')).toBeTruthy()
+    expect(getByText('36.8% Tasa de Aprobación')).toBeTruthy()
+    expect(getByText('Certificación')).toBeTruthy()
     expect(getByText('3')).toBeTruthy()
   })
 
@@ -207,7 +213,7 @@ describe('MiniJourney', () => {
     const { queryByText } = render(
       <MiniJourney rows={[{ module: 'lms', label: 'LMS', phase: 'cognitive', total_sessions: 40, pass_rate: null }]} />,
     )
-    expect(queryByText(/pass rate/)).toBeNull()
+    expect(queryByText(/Tasa de Aprobación/)).toBeNull()
   })
 
   it('shows a placeholder rather than an empty journey for no rows', () => {
@@ -237,7 +243,7 @@ describe('MiniTable', () => {
         idField="saved_report_id"
       />,
     )
-    const link = getByText('View →').closest('a')
+    const link = getByText('Ver →').closest('a')
     expect(link?.getAttribute('href')).toBe('/drilldown/501')
   })
 
@@ -252,14 +258,14 @@ describe('MiniTable', () => {
     const { queryByText } = render(
       <MiniTable rows={[{ usecase: 'Objection Handling' }]} idField="saved_report_id" />,
     )
-    expect(queryByText('View →')).toBeNull()
+    expect(queryByText('Ver →')).toBeNull()
   })
 
   it('adds no link column at all when idField is absent', () => {
     const { queryByText } = render(
       <MiniTable rows={[{ simulator: 'Exkruthera', total_sessions: 2 }]} />,
     )
-    expect(queryByText('View →')).toBeNull()
+    expect(queryByText('Ver →')).toBeNull()
   })
 })
 
@@ -298,8 +304,9 @@ describe('DashboardRenderer — end to end with real widget shapes', () => {
 
     const pieData = JSON.parse(container.querySelector('[data-testid="pie"]')?.getAttribute('data-points') ?? '[]')
     const byLabel = new Map(pieData.map((d: { label: string; value: number }) => [d.label, d.value]))
-    expect(byLabel.get('Passed')).toBe(9)
-    expect(byLabel.get('Failed')).toBe(6)
+    // Default test language is Spanish (SSR_LANG='es') -- translated, as above.
+    expect(byLabel.get('Aprobado')).toBe(9)
+    expect(byLabel.get('Reprobado')).toBe(6)
   })
 
   it('renders the Solution Journey for a journey widget with real per-module data', () => {
@@ -320,8 +327,9 @@ describe('DashboardRenderer — end to end with real widget shapes', () => {
 
     const { getByText } = render(<DashboardRenderer config={config} preview={preview} />)
 
-    expect(getByText('Practice Simulator')).toBeTruthy()
-    expect(getByText('Certification')).toBeTruthy()
+    // Default test language is Spanish (SSR_LANG='es') -- translated, as above.
+    expect(getByText('Simulador de Práctica')).toBeTruthy()
+    expect(getByText('Certificación')).toBeTruthy()
     expect(getByText('144')).toBeTruthy()
   })
 
@@ -335,7 +343,8 @@ describe('DashboardRenderer — end to end with real widget shapes', () => {
 
     const { getByText } = render(<DashboardRenderer config={config} preview={preview} />)
 
-    expect(getByText(/no data/)).toBeTruthy()
+    // Default test language is Spanish (SSR_LANG='es' — see lib/lang-store.ts).
+    expect(getByText(/sin datos/)).toBeTruthy()
   })
 
   it('shows an up arrow with the real delta_pct for a KPI tile that improved', () => {
@@ -349,6 +358,35 @@ describe('DashboardRenderer — end to end with real widget shapes', () => {
     const { getByText } = render(<DashboardRenderer config={config} preview={preview} />)
 
     expect(getByText('+50%')).toBeTruthy()
+  })
+
+  it('shows the passing-threshold legend under a pass_rate KPI tile', () => {
+    const config = {
+      company: 'Siigo', slug: 'siigo', title: 'Siigo Analytics', connector: 'rolplay_app_sql',
+      rows: [{ id: 'r1', widgets: [{ id: 'tile_pass_rate', type: 'kpi_tile', title: 'Pass Rate', metric_key: 'pass_rate' }] }],
+      recommendations: [],
+    }
+    const preview = { widgets: [{ widget_id: 'tile_pass_rate', ok: true, value: 62.5, legend: 'Passing threshold: 90 pts' }] }
+
+    const { getByText } = render(<DashboardRenderer config={config} preview={preview} />)
+
+    // Default test language is Spanish (SSR_LANG='es') -- this backend-
+    // generated legend is now translated via translateLegend, same pattern
+    // as every other generated string in this file.
+    expect(getByText('Umbral de aprobación: puntuación ≥ 90 pts')).toBeTruthy()
+  })
+
+  it('shows an honest no-data state, no legend, for a tenant with no passing criteria', () => {
+    const config = {
+      company: 'Sanfer', slug: 'sanfer', title: 'Sanfer Analytics', connector: 'rolplay_app_sql',
+      rows: [{ id: 'r1', widgets: [{ id: 'tile_pass_rate', type: 'kpi_tile', title: 'Pass Rate', metric_key: 'pass_rate' }] }],
+      recommendations: [],
+    }
+    const preview = { widgets: [{ widget_id: 'tile_pass_rate', ok: false, value: null, error: 'This tenant has no score-based passing criteria configured' }] }
+
+    const { queryByText } = render(<DashboardRenderer config={config} preview={preview} />)
+
+    expect(queryByText(/Passing threshold/)).toBeNull()
   })
 
   it('shows a down arrow for a KPI tile that regressed', () => {
@@ -375,7 +413,8 @@ describe('DashboardRenderer — end to end with real widget shapes', () => {
     const { getByText, queryByText } = render(<DashboardRenderer config={config} preview={preview} />)
 
     expect(queryByText(/^\+\d|^-\d/)).toBeNull()
-    expect(getByText('no comparison')).toBeTruthy()
+    // Default test language is Spanish (SSR_LANG='es' — see lib/lang-store.ts).
+    expect(getByText('sin comparación histórica')).toBeTruthy()
   })
 
   it('renders the Best Performers leaderboard, ranked, for a table_best_performers widget', () => {
@@ -453,7 +492,9 @@ describe('DashboardRenderer — multi-page navigation', () => {
   it('renders a tab per page and shows the first page by default', () => {
     const { getByText, getAllByRole } = render(<DashboardRenderer config={multiPageConfig()} preview={multiPagePreview()} />)
     const tabs = getAllByRole('tab')
-    expect(tabs.map(t => t.textContent)).toEqual(['Overview', 'Master Coach', 'Practice Simulator'])
+    // Default test language is Spanish (SSR_LANG='es' — see lib/lang-store.ts);
+    // page titles are generated-content strings translated at render time.
+    expect(tabs.map(t => t.textContent)).toEqual(['Resumen', 'Coach Maestro', 'Simulador de Práctica'])
     // Overview's own value (144) is visible; the other pages' values are not.
     expect(getByText('144')).toBeTruthy()
     expect(() => getByText('237')).toThrow()
@@ -501,6 +542,28 @@ describe('DashboardRenderer — multi-page navigation', () => {
   })
 })
 
+describe('DashboardRenderer — mandatory sections with no data', () => {
+  it('shows an honest empty state for a mandatory page instead of silently omitting it', () => {
+    const config = {
+      company: 'Salinas', slug: 'salinas', title: 'Salinas Analytics', connector: 'rolplay_app_sql',
+      rows: [],
+      pages: [
+        { id: 'overview', title: 'Overview', rows: [{ id: 'row_kpis', widgets: [{ id: 'tile_total_sessions', type: 'kpi_tile', title: 'Total Sessions' }] }] },
+        { id: 'lms', title: 'LMS', mandatory: true, rows: [{ id: 'lms_empty', title: 'LMS', widgets: [] }] },
+      ],
+      recommendations: [],
+    }
+    const preview = { widgets: [{ widget_id: 'tile_total_sessions', ok: true, value: 144 }] }
+    const { getByText, getAllByRole } = render(<DashboardRenderer config={config} preview={preview} />)
+
+    expect(getAllByRole('tab').map(t => t.textContent)).toEqual(['Resumen', 'LMS'])
+    fireEvent.click(getByText('LMS'))
+    // Default test language is Spanish (SSR_LANG='es' — see lib/lang-store.ts).
+    expect(getByText('Aún no hay datos disponibles')).toBeTruthy()
+    expect(getByText(/solicitada pero no tiene datos/)).toBeTruthy()
+  })
+})
+
 describe('ReportsTable', () => {
   const rows = Array.from({ length: 30 }, (_, i) => ({
     date: `2026-07-${String((i % 28) + 1).padStart(2, '0')}`,
@@ -511,6 +574,33 @@ describe('ReportsTable', () => {
   it('shows a placeholder for no rows', () => {
     const { container } = render(<ReportsTable rows={[]} searchable exportable filenamePrefix="reports" />)
     expect(container.querySelector('table')).toBeNull()
+  })
+
+  it('translates the "result" column\'s Passed/Failed data values, not just the column header', () => {
+    // Regression: 'Passed'/'Failed' are SQL CASE-expression literals baked
+    // into the row data itself (ai-service's preview_fetch.py), not app
+    // chrome -- the column HEADER translating was not enough, the cell
+    // VALUES were still raw English even with the toggle on Spanish.
+    render(<ReportsTable rows={rows} searchable exportable filenamePrefix="reports" />)
+    expect(screen.queryByText('Passed')).toBeNull()
+    expect(screen.queryByText('Failed')).toBeNull()
+    expect(screen.getAllByText('Aprobado').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Reprobado').length).toBeGreaterThan(0)
+  })
+
+  it('translates the "status" column\'s Active/Disabled data values (Organization page roster)', () => {
+    // Same fixed-vocabulary pattern as "result" above -- ai-service's
+    // preview_fetch.py emits literal 'Active'/'Disabled' from
+    // r_user.disabled for the Organization page's registered-users roster.
+    const statusRows = [
+      { name: 'Claudia Salinas', email: 'claudia@chinoin.com', status: 'Active' },
+      { name: 'Tester Chinoin', email: 'tester@chinoin.com', status: 'Disabled' },
+    ]
+    render(<ReportsTable rows={statusRows} searchable exportable filenamePrefix="organization" />)
+    expect(screen.queryByText('Active')).toBeNull()
+    expect(screen.queryByText('Disabled')).toBeNull()
+    expect(screen.getByText('Activo')).toBeInTheDocument()
+    expect(screen.getByText('Deshabilitado')).toBeInTheDocument()
   })
 
   it('paginates real rows (25 per page)', () => {
@@ -529,7 +619,8 @@ describe('ReportsTable', () => {
   it('filters rows via the search box, across every column', () => {
     render(<ReportsTable rows={rows} searchable exportable filenamePrefix="reports" />)
     fireEvent.change(screen.getByPlaceholderText('Buscar…'), { target: { value: 'alice' } })
-    expect(screen.getByText('10 rows')).toBeTruthy() // 30/3 rows are alice's
+    // Default test language is Spanish (SSR_LANG='es' — see lib/lang-store.ts).
+    expect(screen.getByText('10 filas')).toBeTruthy() // 30/3 rows are alice's
   })
 
   it('omits the search box when searchable is false', () => {
@@ -540,6 +631,32 @@ describe('ReportsTable', () => {
   it('omits the export button when exportable is false', () => {
     render(<ReportsTable rows={rows} searchable exportable={false} filenamePrefix="reports" />)
     expect(screen.queryByText('Export CSV')).toBeNull()
+  })
+
+  it('links each row to /drilldown/[id] when idField is set (rolplay_app_sql Reports page)', () => {
+    render(
+      <ReportsTable
+        rows={[{ id: 78, date: '2026-04-13', rep: 'a@siigo.com', result: 'Passed' }]}
+        searchable exportable filenamePrefix="reports" idField="id"
+      />,
+    )
+    const link = screen.getByText('Ver →').closest('a')
+    expect(link?.getAttribute('href')).toBe('/drilldown/78')
+  })
+
+  it('never renders the raw id as its own displayed column', () => {
+    render(
+      <ReportsTable
+        rows={[{ id: 78, date: '2026-04-13', rep: 'a@siigo.com', result: 'Passed' }]}
+        searchable exportable filenamePrefix="reports" idField="id"
+      />,
+    )
+    expect(screen.queryByText('78')).toBeNull()
+  })
+
+  it('adds no link column at all when idField is absent', () => {
+    render(<ReportsTable rows={rows} searchable exportable filenamePrefix="reports" />)
+    expect(screen.queryByText('Ver →')).toBeNull()
   })
 })
 
@@ -571,6 +688,154 @@ describe('DashboardRenderer — AI Insights', () => {
     }
     const { getByText } = render(<DashboardRenderer config={config} preview={{ widgets: [] }} />)
     expect(getByText('A real grounded insight.')).toBeTruthy()
-    expect(getByText('Overview')).toBeTruthy()
+    expect(getByText('Resumen')).toBeTruthy()
+  })
+})
+
+describe('Language consistency — EN/ES round trip on real generated-content shapes', () => {
+  // Mirrors an actual AI-service-generated config verbatim: literal page/row/
+  // widget titles and business_question strings copied from
+  // ai-service/app/agents/schema_discovery.py and dashboard_planning.py, not
+  // invented for this test -- if any of these ever fall out of sync with the
+  // real Python literals, lib/generated-content-i18n.ts's dictionary (and
+  // this test) both need updating together.
+  function realisticConfig() {
+    return {
+      company: 'Siigo', slug: 'siigo', title: 'Siigo Analytics', connector: 'rolplay_app_sql',
+      rows: [],
+      pages: [
+        {
+          id: 'overview', title: 'Overview',
+          rows: [
+            {
+              id: 'row_kpis', title: 'Overview',
+              widgets: [
+                { id: 'tile_total_sessions', type: 'kpi_tile', title: 'Total Sessions', metric_key: 'total_sessions' },
+                { id: 'tile_avg_score', type: 'kpi_tile', title: 'Average Score', metric_key: 'avg_score' },
+                { id: 'tile_pass_rate', type: 'kpi_tile', title: 'Pass Rate', metric_key: 'pass_rate' },
+              ],
+            },
+            {
+              id: 'row_charts', title: 'Analytics',
+              widgets: [
+                { id: 'chart_trend', type: 'line_chart', title: 'Score Trend' },
+                {
+                  id: 'table_breakdown', type: 'table', title: 'By Simulator — detail',
+                  business_question: 'Which practice scenarios are reps using, and how do they perform on each?',
+                },
+              ],
+            },
+          ],
+        },
+        {
+          id: 'kpis', title: 'KPIs',
+          rows: [{
+            id: 'kpis_group1', title: 'Adoption, Efficiency & Readiness',
+            widgets: [{ id: 'tile_cesar_activation_rate', type: 'kpi_tile', title: 'Activation Rate' }],
+          }],
+        },
+        { id: 'reports', title: 'Reports', rows: [] },
+      ],
+      recommendations: [],
+    }
+  }
+
+  function realisticPreview() {
+    return {
+      widgets: [
+        { widget_id: 'tile_total_sessions', ok: true, value: 154 },
+        { widget_id: 'tile_avg_score', ok: true, value: 46.25 },
+        { widget_id: 'tile_pass_rate', ok: true, value: 12.3 },
+        { widget_id: 'tile_cesar_activation_rate', ok: true, value: 88.1 },
+        {
+          widget_id: 'table_breakdown', ok: true,
+          rows: [{ simulator: 'Discovery Call', total_sessions: 12, avg_score: 55.2 }],
+        },
+      ],
+    }
+  }
+
+  afterEach(() => {
+    useLangStore.getState().setLang('es') // restore the suite-wide default
+  })
+
+  it('renders every generated string in English with zero Spanish leakage', () => {
+    useLangStore.getState().setLang('en')
+    const { getByText, getAllByRole, queryByText } = render(
+      <DashboardRenderer config={realisticConfig()} preview={realisticPreview()} />,
+    )
+    expect(getAllByRole('tab').map(t => t.textContent)).toEqual(['Overview', 'KPIs', 'Reports'])
+    expect(getByText('Total Sessions')).toBeTruthy()
+    expect(getByText('Average Score')).toBeTruthy()
+    expect(getByText('Pass Rate')).toBeTruthy()
+    // No Spanish translation of any of these strings should appear.
+    expect(queryByText('Resumen')).toBeNull()
+    expect(queryByText('Sesiones Totales')).toBeNull()
+    expect(queryByText('Puntuación Promedio')).toBeNull()
+    expect(queryByText('Tasa de Aprobación')).toBeNull()
+  })
+
+  it('renders every generated string in Spanish with zero English leakage', () => {
+    useLangStore.getState().setLang('es')
+    const { getByText, getAllByText, getAllByRole, queryByText, container } = render(
+      <DashboardRenderer config={realisticConfig()} preview={realisticPreview()} />,
+    )
+    expect(getAllByRole('tab').map(t => t.textContent)).toEqual(['Resumen', 'KPIs', 'Reportes'])
+    fireEvent.click(getAllByRole('tab')[0])
+    // "Sesiones Totales" appears twice on purpose: the KPI tile title AND the
+    // breakdown table's translated "total_sessions" column header.
+    expect(getAllByText('Sesiones Totales').length).toBeGreaterThanOrEqual(2)
+    expect(getByText('Puntuación Promedio')).toBeTruthy()
+    expect(getByText('Tasa de Aprobación')).toBeTruthy()
+    expect(getByText('Tendencia de Puntuación')).toBeTruthy()
+    expect(getByText('Por Simulador — detalle')).toBeTruthy()
+    expect(getByText('¿Qué escenarios de práctica usan los representantes y cómo se desempeñan en cada uno?')).toBeTruthy()
+    // No English original of any of these strings should survive.
+    expect(queryByText('Overview')).toBeNull()
+    expect(queryByText('Total Sessions')).toBeNull()
+    expect(queryByText('Average Score')).toBeNull()
+    expect(queryByText('Pass Rate')).toBeNull()
+    expect(queryByText('Score Trend')).toBeNull()
+    expect(queryByText('Reports')).toBeNull()
+    // Table column headers (from live per-simulator breakdown rows) must
+    // also translate, not just widget/page chrome.
+    fireEvent.click(getAllByRole('tab')[0])
+    expect(container.textContent).not.toMatch(/\btotal_sessions\b/)
+  })
+
+  it('switching EN -> ES -> EN never leaves stale text from the previous language', () => {
+    useLangStore.getState().setLang('en')
+    const { rerender, queryByText, getByText } = render(
+      <DashboardRenderer config={realisticConfig()} preview={realisticPreview()} />,
+    )
+    expect(getByText('Average Score')).toBeTruthy()
+
+    useLangStore.getState().setLang('es')
+    rerender(<DashboardRenderer config={realisticConfig()} preview={realisticPreview()} />)
+    expect(queryByText('Average Score')).toBeNull()
+    expect(getByText('Puntuación Promedio')).toBeTruthy()
+
+    useLangStore.getState().setLang('en')
+    rerender(<DashboardRenderer config={realisticConfig()} preview={realisticPreview()} />)
+    expect(queryByText('Puntuación Promedio')).toBeNull()
+    expect(getByText('Average Score')).toBeTruthy()
+  })
+
+  it('an unmapped/unknown generated string renders as-is in either language, never blank', () => {
+    // A page title only ever renders as a tab label when there's more than
+    // one page (DashboardRenderer.tsx: `pages.length > 1 && (...)`) -- a
+    // lone page's title has nowhere to display at all, by the existing,
+    // unrelated design of this component.
+    useLangStore.getState().setLang('es')
+    const config = {
+      ...realisticConfig(),
+      pages: [
+        { id: 'x', title: 'Some Brand New AI-Invented Page Title', rows: [] },
+        { id: 'overview', title: 'Overview', rows: [] },
+      ],
+    }
+    const { getByText } = render(<DashboardRenderer config={config} preview={{ widgets: [] }} />)
+    expect(getByText('Some Brand New AI-Invented Page Title')).toBeTruthy()
+    expect(getByText('Resumen')).toBeTruthy()
   })
 })

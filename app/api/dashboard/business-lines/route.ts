@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { buildSuccess, buildApiError, parseDateRange } from '@/lib/api-utils'
 import { getAuthContextFromRequest } from '@/lib/server-auth'
 import { resolveOrgType } from '@/lib/org-type'
-import { resolvePharmaTenant } from '@/lib/pharma-tenant'
+import { resolvePharmaTenantAccess } from '@/lib/pharma-tenant'
 import { pharmaDashboardBusinessLines } from '@/lib/bridge-pharma-analytics'
 import { isDemoDataEnabled } from '@/lib/demo'
 import { demoBusinessLines } from '@/lib/demo/engine'
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     const range = parseDateRange(sp)
     if (!range) return buildApiError('Invalid date range — provide ?from= and ?to= as ISO strings', 400)
 
-    const tenant = await resolvePharmaTenant(ctx.email)
+    const tenant = await resolvePharmaTenantAccess(ctx.email)
     if (!tenant) return buildApiError('Pharma tenant could not be resolved', 500)
 
     const data = await pharmaDashboardBusinessLines(tenant, {

@@ -16,10 +16,14 @@ async function fresh() {
   return import('../ai')
 }
 
-function geminiResponse(text: string) {
+function geminiResponse(text: string, finishReason?: string) {
   return new Response(JSON.stringify({
-    candidates: [{ content: { parts: [{ text }] } }],
+    candidates: [{ content: { parts: [{ text }] }, ...(finishReason ? { finishReason } : {}) }],
   }), { status: 200, headers: { 'content-type': 'application/json' } })
+}
+
+function geminiErrorResponse(status: number, errorMessage: string) {
+  return new Response(errorMessage, { status })
 }
 
 /** A long-enough real answer so the < 80 char retry never fires unless a test wants it to. */
@@ -198,6 +202,43 @@ describe('user context (contextualize navigation to where the person actually is
   })
 })
 
+describe('token overflow on large date ranges (never answer on a silent partial view)', () => {
+  it('refuses before calling the model when the assembled context is far past a safe input budget', async () => {
+    const { getAIResponse } = await fresh()
+    const hugeContext = `Pass rate: 65%\n${'x'.repeat(500_000)}`
+    const answer = await getAIResponse('Why did the pass rate drop?', hugeContext, 'en')
+
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(answer.toLowerCase()).toContain('narrow the date range')
+  })
+
+  it('catches a 400 "token count exceeds" error from Gemini and asks the user to narrow the range, in the requested language', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      geminiErrorResponse(400, 'The input token count (1234567) exceeds the maximum number of tokens allowed (1000000).')
+    )
+    const { getAIResponse } = await fresh()
+    const answer = await getAIResponse('Why did the pass rate drop?', 'Pass rate: 65%', 'es')
+
+    expect(answer.toLowerCase()).toContain('reduce el rango de fechas')
+  })
+
+  it('does not misreport an unrelated 400 error (e.g. a malformed request) as a range-too-large condition', async () => {
+    fetchSpy.mockResolvedValueOnce(geminiErrorResponse(400, 'Invalid JSON payload received.'))
+    const { getAIResponse } = await fresh()
+
+    await expect(getAIResponse('Why did the pass rate drop?', 'Pass rate: 65%')).rejects.toThrow(/Gemini API error 400/)
+  })
+
+  it('treats a MAX_TOKENS finishReason as an incomplete answer, never surfacing the truncated text as if it were complete', async () => {
+    fetchSpy.mockResolvedValue(geminiResponse('The pass rate dropped because', 'MAX_TOKENS'))
+    const { getAIResponse } = await fresh()
+    const answer = await getAIResponse('Why did the pass rate drop?', 'Pass rate: 65%', 'en')
+
+    expect(answer).not.toContain('The pass rate dropped because')
+    expect(answer.toLowerCase()).toContain('narrow the date range')
+  })
+})
+
 describe('resilience (unchanged behavior worth keeping)', () => {
   it('retries once on a suspiciously short response', async () => {
     fetchSpy
@@ -216,5 +257,26 @@ describe('resilience (unchanged behavior worth keeping)', () => {
     const { getAIResponse } = await import('../ai')
 
     await expect(getAIResponse('Why did the pass rate drop?', 'Pass rate: 65%')).rejects.toThrow(/GEMINI_API_KEY/)
+  })
+})
+
+describe('model is env-configurable (ROBIN_AI_MODEL), not hardcoded', () => {
+  afterEach(() => { delete process.env.ROBIN_AI_MODEL })
+
+  it('defaults to gemini-2.5-flash (today\'s exact behavior) when unset', async () => {
+    const { getAIResponse } = await fresh()
+    await getAIResponse('Why did the pass rate drop?', 'Pass rate: 65%')
+
+    const url = String(fetchSpy.mock.calls[0][0])
+    expect(url).toContain('/models/gemini-2.5-flash:generateContent')
+  })
+
+  it('uses ROBIN_AI_MODEL when set, without a code change', async () => {
+    process.env.ROBIN_AI_MODEL = 'gemini-3-flash-preview'
+    const { getAIResponse } = await fresh()
+    await getAIResponse('Why did the pass rate drop?', 'Pass rate: 65%')
+
+    const url = String(fetchSpy.mock.calls[0][0])
+    expect(url).toContain('/models/gemini-3-flash-preview:generateContent')
   })
 })

@@ -15,7 +15,7 @@ import { NextRequest } from 'next/server'
 import { buildSuccess, buildApiError } from '@/lib/api-utils'
 import { getAuthContextFromRequest } from '@/lib/server-auth'
 import { resolveOrgType } from '@/lib/org-type'
-import { resolvePharmaTenant } from '@/lib/pharma-tenant'
+import { resolvePharmaTenantAccess } from '@/lib/pharma-tenant'
 import { pharmaDataBounds } from '@/lib/bridge-pharma-analytics'
 import { bridgeAnalyticsDataBounds } from '@/lib/bridge-client'
 import { bridgeBancoDataBounds } from '@/lib/bridge-banco'
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
     if (orgType === 'banco') {
       bounds = await bridgeBancoDataBounds()
     } else if (orgType === 'pharma') {
-      const tenant = await resolvePharmaTenant(ctx.email)
+      const tenant = await resolvePharmaTenantAccess(ctx.email)
       if (tenant) {
         bounds = await pharmaDataBounds(tenant)
         source = `pharma-${tenant}`

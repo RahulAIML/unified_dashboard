@@ -200,6 +200,12 @@ class WidgetConfig(BaseModel):
     paginated: bool = False
     searchable: bool = False
     exportable: bool = False
+    # A section the manager explicitly contracted/requested (see
+    # GenerateRequest.services) that must still render even though no data
+    # was discovered for it — an honest "no data yet" empty state, never a
+    # silent disappearance. False for every widget built from real discovered
+    # data (the overwhelming majority).
+    mandatory: bool = False
 
 
 class DashboardRow(BaseModel):
@@ -225,6 +231,11 @@ class DashboardPage(BaseModel):
     # hidden by default; this proves the enforcement path works without
     # inventing a restriction nobody asked for.
     visibility: Literal["all_users", "admin_only"] = "all_users"
+    # Same contract as WidgetConfig.mandatory, at the page level: a whole
+    # page (e.g. "LMS") that the manager contracted but that has no
+    # discovered data still appears, with an honest empty state, instead of
+    # being omitted from `pages` entirely.
+    mandatory: bool = False
 
 
 class DashboardFilter(BaseModel):
@@ -266,6 +277,32 @@ class DashboardConfig(BaseModel):
     # outside the normal authenticated tenant flow. Defaults False so every
     # config built before this field existed deserializes unchanged.
     confidential: bool = False
+    # The contracted-services snapshot (GenerateRequest.services) this config
+    # was last built/edited with — which page ids are allowed to render as a
+    # mandatory empty state rather than disappearing. Persisted so a later
+    # edit (POST /ai/dashboard/{slug}/required-sections) can add/remove a
+    # required section without re-running discovery/planning from scratch.
+    required_sections: list[str] = Field(default_factory=list)
+    # See GenerateRequest.pass_threshold / has_no_passing_criteria -- copied
+    # in at build time, and editable afterward via
+    # PATCH /ai/dashboard/{slug}/pass-threshold (dashboard_versions.
+    # set_pass_threshold) without a full regenerate. preview_fetch.py reads
+    # these two fields fresh on every render, so a change here updates every
+    # affected KPI/chart the next time the dashboard is viewed -- no rebuild.
+    pass_threshold: int = Field(default=80, ge=1, le=100)
+    has_no_passing_criteria: bool = False
+    # Additional access restriction layered ON TOP OF the existing tenant
+    # domain+roster check (app/api/dashboard-view/[slug]/route.ts's
+    # checkAccess) -- never a replacement for it. Empty (the default) means
+    # "no extra restriction, same as every dashboard before this field
+    # existed": anyone who's a real, verified user of the owning tenant can
+    # view it. Non-empty means ONLY these exact emails may view it, even if
+    # other real users of the same tenant exist -- e.g. a manager wants just
+    # the 3 admins who'll actually use it, not the whole company roster.
+    # Editable after publish via PATCH /ai/dashboard/{slug}/authorized-emails
+    # (dashboard_versions.set_authorized_emails), same narrow-edit pattern as
+    # pass_threshold/required_sections above -- no rebuild, no version bump.
+    authorized_emails: list[str] = Field(default_factory=list)
 
 
 # ── Validation ──────────────────────────────────────────────────────────────────
@@ -310,6 +347,11 @@ class WidgetPreview(BaseModel):
     # None for every widget that doesn't compute a previous-period baseline.
     prev_value: Any | None = None
     delta_pct: float | None = None
+    # Short caption shown under a kpi_tile, e.g. "Passing threshold: 80 pts"
+    # on a pass_rate tile -- so the number is never left for the viewer to
+    # interpret against an assumed bar. None for every widget that isn't a
+    # pass-rate tile.
+    legend: str | None = None
 
 
 class DashboardPreview(BaseModel):
@@ -362,17 +404,49 @@ class GenerateRequest(BaseModel):
     # reps are actually on "sanfer.com.mx"), which silently breaks logins.
     domains: list[str] = Field(default_factory=list)
     # Services the client has CONTRACTED (guided config step 1): simulator,
-    # coach, certification, lms, second-brain. Empty = no restriction. Intent
-    # only — the platform still verifies which of these actually have data, so a
-    # contracted-but-empty service is hidden rather than shown as zeros
-    # (contracted ∩ has-data = rendered).
+    # coach, certification, lms, second-brain. Empty = no restriction.
+    #
+    # A contracted service is MANDATORY: it always gets a page, even with zero
+    # data, rendered as an honest empty state rather than fabricated zeros. See
+    # agents/dashboard_planning.py::mandatory_empty_page and the fallbacks in
+    # _lms_page / _module_pages / _assemble_pages.
+    #
+    # (This comment previously documented the opposite, older rule --
+    # "contracted ∩ has-data = rendered", i.e. hide a contracted-but-empty
+    # service. That rule no longer exists; silently dropping a section the
+    # client is paying for is precisely what the mandatory design prevents.)
     services: list[str] = Field(default_factory=list)
     manager_request: str = ""
     auto_publish: bool = False
+    # Post-launch layout freeze override: once a slug is published, a second
+    # generate+auto_publish call for the SAME slug is blocked (see
+    # agents/publish.py) unless a human explicitly sets this — an accidental
+    # re-run of the builder must never silently rearrange what a client
+    # already sees. Defaults False (frozen).
+    force_republish: bool = False
     # Closing criterion: shown as a "CONFIDENTIAL" label on the published
     # /d/[slug] view -- for a link shared before the client's own login is
     # set up, or shared outside the platform entirely.
     confidential: bool = False
+    # Score >= pass_threshold counts as a pass, everywhere a pass/fail
+    # verdict is computed for this dashboard (KPI tiles, journey, daily
+    # pass/fail chart, best performers, reports, per-simulator breakdown).
+    # Different real customers pass at different bars (70/80/90); 80 is only
+    # the default for a tenant that never configured one, not a universal
+    # truth. See DashboardConfig.pass_threshold for the persisted value this
+    # is copied into, and dashboard_versions.set_pass_threshold for changing
+    # it after publish without a rebuild.
+    pass_threshold: int = Field(default=80, ge=1, le=100)
+    # True for a tenant with no score-based passing criteria at all (e.g.
+    # certified by completing all assigned simulations, not by a score bar).
+    # Every pass-rate widget must show an honest "no data" state for such a
+    # tenant, never a number computed against a threshold that doesn't apply.
+    has_no_passing_criteria: bool = False
+    # See DashboardConfig.authorized_emails's docstring -- an ADDITIONAL
+    # restriction on top of the normal tenant domain+roster check, not a
+    # replacement for it. Empty (default) means every dashboard behaves
+    # exactly as before this field existed.
+    authorized_emails: list[str] = Field(default_factory=list)
 
 
 class JobState(BaseModel):

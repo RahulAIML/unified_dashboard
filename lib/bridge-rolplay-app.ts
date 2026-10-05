@@ -27,8 +27,11 @@ import type {
   OverviewApiResponse, ResultsApiResponse, EvaluationApiRow,
   TrendsApiResponse, ApiTrendPoint, UsecaseBreakdownApiResponse, UsecaseApiRow,
   BestPerformersApiResponse, BestPerformerRow,
+  OrganizationApiResponse, OrgMemberRow,
 } from './types'
 import { getOrSetCache } from './cache'
+import { computePassRate } from './kpi-builder'
+import type { DrilldownResult, DrilldownField } from './data-provider'
 
 // Rolplay-app is this platform's primary, fully-automated connector -- every
 // query here goes over the SQL-over-HTTP bridge (remoteSelect, ~seconds per
@@ -91,16 +94,35 @@ async function remoteSelect<T = Record<string, unknown>>(sql: string): Promise<T
   const token = process.env.ROLPLAY_APP_SQL_TOKEN
   if (token) headers['X-Rolplay-Auth'] = token
 
-  const res = await fetch(sqlUrl(), {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ sql }),
-    cache: 'no-store',
-    signal: AbortSignal.timeout(20_000),
-  })
-  if (!res.ok) throw new Error(`rolplay-app SQL HTTP ${res.status}`)
+  // A parallel session removed every call site's `.catch(() => [])` (see
+  // below in this file), so a failed query now correctly propagates as a real
+  // error instead of degrading to indistinguishable-from-empty -- that WAS
+  // this function's biggest gap. This session's own contribution on top: even
+  // a propagated error was invisible anywhere in server logs, so a caller
+  // that still swallows (a future one, or an external consumer of this
+  // module) would have no trace of *why* it got nothing. Log before
+  // rethrowing so an outage always shows up in Render logs, independent of
+  // whether the caller re-swallows or lets it bubble.
+  let res: Response
+  try {
+    res = await fetch(sqlUrl(), { method: 'POST', headers, body: JSON.stringify({ sql }), cache: 'no-store', signal: AbortSignal.timeout(20_000) })
+  } catch (error) {
+    const detail = error instanceof Error && error.name === 'TimeoutError' ? 'timed out after 20 seconds' : 'is unreachable'
+    const err = new Error(`rolplay-app SQL ${detail}`, { cause: error })
+    console.error('[rolplay-app] SQL query failed:', err.message)
+    throw err
+  }
+  if (!res.ok) {
+    const err = new Error(`rolplay-app SQL HTTP ${res.status}`)
+    console.error('[rolplay-app] SQL query failed:', err.message)
+    throw err
+  }
   const json = (await res.json()) as { result?: string; data?: T[]; error?: string }
-  if (json.result !== 'success') throw new Error(json.error ?? 'rolplay-app SQL error')
+  if (json.result !== 'success') {
+    const err = new Error(json.error ?? 'rolplay-app SQL error')
+    console.error('[rolplay-app] SQL query failed:', err.message)
+    throw err
+  }
   return Array.isArray(json.data) ? json.data : []
 }
 
@@ -139,9 +161,30 @@ const BUILTIN_DOMAIN_MAP: Record<string, number> = {
   'besins-healthcare.com': 14,
   'rowe.com.do': 25,
   'rowe.com': 25,
-  // M8's real domain (arceralifesciences.com) is intentionally NOT here: it is
-  // also the pharma M8 domain and resolveOrgType checks pharma first — the two
-  // M8 configs must be reconciled before M8 can route to the query endpoint.
+  // M8's rolplay_app_sql client. resolveOrgType checks pharma first, so this
+  // does NOT change which pipeline an M8 user's dashboard is built from (still
+  // 'pharma', tenant 'm8', backed by pharma_exceltis_rest) -- it only lets
+  // app/api/dashboard/overview/route.ts also resolve this SECOND, real data
+  // source for the same person and compose it into the tenant-wide Overview
+  // (see mergeOverviewSources below). Verified live and non-ambiguous: a
+  // direct query of r_user WHERE client_id=24 found 85 of 92 real users on
+  // this exact domain -- distinct from the audioweb.com.mx shared-staff
+  // domain excluded below, which really does span multiple unrelated clients.
+  'arceralifesciences.com': 24,
+  // Confirmed live via a direct r_user query (2026-08-27): every client_id
+  // with >=3 real users cross-checked against this map. Two large real
+  // clients were entirely missing -- every one of their users got "You're
+  // not linked to any organization yet" on login, reported live by a real
+  // Armstrong Labs user. armstronglabs.com.mx has 476 real users under
+  // client_id 33; procapslatam.com has 156 under client_id 40. (The other
+  // unmapped client_ids found in that same query -- below.com, client.com,
+  // first.com, rolplay.ca, gmail.com -- are test/demo/shared-public domains
+  // that genuinely can't map to one company, same reasoning as
+  // audioweb.com.mx below.)
+  'armstronglabs.com.mx': 33,
+  'procapslatam.com': 40,
+  // audioweb.com.mx is deliberately excluded: it's the shared staff domain and
+  // spans several clients (Takeda/M8/Rowe), so it can't map to one.
 }
 
 function domainMap(): Map<string, number> {
@@ -194,16 +237,69 @@ export function invalidateRolplayAppDomainCache(): void {
   dbDomainCache = null
 }
 
+// ── Auto-discovered domains (real usage data, no code change/deploy needed) ──
+// Found live (2026-08-27): armstronglabs.com.mx (476 real users) and
+// procapslatam.com (156 real users) were both entirely absent from
+// BUILTIN_DOMAIN_MAP -- every user at either company got "not linked to any
+// organization" until someone noticed and a code change shipped. That is
+// exactly the "self-service dashboards keep needing manual backend
+// intervention for every new client" complaint this platform exists to
+// avoid. A domain that is unambiguously single-tenant in real r_user data
+// (every real user on it shares one client_id, and there's more than one of
+// them) resolves automatically -- a genuinely new client "just works" the
+// moment their users start logging in, no deploy required.
+//
+// Deliberately conservative: never auto-resolves a domain that (a) is a
+// known public/shared email provider (gmail.com etc. -- a coincidence of
+// sparse data could otherwise make one look single-tenant), (b) spans more
+// than one client_id (ambiguous, same reasoning audioweb.com.mx is
+// hardcoded to exclude), or (c) has fewer than 2 real users on it (a lone
+// row is as likely a typo/test account as a real company).
+const PUBLIC_EMAIL_DOMAINS = new Set([
+  'gmail.com', 'googlemail.com', 'yahoo.com', 'yahoo.com.mx', 'ymail.com',
+  'hotmail.com', 'hotmail.es', 'hotmail.com.mx', 'outlook.com', 'outlook.es',
+  'live.com', 'live.com.mx', 'icloud.com', 'me.com', 'aol.com',
+  'protonmail.com', 'proton.me', 'gmx.com', 'mail.com', 'msn.com',
+  'yandex.com', 'zoho.com',
+])
+const MIN_AUTO_DOMAIN_USERS = 2
+const AUTO_DOMAIN_TTL_MS = 10 * 60_000
+const autoDomainCache = new Map<string, { clientId: number | null; at: number }>()
+
+async function autoDiscoverDomain(domain: string): Promise<number | null> {
+  if (PUBLIC_EMAIL_DOMAINS.has(domain)) return null
+  // Reject rather than escape (same rule as rolplayAppUserExists above) --
+  // a real email domain never legitimately contains anything outside
+  // letters/digits/dot/hyphen, so anything else is refused, not sanitized.
+  if (!/^[a-z0-9.-]+$/.test(domain)) return null
+
+  const cached = autoDomainCache.get(domain)
+  if (cached && Date.now() - cached.at < AUTO_DOMAIN_TTL_MS) return cached.clientId
+
+  const rows = await remoteSelect<{ client_id: number | string; n: number | string }>(
+    `SELECT client_id, COUNT(*) AS n FROM r_user WHERE email LIKE '%@${domain}' GROUP BY client_id`,
+  ).catch(() => [])
+
+  const clientId = rows.length === 1 && Number(rows[0].n) >= MIN_AUTO_DOMAIN_USERS
+    ? Number(rows[0].client_id)
+    : null
+  autoDomainCache.set(domain, { clientId, at: Date.now() })
+  return clientId
+}
+
 /**
- * Pipeline resolution including DB-published domains. Prefer this wherever an
- * await is possible; resolveRolplayAppClientId stays for sync callers.
+ * Pipeline resolution including DB-published domains AND auto-discovered
+ * ones (see autoDiscoverDomain above). Prefer this wherever an await is
+ * possible; resolveRolplayAppClientId stays for sync callers.
  */
 export async function resolveRolplayAppClientIdAsync(email: string): Promise<number | null> {
   const sync = resolveRolplayAppClientId(email)
   if (sync) return sync
   const domain = email.toLowerCase().trim().split('@')[1]
   if (!domain) return null
-  return (await dbDomainMap()).get(domain) ?? null
+  const fromDb = (await dbDomainMap()).get(domain)
+  if (fromDb) return fromDb
+  return autoDiscoverDomain(domain)
 }
 
 // ── Authorization (tenant isolation) ──────────────────────────────────────────
@@ -221,9 +317,23 @@ async function rolplayAppUserExists(email: string, clientId: number): Promise<bo
   const cached = userExistsCache.get(key)
   if (cached && Date.now() - cached.at < USER_EXISTS_TTL_MS) return cached.ok
 
-  const esc = clean.replace(/'/g, "''") // inlined, so escape quotes
+  // Reject rather than escape. `email` is attacker-reachable: registration's
+  // own validateEmail() regex (lib/password.ts) has no denylist on quote or
+  // backslash characters, so a self-registered account CAN carry an email
+  // like `a'or'1'='1@example.com`. The `.replace(/'/g, "''")` this used to do
+  // is the classic unsafe pattern (fragile under backslash-escape SQL modes,
+  // and this endpoint has no parameterization to fall back on -- remoteSelect
+  // sends a raw SQL string). A real email has no operational need for a quote
+  // or backslash, so refuse to query rather than trust a manual escape. This
+  // function decides tenant-membership ACCESS -- a bypass here would defeat
+  // the very check S1 (docs/PRODUCTION_READINESS_AUDIT.md) added.
+  if (clean.includes("'") || clean.includes("\\")) {
+    console.warn('[rolplay-app] rejecting membership check for an email containing a quote/backslash character')
+    return false
+  }
+
   const rows = await remoteSelect<{ n: number | string }>(
-    `SELECT COUNT(*) AS n FROM r_user WHERE LOWER(email) = '${esc}' AND client_id = ${cid}`,
+    `SELECT COUNT(*) AS n FROM r_user WHERE LOWER(email) = '${clean}' AND client_id = ${cid}`,
   ).catch(() => [])
   const ok = Number(rows[0]?.n ?? 0) > 0
   userExistsCache.set(key, { ok, at: Date.now() })
@@ -246,7 +356,18 @@ export async function resolveRolplayAppAccess(email: string): Promise<number | n
 
 // ── Score extraction (SQL) ────────────────────────────────────────────────────
 
-const PASS_THRESHOLD = 70 // platform-wide pass convention (matches every tenant)
+// Pass convention for rolplay_app_sql tenants.
+//
+// The old comment here read "matches every tenant", which is no longer true:
+// migration 009 made the threshold per-tenant configurable and pharma tenants
+// can now sit at 80 or have no score-based criteria at all (see
+// kpi-builder.ts's resolvePassThreshold). It stays 70 for this connector
+// because rolplay_app_sql has NO configured-threshold storage -- 009 added
+// pass_threshold/has_no_passing_criteria to `pharma_tenants` only, and there is
+// no equivalent column for a rolplay-app client. Making this configurable needs
+// that storage first; hardcoding a different number here would just move the
+// assumption, not remove it.
+const PASS_THRESHOLD = 70
 
 /**
  * SQL expression yielding a 0-100 score per r_user_session row `s`, or NULL.
@@ -339,6 +460,12 @@ function categoryClause(solution?: string | null): string {
   return ` AND s.simulator_id IN (SELECT ID FROM r_simulator WHERE category = '${cat}')`
 }
 
+function tenantId(clientId: number): number {
+  const cid = Math.trunc(clientId)
+  if (!Number.isSafeInteger(cid) || cid < 1) throw new Error('rolplay-app SQL: invalid client id')
+  return cid
+}
+
 /**
  * Which dashboard modules this client actually has data for — drives dynamic
  * rendering so a client sees only their contracted/used services (no empty
@@ -350,14 +477,14 @@ export async function rolplayAppAvailableModules(clientId: number): Promise<stri
 }
 
 async function _rolplayAppAvailableModulesImpl(clientId: number): Promise<string[]> {
-  const cid = Math.trunc(clientId)
+  const cid = tenantId(clientId)
   const rows = await remoteSelect<{ category: string | null; n: number | string }>(
     `SELECT sim.category AS category, COUNT(*) AS n
        FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
        LEFT JOIN r_simulator sim ON sim.ID = s.simulator_id
       WHERE u.client_id = ${cid}
       GROUP BY sim.category`,
-  ).catch(() => [])
+  )
   const present = new Set(
     rows.filter(r => Number(r.n) > 0 && r.category).map(r => String(r.category).toUpperCase()),
   )
@@ -384,7 +511,7 @@ async function fetchScoreStats(cid: number, fromIso?: string, toIso?: string, so
            FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
           WHERE u.client_id = ${cid}${dateClause(fromIso, toIso)}${categoryClause(solution)}
        ) t`,
-  ).catch(() => [])
+  )
   const r = rows[0]
   return {
     total:  Number(r?.total ?? 0),
@@ -410,15 +537,20 @@ async function _rolplayAppOverviewImpl(
   range?: { fromIso: string; toIso: string },
   solution?: string | null,
 ): Promise<OverviewApiResponse> {
-  const cid = Math.trunc(clientId)
+  const cid = tenantId(clientId)
 
   // Previous period = the equal-length window immediately before `from`.
+  // toIso ends 1ms before `from`, not AT `from` -- dateClause()'s BETWEEN is
+  // inclusive on both ends, so a previous window ending exactly on `from`
+  // would double-count any session at that exact instant in both periods.
+  // Matches the same -1 adjustment app/api/dashboard/cesar-kpis/route.ts
+  // already uses for its own prevRange, for consistency.
   let prevRange: { fromIso: string; toIso: string } | undefined
   if (range) {
     const from = new Date(range.fromIso).getTime()
     const to   = new Date(range.toIso).getTime()
     if (Number.isFinite(from) && Number.isFinite(to) && to > from) {
-      prevRange = { fromIso: new Date(from - (to - from)).toISOString(), toIso: range.fromIso }
+      prevRange = { fromIso: new Date(from - (to - from)).toISOString(), toIso: new Date(from - 1).toISOString() }
     }
   }
 
@@ -427,7 +559,7 @@ async function _rolplayAppOverviewImpl(
     prevRange ? fetchScoreStats(cid, prevRange.fromIso, prevRange.toIso, solution) : Promise.resolve<ScoreStats | null>(null),
   ])
 
-  const passRate = (s: ScoreStats) => s.total > 0 ? Math.round((s.passed / s.total) * 1000) / 10 : null
+  const passRate = (s: ScoreStats) => computePassRate(s.passed, s.scored)
 
   return {
     totalEvaluations:     cur.total,
@@ -440,6 +572,46 @@ async function _rolplayAppOverviewImpl(
   }
 }
 
+/**
+ * Composes two real Overview sources for the same authenticated person
+ * (currently only M8: pharma_exceltis_rest and rolplay_app_sql under a
+ * distinct client_id on the same real domain -- two live systems, the same
+ * real people, not a dead/live pair). Counts sum (both are real, disjoint
+ * activity logs); rate fields are weighted by each source's
+ * totalEvaluations and a null rate is EXCLUDED from the weighted average
+ * rather than treated as zero, matching the null-vs-zero rule used
+ * throughout this KPI layer.
+ *
+ * Order-independent by design (`a`/`b`, not `primary`/`secondary`):
+ * lib/data-sources.ts orders rolplay_app_sql first when composing, since
+ * it's the preferred/primary source wherever it exists, but a pharma
+ * tenant's configured pass-rate legend must still win regardless of which
+ * argument position it's passed in -- rolplay_app_sql never produces one of
+ * its own, so whichever side actually HAS a legend is used, not "whichever
+ * came first".
+ */
+export function mergeOverviewSources(a: OverviewApiResponse, b: OverviewApiResponse): OverviewApiResponse {
+  const weightedAvg = (aVal: number | null, aWeight: number, bVal: number | null, bWeight: number): number | null => {
+    if (aVal == null && bVal == null) return null
+    if (aVal == null) return bVal
+    if (bVal == null) return aVal
+    const totalWeight = aWeight + bWeight
+    if (totalWeight <= 0) return null
+    return Math.round(((aVal * aWeight + bVal * bWeight) / totalWeight) * 10) / 10
+  }
+
+  return {
+    totalEvaluations:     a.totalEvaluations + b.totalEvaluations,
+    prevTotalEvaluations: a.prevTotalEvaluations + b.prevTotalEvaluations,
+    avgScore:     weightedAvg(a.avgScore, a.totalEvaluations, b.avgScore, b.totalEvaluations),
+    prevAvgScore: weightedAvg(a.prevAvgScore, a.prevTotalEvaluations, b.prevAvgScore, b.prevTotalEvaluations),
+    passRate:     weightedAvg(a.passRate, a.totalEvaluations, b.passRate, b.totalEvaluations),
+    prevPassRate: weightedAvg(a.prevPassRate, a.prevTotalEvaluations, b.prevPassRate, b.prevTotalEvaluations),
+    passedEvaluations: a.passedEvaluations + b.passedEvaluations,
+    passRateLegend: a.passRateLegend ?? b.passRateLegend,
+  }
+}
+
 export async function rolplayAppDataBounds(
   clientId: number,
 ): Promise<{ min: string; max: string } | null> {
@@ -449,12 +621,12 @@ export async function rolplayAppDataBounds(
 async function _rolplayAppDataBoundsImpl(
   clientId: number,
 ): Promise<{ min: string; max: string } | null> {
-  const cid = Math.trunc(clientId)
+  const cid = tenantId(clientId)
   const rows = await remoteSelect<{ min_date: string | null; max_date: string | null }>(
     `SELECT MIN(s.date_created) AS min_date, MAX(s.date_created) AS max_date
        FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
       WHERE u.client_id = ${cid}`,
-  ).catch(() => [])
+  )
   const r = rows[0]
   if (!r?.min_date || !r?.max_date) return null
   return { min: String(r.min_date), max: String(r.max_date) }
@@ -476,28 +648,33 @@ async function _rolplayAppResultsImpl(
   range?: { fromIso: string; toIso: string },
   solution?: string | null,
 ): Promise<ResultsApiResponse> {
-  const cid = Math.trunc(clientId)
+  const cid = tenantId(clientId)
   const lim = Math.max(1, Math.min(200, Math.trunc(limit)))
   const rows = await remoteSelect<{
     id: number | string
     simulator_id: number | string | null
+    simulator_name: string | null
     date_created: string
     sc: string | null
   }>(
-    `SELECT s.ID AS id, s.simulator_id, s.date_created, ${SCORE_SQL} AS sc
+    `SELECT s.ID AS id, s.simulator_id, sim.name AS simulator_name, s.date_created, ${SCORE_SQL} AS sc
        FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
+       LEFT JOIN r_simulator sim ON sim.ID = s.simulator_id
       WHERE u.client_id = ${cid}${dateClause(range?.fromIso, range?.toIso)}${categoryClause(solution)}
       ORDER BY s.date_created DESC
       LIMIT ${lim}`,
-  ).catch(() => [])
+  )
 
   const data: EvaluationApiRow[] = rows.map((r) => {
     const score = r.sc != null ? Number(r.sc) : null
-    const passed = score != null && score >= PASS_THRESHOLD
+    // null (not false) for an unscoreable session -- see EvaluationApiRow's
+    // own doc comment. Previously `false`, which every consumer rendered as
+    // a fabricated "FAIL" badge (and CSV value) next to a blank score.
+    const passed = score != null ? score >= PASS_THRESHOLD : null
     return {
       savedReportId: Number(r.id),
       usecaseId: r.simulator_id != null ? Number(r.simulator_id) : null,
-      usecaseName: null,    // simulator display name not joined here
+      usecaseName: r.simulator_name?.trim() || null,
       score,
       result: score != null ? (passed ? 'pass' : 'fail') : null,
       passed,
@@ -505,6 +682,140 @@ async function _rolplayAppResultsImpl(
     }
   })
   return { data }
+}
+
+function safeSessionId(id: number): number {
+  const n = Math.trunc(id)
+  if (!Number.isSafeInteger(n) || n < 1) throw new Error('rolplay-app SQL: invalid session id')
+  return n
+}
+
+function rdField(key: string, label: string | null, value: string | null): DrilldownField | null {
+  if (!value || !value.trim()) return null
+  return { fieldKey: key, fieldLabel: label, valueNum: null, valueText: value, valueLongtext: null, normalizedValue: value }
+}
+
+/**
+ * Full session detail for one report id (r_user_session.ID) -- the same two
+ * queries used to build a manual summary report: the session row (joined to
+ * user/simulator names) plus every per-turn interaction from
+ * r_user_session_details, ordered by sequence. Scoped by client_id so a
+ * session id belonging to another tenant returns null, never that tenant's
+ * transcript -- the platform-owner's queries had no such scoping, which is
+ * fine for a manual one-off lookup but not for a multi-tenant endpoint.
+ *
+ * Returns the SAME generic DrilldownResult/DrilldownField shape
+ * coach_app_sql and pharma already use, so app/drilldown/[id]/page.tsx
+ * renders this with zero frontend changes: field keys `question_N`/
+ * `answer_N`/`retro_N` match the page's own groupInteractions() regex and
+ * render as an ordered conversation, `overall_score`/`overall_result` match
+ * lib/field-map.ts's CORE_FIELD_MAP and get the hero score/result treatment.
+ */
+export async function rolplayAppDrilldown(sessionId: number, clientId: number): Promise<DrilldownResult | null> {
+  const cid = tenantId(clientId)
+  const sid = safeSessionId(sessionId)
+
+  const rows = await remoteSelect<{
+    ID: number | string
+    simulator_id: number | string | null
+    date_created: string
+    closing_analysis: string | null
+    raw_closing_data: string | null
+    user_name: string | null
+    simulator_name: string | null
+    extracted_score: string | null
+  }>(
+    // SCORE_SQL (above) hardcodes s.raw_closing_data/s.closing_analysis --
+    // 's' MUST be r_user_session's own alias here, matching every other
+    // SCORE_SQL call site in this file. Aliasing the session row 's' too
+    // (as the platform owner's original manual query did) broke this live:
+    // 's' resolved to r_simulator instead, which has neither column, and
+    // the bridge's resulting SQL error surfaced only as the route's generic
+    // "Failed to load drilldown data" catch-all.
+    // r_simulator must be a LEFT JOIN, matching every other query in this
+    // file (see the other 5 call sites) -- a session whose simulator_id has
+    // no matching row (a deleted/orphaned simulator) is a real, valid
+    // session that must still resolve, not silently vanish because an INNER
+    // JOIN dropped it. Confirmed live: a real session for a real tenant came
+    // back "Report not found" purely because of this.
+    `SELECT s.*, u.name AS user_name, sim.name AS simulator_name, ${SCORE_SQL} AS extracted_score
+       FROM r_user_session s
+       JOIN r_user u ON u.ID = s.user_id
+       LEFT JOIN r_simulator sim ON sim.ID = s.simulator_id
+      WHERE s.ID = ${sid} AND u.client_id = ${cid}
+      LIMIT 1`,
+  )
+  const session = rows[0]
+  if (!session) return null
+
+  const details = await remoteSelect<{
+    sequence: number | string
+    ai_text: string | null
+    user_text: string | null
+    retro_analysis: string | null
+  }>(
+    `SELECT sequence, ai_text, user_text, retro_analysis
+       FROM r_user_session_details
+      WHERE session_id = ${sid}
+      ORDER BY sequence ASC`,
+  )
+
+  const score = session.extracted_score != null ? Number(session.extracted_score) : null
+  const passed = score != null ? score >= PASS_THRESHOLD : null
+
+  const fields: DrilldownField[] = []
+  if (score != null) {
+    fields.push({ fieldKey: 'overall_score', fieldLabel: 'Score', valueNum: score, valueText: null, valueLongtext: null, normalizedValue: score })
+  }
+  if (passed !== null) {
+    const text = passed ? 'Aprobado' : 'Deficiente'
+    fields.push({ fieldKey: 'overall_result', fieldLabel: 'Resultado', valueNum: null, valueText: text, valueLongtext: null, normalizedValue: text })
+  }
+
+  for (const d of details) {
+    const seq = Number(d.sequence)
+    const q = rdField(`question_${seq}`, `Turn ${seq}`, d.ai_text)
+    if (q) fields.push(q)
+    const a = rdField(`answer_${seq}`, `Turn ${seq} response`, d.user_text)
+    if (a) fields.push(a)
+    const r = rdField(`retro_${seq}`, `Turn ${seq} feedback`, d.retro_analysis)
+    if (r) fields.push(r)
+  }
+
+  // Qualitative summary. raw_closing_data (richer, e.g. Siigo) preferred over
+  // closing_analysis (legacy JSON-as-text or, for some templates, raw HTML) --
+  // same preference order as SCORE_SQL above. general_strengths/
+  // general_improvement_areas already match lib/field-map.ts's
+  // EXTRA_FIELD_MAP aliases, so they surface as qualitative fields with no
+  // extra mapping needed.
+  let closingJson: Record<string, unknown> | null = null
+  const rawSource = session.raw_closing_data || session.closing_analysis
+  if (rawSource) {
+    try {
+      const parsed: unknown = JSON.parse(rawSource)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        closingJson = parsed as Record<string, unknown>
+        for (const [key, value] of Object.entries(closingJson)) {
+          if (typeof value !== 'string' || fields.some(f => f.fieldKey === key)) continue
+          const f = rdField(key, null, value)
+          if (f) fields.push(f)
+        }
+      }
+    } catch {
+      // Some legacy templates (e.g. Takeda) store raw HTML here, not JSON --
+      // not parseable into structured fields. The score/transcript above
+      // already cover the meaningful content; skip rather than show a wall
+      // of markup.
+    }
+  }
+
+  return {
+    savedReportId: Number(session.ID),
+    usecaseId: session.simulator_id != null ? Number(session.simulator_id) : null,
+    date: String(session.date_created).slice(0, 10),
+    fields,
+    closingJson,
+  }
 }
 
 /** Daily trends (score + counts + pass) and a score-distribution histogram. */
@@ -521,7 +832,7 @@ async function _rolplayAppTrendsImpl(
   range?: { fromIso: string; toIso: string },
   solution?: string | null,
 ): Promise<TrendsApiResponse> {
-  const cid = Math.trunc(clientId)
+  const cid = tenantId(clientId)
   const dc = dateClause(range?.fromIso, range?.toIso)
 
   const daily = await remoteSelect<{ day: string; sessions: number | string; avg: string | null; passed: number | string }>(
@@ -531,7 +842,7 @@ async function _rolplayAppTrendsImpl(
                FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
               WHERE u.client_id = ${cid}${dc}${categoryClause(solution)}) t
       GROUP BY day ORDER BY day`,
-  ).catch(() => [])
+  )
 
   const scoreTrend: ApiTrendPoint[] = daily.filter(r => r.avg != null).map(r => ({ date: String(r.day).slice(0, 10), value: Number(r.avg) }))
   const evalCountTrend: ApiTrendPoint[] = daily.map(r => ({ date: String(r.day).slice(0, 10), value: Number(r.sessions) }))
@@ -542,7 +853,7 @@ async function _rolplayAppTrendsImpl(
        FROM (SELECT ${SCORE_SQL} AS sc FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
               WHERE u.client_id = ${cid}${dc}${categoryClause(solution)}) t
       WHERE sc IS NOT NULL GROUP BY bucket ORDER BY bucket`,
-  ).catch(() => [])
+  )
   const totalScored = buckets.reduce((s, b) => s + Number(b.count), 0) || 1
   const scoreDistribution = buckets.map(b => {
     const lo = Number(b.bucket)
@@ -566,27 +877,28 @@ async function _rolplayAppUsecaseBreakdownImpl(
   range?: { fromIso: string; toIso: string },
   solution?: string | null,
 ): Promise<UsecaseBreakdownApiResponse> {
-  const cid = Math.trunc(clientId)
+  const cid = tenantId(clientId)
   const dc = dateClause(range?.fromIso, range?.toIso)
-  const rows = await remoteSelect<{ simulator_id: number | string; name: string | null; total: number | string; avg: string | null; passed: number | string }>(
+  const rows = await remoteSelect<{ simulator_id: number | string; name: string | null; total: number | string; scored: number | string; avg: string | null; passed: number | string }>(
     `SELECT s.simulator_id, sim.name,
-            COUNT(*) AS total, ROUND(AVG(${SCORE_SQL}),2) AS avg,
+            COUNT(*) AS total, COUNT(${SCORE_SQL}) AS scored, ROUND(AVG(${SCORE_SQL}),2) AS avg,
             SUM(CASE WHEN (${SCORE_SQL}) >= ${PASS_THRESHOLD} THEN 1 ELSE 0 END) AS passed
        FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
        LEFT JOIN r_simulator sim ON sim.ID = s.simulator_id
       WHERE u.client_id = ${cid}${dc}${categoryClause(solution)}
       GROUP BY s.simulator_id, sim.name ORDER BY total DESC`,
-  ).catch(() => [])
+  )
 
   const data: UsecaseApiRow[] = rows.map(r => {
     const total = Number(r.total)
     const passed = Number(r.passed)
+    const scored = Number(r.scored)
     return {
       usecaseId: Number(r.simulator_id),
       usecase_name: r.name?.trim() || `Simulator ${r.simulator_id}`,
       totalEvaluations: total,
       avgScore: r.avg != null ? Number(r.avg) : null,
-      passRate: total ? Math.round((passed / total) * 1000) / 10 : null,
+      passRate: computePassRate(passed, scored),
       passed,
     }
   })
@@ -609,12 +921,12 @@ async function _rolplayAppBestPerformersImpl(
   range?: { fromIso: string; toIso: string },
   solution?: string | null,
 ): Promise<BestPerformersApiResponse> {
-  const cid = Math.trunc(clientId)
+  const cid = tenantId(clientId)
   const lim = Math.max(1, Math.min(50, Math.trunc(limit)))
   const dc = dateClause(range?.fromIso, range?.toIso)
-  const rows = await remoteSelect<{ email: string; name: string | null; sessions: number | string; avg: string | null; passed: number | string }>(
+  const rows = await remoteSelect<{ email: string; name: string | null; sessions: number | string; scored: number | string; avg: string | null; passed: number | string }>(
     `SELECT u.email, u.name,
-            COUNT(*) AS sessions, ROUND(AVG(${SCORE_SQL}),2) AS avg,
+            COUNT(*) AS sessions, COUNT(${SCORE_SQL}) AS scored, ROUND(AVG(${SCORE_SQL}),2) AS avg,
             SUM(CASE WHEN (${SCORE_SQL}) >= ${PASS_THRESHOLD} THEN 1 ELSE 0 END) AS passed
        FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
       WHERE u.client_id = ${cid}${dc}${categoryClause(solution)}
@@ -622,20 +934,107 @@ async function _rolplayAppBestPerformersImpl(
       HAVING COUNT(${SCORE_SQL}) > 0
       ORDER BY avg DESC, sessions DESC
       LIMIT ${lim}`,
-  ).catch(() => [])
+  )
 
   const data: BestPerformerRow[] = rows.map(r => {
     const sessions = Number(r.sessions)
     const passed = Number(r.passed)
+    const scored = Number(r.scored)
     return {
       user_email: r.email,
       user_name: r.name?.trim() || null,
       sessions,
       avg_score: r.avg != null ? Number(r.avg) : 0,
-      pass_rate: sessions ? Math.round((passed / sessions) * 1000) / 10 : 0,
+      pass_rate: computePassRate(passed, scored) ?? 0,
     }
   })
   return { data }
+}
+
+// Inverse of SOLUTION_TO_CATEGORY -- turns r_simulator.category values back
+// into the dashboard's own module names, so "modules used" reads the same
+// vocabulary as the sidebar/journey (coach/simulator/certification), not a
+// raw DB category string a viewer has no context for.
+const CATEGORY_TO_SOLUTION: Record<string, string> = Object.fromEntries(
+  Object.entries(SOLUTION_TO_CATEGORY).map(([solution, cat]) => [cat, solution]),
+)
+
+/**
+ * Full registered roster for one rolplay-app tenant, each user annotated with
+ * their real activity: session count, average score, last session date, and
+ * which modules they've actually used -- all-time, deliberately unbounded by
+ * the dashboard's date-range filter, since "is this account real / has it
+ * ever done anything" isn't a time-windowed question.
+ *
+ * Found live on Chinoin: 581 real r_user rows, only 1 with any session --
+ * app/organization/page.tsx previously only rendered for pharma tenants
+ * (a different admin/member hierarchy with no session data of its own), so a
+ * rolplay-app tenant's Organization nav item never appeared at all and a
+ * manager had no way to see who the OTHER 580 registered people are, or
+ * confirm the 1 active user's own activity.
+ */
+export async function rolplayAppOrganization(clientId: number): Promise<OrganizationApiResponse> {
+  return getOrSetCache(cacheKey('organization', clientId), CACHE_TTL_SECONDS, () => _rolplayAppOrganizationImpl(clientId))
+}
+
+async function _rolplayAppOrganizationImpl(clientId: number): Promise<OrganizationApiResponse> {
+  const cid = tenantId(clientId)
+
+  const users = await remoteSelect<{
+    id: number | string; name: string | null; email: string
+    department: string | null; designation: string | null
+    created_on: string | null; last_loggedin: string | null; disabled: number | string
+  }>(
+    `SELECT u.ID AS id, u.name, u.email, u.department, u.designation,
+            u.created_on, u.last_loggedin, u.disabled
+       FROM r_user u
+      WHERE u.client_id = ${cid}
+      ORDER BY u.created_on DESC`,
+  )
+
+  // Deliberately its own query, all-time, never joined to the roster query
+  // above (which must return EVERY registered account, including the ones
+  // with zero rows here) -- a plain JOIN would silently drop every user who
+  // has never run a session, which is the exact population this page exists
+  // to surface.
+  const activity = await remoteSelect<{
+    user_id: number | string; sessions: number | string
+    avg: string | null; last_session: string | null; categories: string | null
+  }>(
+    `SELECT s.user_id, COUNT(*) AS sessions, ROUND(AVG(${SCORE_SQL}),2) AS avg,
+            MAX(s.date_created) AS last_session,
+            GROUP_CONCAT(DISTINCT sim.category) AS categories
+       FROM r_user_session s
+       JOIN r_user u ON u.ID = s.user_id
+       LEFT JOIN r_simulator sim ON sim.ID = s.simulator_id
+      WHERE u.client_id = ${cid}
+      GROUP BY s.user_id`,
+  )
+  const byUser = new Map(activity.map(a => [Number(a.user_id), a]))
+
+  const members: OrgMemberRow[] = users.map(u => {
+    const act = byUser.get(Number(u.id))
+    const categories = act?.categories ? act.categories.split(',').filter(Boolean) : []
+    const modulesUsed = Array.from(new Set(
+      categories.map(c => CATEGORY_TO_SOLUTION[c.toUpperCase()]).filter((s): s is string => !!s),
+    ))
+    return {
+      id: Number(u.id),
+      fullName: u.name?.trim() || '',
+      email: u.email,
+      designation: u.designation?.trim() || null,
+      adminId: null,
+      department: u.department?.trim() || null,
+      status: Number(u.disabled) ? 'disabled' : 'active',
+      sessions: act ? Number(act.sessions) : 0,
+      modulesUsed,
+      lastSessionAt: act?.last_session ?? null,
+      lastLoginAt: u.last_loggedin,
+      createdOn: u.created_on,
+    }
+  })
+
+  return { totalMembers: members.length, totalAdmins: 0, totalSupervisors: 0, members, admins: [] }
 }
 
 // ── Cesar KPIs (Sugerencia de KPI's Cesar.xlsx) ──────────────────────────────
@@ -648,8 +1047,8 @@ async function _rolplayAppBestPerformersImpl(
 // AI-generated one.
 //
 // GROUP 1 (schema-only, works for any rolplay-app tenant): activation rate,
-// weekly practice frequency, MAU, practices-to-mastery, competency gain
-// (delta score), field readiness index, mastery distribution.
+// weekly practice frequency, MAU, competency gain (delta score), field
+// readiness index, mastery distribution.
 //
 // GROUP 2 (depends on raw_closing_data carrying a rich per-session
 // evaluation JSON -- confirmed real for Siigo, confirmed ABSENT for Takeda):
@@ -658,6 +1057,10 @@ async function _rolplayAppBestPerformersImpl(
 // never a hardcoded field list -- works for any product whose evaluator
 // produces this shape, reports empty/null (never a fabricated value) for
 // one that doesn't.
+//
+// REMOVED FROM SCOPE (Aug 6 session with Silverio, not a feasibility gap --
+// both were implemented and working before this decision): Practices to
+// Mastery, KPI-2.4 Trial-and-Error Index.
 //
 // NOT implemented, same reasons as the Python port: KPI-2.1 Time-to-Mastery
 // (no duration column exists anywhere in r_user_session), KPI-3.1/3.3/5.2
@@ -672,18 +1075,25 @@ export interface CesarGroup1Kpis {
   activationRate: number | null
   weeklyPracticeFrequency: number | null
   mauRate: number | null
-  practicesToMastery: number | null
   deltaScore: number | null
   readinessIndex: number | null
-  trialAndErrorRate: number | null
   masteryDistribution: { label: string; value: number; pct: number }[]
+  /** True when deltaScore was computed from a truncated per-user scan (the
+   *  _CLOSING_DATA_SAMPLE_LIMIT row cap was actually hit) rather than from
+   *  every scored session in range. Callers MUST surface this -- a sampled
+   *  average presented as a complete one is exactly the "looks complete but
+   *  was truncated" failure this codebase refuses to ship elsewhere. */
+  deltaScoreSampled: boolean
 }
 
 /** KPI-1.1/1.3/1.4/2.2/2.3/3.2/5.3. Per-user sequencing (delta score,
- *  practices-to-mastery, readiness, mastery distribution) is done in JS
- *  after fetching one bounded (user_id, score) row set, mirroring the
- *  Python port's own approach -- simpler and more testable than nested
- *  correlated SQL re-deriving SCORE_SQL inside a subquery. */
+ *  readiness, mastery distribution) is done in JS after fetching one
+ *  bounded (user_id, score) row set, mirroring the Python port's own
+ *  approach -- simpler and more testable than nested correlated SQL
+ *  re-deriving SCORE_SQL inside a subquery.
+ *  (Practices to Mastery and Trial-and-Error Index were REMOVED from scope
+ *  per the Aug 6 session with Silverio -- both were implemented and
+ *  working before this decision.) */
 export async function rolplayAppCesarGroup1(
   clientId: number,
   range?: { fromIso: string; toIso: string },
@@ -697,14 +1107,14 @@ async function _rolplayAppCesarGroup1Impl(
   range?: { fromIso: string; toIso: string },
   solution?: string | null,
 ): Promise<CesarGroup1Kpis> {
-  const cid = Math.trunc(clientId)
+  const cid = tenantId(clientId)
   const dc = dateClause(range?.fromIso, range?.toIso)
   const cat = categoryClause(solution)
   const round1 = (n: number) => Math.round(n * 10) / 10
 
   const enrolledRows = await remoteSelect<{ n: number | string }>(
     `SELECT COUNT(*) AS n FROM r_user u WHERE u.client_id = ${cid}`,
-  ).catch(() => [])
+  )
   const enrolled = Number(enrolledRows[0]?.n ?? 0)
 
   const activeRows = await remoteSelect<{ n: number | string; sessions: number | string; weeks: number | string }>(
@@ -712,31 +1122,67 @@ async function _rolplayAppCesarGroup1Impl(
             COUNT(DISTINCT YEARWEEK(s.date_created)) AS weeks
        FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
       WHERE u.client_id = ${cid}${cat}${dc}`,
-  ).catch(() => [])
+  )
   const activeUsers = Number(activeRows[0]?.n ?? 0)
   const periodSessions = Number(activeRows[0]?.sessions ?? 0)
   const activeWeeks = Number(activeRows[0]?.weeks ?? 0)
 
   // MAU: a real 30-day recency window, independent of whatever wider range
-  // the dashboard's own date filter currently shows.
-  let mauUsers = 0
+  // the dashboard's own date filter currently shows. `range` is optional on
+  // this function's own signature, so mauUsers must stay null (not 0) when
+  // it's omitted -- mauRate below is enrolled ? mauUsers/enrolled : null,
+  // and enrolled is truthy for any real tenant, so a bare 0 here would
+  // render as a fabricated "0% MAU" instead of "not computed for this call".
+  let mauUsers: number | null = null
   if (range?.toIso) {
     const toDate = range.toIso.slice(0, 10)
     const mauRows = await remoteSelect<{ n: number | string }>(
       `SELECT COUNT(DISTINCT s.user_id) AS n FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
         WHERE u.client_id = ${cid}${cat} AND s.date_created >= DATE_SUB('${toDate}', INTERVAL 30 DAY)
           AND s.date_created <= '${toDate} 23:59:59'`,
-    ).catch(() => [])
+    )
     mauUsers = Number(mauRows[0]?.n ?? 0)
   }
 
+  // Mastery bands + mastered-user count are computed DB-side over EVERY scored
+  // session in range -- deliberately NOT from the bounded seqRows scan below.
+  //
+  // They used to be derived from that 500-row slice while `enrolled` counted all
+  // users, so readinessIndex (= mastered / enrolled) divided a capped numerator
+  // by an uncapped denominator and silently trended toward 0% as a tenant grew.
+  // Worse, the slice is ordered by user_id, so it was the lowest-numbered users
+  // every time -- a systematic bias, not a sample. Same derived-table shape as
+  // fetchScoreStats above, so SCORE_SQL is still evaluated exactly once per row.
+  const masteryRows = await remoteSelect<{
+    basic: number | string; intermediate: number | string; advanced: number | string
+    total_scored: number | string; mastered_users: number | string
+  }>(
+    `SELECT SUM(CASE WHEN sc < 75 THEN 1 ELSE 0 END) AS basic,
+            SUM(CASE WHEN sc >= 75 AND sc < ${MASTERY_THRESHOLD} THEN 1 ELSE 0 END) AS intermediate,
+            SUM(CASE WHEN sc >= ${MASTERY_THRESHOLD} THEN 1 ELSE 0 END) AS advanced,
+            COUNT(sc) AS total_scored,
+            COUNT(DISTINCT CASE WHEN sc >= ${MASTERY_THRESHOLD} THEN user_id END) AS mastered_users
+       FROM (
+         SELECT s.user_id AS user_id, ${SCORE_SQL} AS sc
+           FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
+          WHERE u.client_id = ${cid}${cat}${dc}
+       ) t
+      WHERE sc IS NOT NULL`,
+  )
+
+  // deltaScore still needs per-user first/last ordering, which has no portable
+  // aggregate form on the MySQL version behind this bridge (no window functions
+  // are used anywhere in this file). It therefore keeps the bounded scan -- but
+  // reports whether that bound was actually hit instead of passing a truncated
+  // average off as a complete one.
   const seqRows = await remoteSelect<{ user_id: number | string; sc: string | null }>(
     `SELECT s.user_id, (${SCORE_SQL}) AS sc
        FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
       WHERE u.client_id = ${cid}${cat}${dc} AND (${SCORE_SQL}) IS NOT NULL
       ORDER BY s.user_id, s.date_created ASC
       LIMIT ${_CLOSING_DATA_SAMPLE_LIMIT}`,
-  ).catch(() => [])
+  )
+  const deltaScoreSampled = seqRows.length >= _CLOSING_DATA_SAMPLE_LIMIT
 
   const byUser = new Map<string, number[]>()
   for (const r of seqRows) {
@@ -749,48 +1195,16 @@ async function _rolplayAppCesarGroup1Impl(
   }
 
   const deltas: number[] = []
-  const practices: number[] = []
-  let mastered = 0
   for (const scores of byUser.values()) {
     if (scores.length >= 2) deltas.push(scores[scores.length - 1] - scores[0])
-    const idx = scores.findIndex(s => s >= MASTERY_THRESHOLD)
-    if (idx >= 0) practices.push(idx + 1)
-    if (scores.some(s => s >= MASTERY_THRESHOLD)) mastered++
   }
 
-  // KPI-2.4 Trial-and-Error Index: % of Certifier ("SEGMENT") attempts with
-  // no prior Coach ("COACH") session for that user. Queried WITHOUT `cat` --
-  // needs a user's full cross-category history, unlike every other metric
-  // here. Real only for a tenant whose r_simulator.category has a Certifier
-  // module (confirmed live: most don't); everyone else gets null, matching
-  // the Python port's own rule of "no data" over a fabricated rate.
-  const catSeqRows = await remoteSelect<{ user_id: number | string; category: string | null; date_created: string }>(
-    `SELECT s.user_id, sim.category AS category, s.date_created
-       FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
-       LEFT JOIN r_simulator sim ON sim.ID = s.simulator_id
-      WHERE u.client_id = ${cid}${dc}
-      ORDER BY s.user_id, s.date_created ASC
-      LIMIT ${_CLOSING_DATA_SAMPLE_LIMIT}`,
-  ).catch(() => [])
-  let certifierAttempts = 0
-  let noPriorCoach = 0
-  const seenCoach = new Set<string>()
-  for (const r of catSeqRows) {
-    const category = String(r.category ?? '').toUpperCase()
-    const uid = String(r.user_id)
-    if (category === 'COACH') seenCoach.add(uid)
-    else if (category === 'SEGMENT') {
-      certifierAttempts++
-      if (!seenCoach.has(uid)) noPriorCoach++
-    }
-  }
-  const trialAndErrorRate = certifierAttempts ? round1(100 * noPriorCoach / certifierAttempts) : null
-
-  const allScores = seqRows.map(r => Number(r.sc)).filter(n => Number.isFinite(n))
-  const basic = allScores.filter(s => s < 75).length
-  const intermediate = allScores.filter(s => s >= 75 && s < MASTERY_THRESHOLD).length
-  const advanced = allScores.filter(s => s >= MASTERY_THRESHOLD).length
-  const totalScored = allScores.length
+  const m = masteryRows[0]
+  const basic = Number(m?.basic ?? 0)
+  const intermediate = Number(m?.intermediate ?? 0)
+  const advanced = Number(m?.advanced ?? 0)
+  const totalScored = Number(m?.total_scored ?? 0)
+  const mastered = Number(m?.mastered_users ?? 0)
   const masteryDistribution = totalScored ? [
     { label: 'Basic (<75)', value: basic, pct: round1(100 * basic / totalScored) },
     { label: 'Intermediate (75-94)', value: intermediate, pct: round1(100 * intermediate / totalScored) },
@@ -800,20 +1214,23 @@ async function _rolplayAppCesarGroup1Impl(
   return {
     activationRate: enrolled ? round1(100 * activeUsers / enrolled) : null,
     weeklyPracticeFrequency: activeWeeks ? round1(periodSessions / activeWeeks) : null,
-    mauRate: enrolled ? round1(100 * mauUsers / enrolled) : null,
-    practicesToMastery: practices.length ? round1(practices.reduce((a, b) => a + b, 0) / practices.length) : null,
+    mauRate: enrolled && mauUsers != null ? round1(100 * mauUsers / enrolled) : null,
     deltaScore: deltas.length ? round1(deltas.reduce((a, b) => a + b, 0) / deltas.length) : null,
+    // Both operands now count every scored session/user in range -- no
+    // capped-numerator-over-uncapped-denominator mismatch.
     readinessIndex: enrolled ? round1(100 * mastered / enrolled) : null,
-    trialAndErrorRate,
     masteryDistribution,
+    deltaScoreSampled,
   }
 }
+
+interface ClosingDataRows { rows: Record<string, unknown>[]; sampled: boolean }
 
 async function rolplayAppClosingDataRows(
   clientId: number,
   range?: { fromIso: string; toIso: string },
   solution?: string | null,
-): Promise<Record<string, unknown>[]> {
+): Promise<ClosingDataRows> {
   // Shared by rolplayAppCommercialDomain/RubricaTags(x2 -- pass+fail)/AdoptionMovementRate,
   // which the cesar-kpis route calls together via Promise.all -- caching here
   // (instead of in each of those four callers) collapses what would be four
@@ -825,26 +1242,35 @@ async function _rolplayAppClosingDataRowsImpl(
   clientId: number,
   range?: { fromIso: string; toIso: string },
   solution?: string | null,
-): Promise<Record<string, unknown>[]> {
-  const cid = Math.trunc(clientId)
+): Promise<ClosingDataRows> {
+  const cid = tenantId(clientId)
   const dc = dateClause(range?.fromIso, range?.toIso)
   const cat = categoryClause(solution)
   const rows = await remoteSelect<{ d: string | null }>(
     `SELECT s.raw_closing_data AS d FROM r_user_session s JOIN r_user u ON u.ID = s.user_id
       WHERE u.client_id = ${cid}${cat}${dc} AND s.raw_closing_data IS NOT NULL
       ORDER BY s.date_created DESC LIMIT ${_CLOSING_DATA_SAMPLE_LIMIT}`,
-  ).catch(() => [])
+  )
   const out: Record<string, unknown>[] = []
   for (const r of rows) {
     if (!r.d) continue
     try {
       const parsed: unknown = JSON.parse(r.d)
-      if (parsed && typeof parsed === 'object') out.push(parsed as Record<string, unknown>)
+      // Array.isArray excluded: typeof [] === 'object' too, and an array has
+      // no bloque_*/rubrica_p* keys to match -- keep the type the same as
+      // ai-service/app/preview_fetch.py's isinstance(parsed, dict) guard.
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) out.push(parsed as Record<string, unknown>)
     } catch {
       // invalid JSON -- skip, never fabricate a row for it
     }
   }
-  return out
+  // Same bias class already fixed for deltaScore/readinessIndex: this is a
+  // bounded (LIMIT _CLOSING_DATA_SAMPLE_LIMIT), most-recent-first scan, so a
+  // tenant with more qualifying sessions than the cap silently had Commercial
+  // Domain/Top Strengths/Top Opportunities/Adoption Movement Rate computed
+  // from only the most recent slice with no indication to the caller. Flag
+  // it exactly like deltaScoreSampled does, rather than fixing it silently.
+  return { rows: out, sampled: rows.length >= _CLOSING_DATA_SAMPLE_LIMIT }
 }
 
 export interface CommercialDomainRow { domain: string; avgScore: number; sessions: number }
@@ -854,8 +1280,8 @@ export interface CommercialDomainRow { domain: string; avgScore: number; session
  *  block list or count. */
 export async function rolplayAppCommercialDomain(
   clientId: number, range?: { fromIso: string; toIso: string }, solution?: string | null,
-): Promise<CommercialDomainRow[]> {
-  const parsed = await rolplayAppClosingDataRows(clientId, range, solution)
+): Promise<{ data: CommercialDomainRow[]; sampled: boolean }> {
+  const { rows: parsed, sampled } = await rolplayAppClosingDataRows(clientId, range, solution)
   const scores = new Map<string, number[]>()
   const re = /^bloque_(.+)_score$/
   for (const d of parsed) {
@@ -874,7 +1300,7 @@ export async function rolplayAppCommercialDomain(
     avgScore: Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10,
     sessions: vals.length,
   }))
-  return out.sort((a, b) => b.avgScore - a.avgScore)
+  return { data: out.sort((a, b) => b.avgScore - a.avgScore), sampled }
 }
 
 export interface RubricaTagRow { item: string; count: number }
@@ -885,26 +1311,29 @@ export interface RubricaTagRow { item: string; count: number }
  *  numbered items each session's evaluator actually produced. */
 export async function rolplayAppRubricaTags(
   clientId: number, wantPass: boolean, range?: { fromIso: string; toIso: string }, solution?: string | null,
-): Promise<RubricaTagRow[]> {
-  const parsed = await rolplayAppClosingDataRows(clientId, range, solution)
+): Promise<{ data: RubricaTagRow[]; sampled: boolean }> {
+  const { rows: parsed, sampled } = await rolplayAppClosingDataRows(clientId, range, solution)
   const counts = new Map<string, number>()
   const re = /^rubrica_p(\d+)_nombre$/
   for (const d of parsed) {
     for (const [k, v] of Object.entries(d)) {
       const m = re.exec(k)
-      if (!m || !v) continue
+      // A non-string label (e.g. a nested object from a non-conforming
+      // evaluator payload) must be skipped, not blindly stringified into a
+      // garbage "[object Object]" row in Top Strengths/Opportunities.
+      if (!m || typeof v !== 'string' || !v) continue
       const cumplido = String(d[`rubrica_p${m[1]}_cumplido`] ?? '').trim().toLowerCase()
       if (cumplido !== 'true' && cumplido !== 'false') continue
       if ((cumplido === 'true') === wantPass) {
-        const name = String(v)
-        counts.set(name, (counts.get(name) ?? 0) + 1)
+        counts.set(v, (counts.get(v) ?? 0) + 1)
       }
     }
   }
-  return Array.from(counts.entries())
+  const data = Array.from(counts.entries())
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10)
     .map(([item, count]) => ({ item, count }))
+  return { data, sampled }
 }
 
 /** KPI-5.1: % of sessions where the evaluator's own 'intencion_movement'
@@ -913,10 +1342,155 @@ export async function rolplayAppRubricaTags(
  *  widget can report "no data" rather than a fabricated 0%. */
 export async function rolplayAppAdoptionMovementRate(
   clientId: number, range?: { fromIso: string; toIso: string }, solution?: string | null,
-): Promise<number | null> {
-  const parsed = await rolplayAppClosingDataRows(clientId, range, solution)
+): Promise<{ value: number | null; sampled: boolean }> {
+  const { rows: parsed, sampled } = await rolplayAppClosingDataRows(clientId, range, solution)
   const movements = parsed.map(d => String(d.intencion_movement ?? '').trim()).filter(Boolean)
-  if (!movements.length) return null
+  if (!movements.length) return { value: null, sampled }
   const positive = movements.filter(m => /^(sub|up|increas|avanz)/i.test(m)).length
-  return Math.round((100 * positive / movements.length) * 10) / 10
+  return { value: Math.round((100 * positive / movements.length) * 10) / 10, sampled }
+}
+
+// ── Admin/internal raw-interaction export ────────────────────────────────────
+//
+// Every other function in this file returns an AGGREGATED shape (a KPI, a
+// per-usecase rollup, a leaderboard row) — none of them expose the underlying
+// per-session record an admin would need to verify/debug how those numbers
+// were produced. This is the one exception: one row per real r_user_session,
+// every column a real, confirmed-existing table field (see the live
+// information_schema inspection this was built from) or a value already
+// computed elsewhere in this file (SCORE_SQL, PASS_THRESHOLD) -- nothing
+// invented. Internal/admin use only; see app/api/admin/export/route.ts for
+// the auth gate.
+
+/** Category filter for the raw export -- mirrors SOLUTION_TO_CATEGORY's three
+ *  mapped categories, plus 'OTHER' for every real session whose simulator has
+ *  no category, or one this dashboard doesn't map (e.g. 'DIAG') -- real,
+ *  currently-unclassified activity, not a fabricated bucket. 'SB' (Second
+ *  Brain) is deliberately excluded from 'OTHER' too, for the exact reason
+ *  documented at SOLUTION_TO_CATEGORY above: it has its own dedicated API and
+ *  must never be double-counted through this connector. */
+export type RawInteractionModule = 'COACH' | 'SIM' | 'SEGMENT' | 'OTHER'
+
+export interface RawInteractionRow {
+  session_id: number
+  client_id: number
+  user_id: number
+  user_name: string
+  user_email: string
+  user_department: string | null
+  user_designation: string | null
+  simulator_id: number | null
+  simulator_name: string | null
+  /** Raw r_simulator.category ('' or NULL for an unclassified simulator). */
+  module_category: string | null
+  date_created: string
+  /** Real 0-100 score extracted via SCORE_SQL, or null if unscoreable. */
+  score: number | null
+  /** Which SCORE_SQL branch produced `score` -- for verifying/debugging the
+   *  dashboard's own score extraction, not a KPI. Null when score is null. */
+  score_source: string | null
+  /** r_user_session.score -- the legacy column, essentially never populated
+   *  on this platform (see this file's own header comment). Exported as-is,
+   *  never backfilled from `score`, so a reader can see it really is empty. */
+  legacy_score: number | null
+  legacy_passed_flag: number | null
+  rating_score: number | null
+  interaction_type: number
+  /** score >= PASS_THRESHOLD, mirroring every other pass/fail computation in
+   *  this file. Null (not a fabricated fail) when score is null. */
+  result: 'pass' | 'fail' | null
+}
+
+/** Mirrors SCORE_SQL's exact branch conditions, but returns a label
+ *  identifying which one fired instead of the extracted value -- same CASE
+ *  structure, same ordering (Siigo's marker before Master Coach's, for the
+ *  same substring-containment reason documented on SCORE_SQL), so this can
+ *  never disagree with SCORE_SQL about which branch a row actually matched. */
+const SCORE_SOURCE_SQL = `CASE
+  WHEN JSON_VALID(s.raw_closing_data)
+       AND JSON_EXTRACT(s.raw_closing_data, '$.score_bar') IS NOT NULL
+       AND JSON_UNQUOTE(JSON_EXTRACT(s.raw_closing_data, '$.score_bar')) REGEXP '^[0-9]+(\\\\.[0-9]+)?$'
+    THEN 'json:score_bar'
+  WHEN JSON_VALID(s.raw_closing_data)
+       AND JSON_EXTRACT(s.raw_closing_data, '$.overall_score') IS NOT NULL
+       AND JSON_UNQUOTE(JSON_EXTRACT(s.raw_closing_data, '$.overall_score')) REGEXP '^[0-9]+(\\\\.[0-9]+)?$'
+    THEN 'json:overall_score'
+  WHEN LOCATE('rp-sim-report-score-number">', s.closing_analysis) > 0 THEN 'html:rp-sim-report-score-number'
+  WHEN LOCATE('rpt-score-num">', s.closing_analysis) > 0 THEN 'html:rpt-score-num'
+  WHEN LOCATE('total-score">', s.closing_analysis) > 0 THEN 'html:total-score'
+  WHEN LOCATE('score-number">', s.closing_analysis) > 0 THEN 'html:score-number'
+  WHEN LOCATE('rp-huge-grade">', s.closing_analysis) > 0 THEN 'html:rp-huge-grade'
+  ELSE NULL
+END`
+
+function moduleCategoryClause(module: RawInteractionModule): string {
+  if (module === 'OTHER') {
+    return ` AND (sim.category IS NULL OR sim.category NOT IN ('COACH','SIM','SEGMENT','SB'))`
+  }
+  return ` AND sim.category = '${module}'`
+}
+
+/**
+ * Raw per-session export rows for one client, one module, capped at `limit`
+ * (default 5000 -- generous for a CSV download, still a real bound so a
+ * huge tenant can't produce an unbounded response). Ordered most-recent-first,
+ * matching every other list endpoint in this file.
+ */
+export async function rolplayAppRawInteractions(
+  clientId: number,
+  module: RawInteractionModule,
+  range?: { fromIso: string; toIso: string },
+  limit = 5000,
+): Promise<RawInteractionRow[]> {
+  const cid = tenantId(clientId)
+  const lim = Math.max(1, Math.min(20000, Math.trunc(limit)))
+  const rows = await remoteSelect<{
+    session_id: number | string; client_id: number | string
+    user_id: number | string; user_name: string; user_email: string
+    user_department: string | null; user_designation: string | null
+    simulator_id: number | string | null; simulator_name: string | null; module_category: string | null
+    date_created: string
+    score: string | null; score_source: string | null
+    legacy_score: number | string | null; legacy_passed_flag: number | string | null
+    rating_score: number | string | null; interaction_type: number | string
+  }>(
+    `SELECT s.ID AS session_id, u.client_id AS client_id,
+            u.ID AS user_id, u.name AS user_name, u.email AS user_email,
+            u.department AS user_department, u.designation AS user_designation,
+            s.simulator_id AS simulator_id, sim.name AS simulator_name, sim.category AS module_category,
+            s.date_created AS date_created,
+            ${SCORE_SQL} AS score, ${SCORE_SOURCE_SQL} AS score_source,
+            s.score AS legacy_score, s.passed_flag AS legacy_passed_flag,
+            s.rating_score AS rating_score, s.interaction_type AS interaction_type
+       FROM r_user_session s
+       JOIN r_user u ON u.ID = s.user_id
+       LEFT JOIN r_simulator sim ON sim.ID = s.simulator_id
+      WHERE u.client_id = ${cid}${moduleCategoryClause(module)}${dateClause(range?.fromIso, range?.toIso)}
+      ORDER BY s.date_created DESC
+      LIMIT ${lim}`,
+  )
+
+  return rows.map(r => {
+    const score = r.score != null ? Number(r.score) : null
+    return {
+      session_id: Number(r.session_id),
+      client_id: Number(r.client_id),
+      user_id: Number(r.user_id),
+      user_name: r.user_name,
+      user_email: r.user_email,
+      user_department: r.user_department,
+      user_designation: r.user_designation,
+      simulator_id: r.simulator_id != null ? Number(r.simulator_id) : null,
+      simulator_name: r.simulator_name,
+      module_category: r.module_category,
+      date_created: String(r.date_created),
+      score,
+      score_source: score != null ? r.score_source : null,
+      legacy_score: r.legacy_score != null ? Number(r.legacy_score) : null,
+      legacy_passed_flag: r.legacy_passed_flag != null ? Number(r.legacy_passed_flag) : null,
+      rating_score: r.rating_score != null ? Number(r.rating_score) : null,
+      interaction_type: Number(r.interaction_type),
+      result: score != null ? (score >= PASS_THRESHOLD ? 'pass' : 'fail') : null,
+    }
+  })
 }

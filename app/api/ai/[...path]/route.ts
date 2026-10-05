@@ -21,6 +21,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdminFromRequest } from '@/lib/server-auth'
 import { rateLimit, rateLimitHeaders } from '@/lib/rate-limit'
+import { getKnownCompanies } from '@/lib/known-companies'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -124,7 +125,29 @@ async function forward(request: NextRequest, path: string[]): Promise<NextRespon
 }
 
 export async function GET(request: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
-  return forward(request, (await ctx.params).path)
+  const path = (await ctx.params).path
+  // GUARD, not routing by folder structure: /api/ai/known-companies has its
+  // own static sibling route (app/api/ai/known-companies/route.ts) that
+  // SHOULD take precedence per Next's own file-based routing rules -- but
+  // confirmed live in production that it didn't (a POST here returned a raw
+  // FastAPI "Method Not Allowed" body, proving the request reached ai-service
+  // unmodified through THIS catch-all rather than hitting Next's native 405
+  // for a route with no POST handler). The Dashboard Builder's company
+  // picker was silently missing every pharma/PHP-bridge tenant as a result --
+  // this check makes the merge happen here unconditionally, regardless of
+  // whichever route Next actually resolves to.
+  if (path.length === 1 && path[0] === 'known-companies') {
+    const admin = await requireAdminFromRequest(request)
+    if (!admin) {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+    }
+    const limit = rateLimit(`ai:${admin.email}`, AI_LIMIT, AI_WINDOW_MS)
+    if (!limit.ok) {
+      return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429, headers: rateLimitHeaders(limit) })
+    }
+    return NextResponse.json(await getKnownCompanies())
+  }
+  return forward(request, path)
 }
 export async function POST(request: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
   return forward(request, (await ctx.params).path)
@@ -134,5 +157,11 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ path: 
 // it, an admin has no way to correct a bad cache other than direct DB access,
 // and this proxy previously only forwarded GET/POST.
 export async function DELETE(request: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
+  return forward(request, (await ctx.params).path)
+}
+// PATCH is required by PATCH /ai/dashboard/{slug}/required-sections — the
+// lightweight mandatory-sections edit that intentionally does NOT go through
+// generate/publish (no schema re-discovery, no version bump).
+export async function PATCH(request: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
   return forward(request, (await ctx.params).path)
 }

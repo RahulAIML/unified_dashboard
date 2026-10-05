@@ -1,7 +1,6 @@
 "use client"
 
 import { useMemo, useEffect, useReducer, useRef, useState } from "react"
-import { motion, AnimatePresence } from "framer-motion"
 import { Target, PlayCircle, TrendingUp, TrendingDown, BadgeCheck, BarChart2, AlertTriangle, Trophy, MessageSquare, Users, Search, FileText, Lightbulb, CheckCircle2 } from "lucide-react"
 import { DashboardHeader }    from "@/components/DashboardHeader"
 import { SummaryCard }        from "@/components/SummaryCard"
@@ -30,6 +29,7 @@ import type {
   EvaluationApiRow,
   BestPerformersApiResponse,
   BestPerformerRow,
+  KpiCard,
 } from "@/lib/types"
 import type { Module } from "@/lib/types"
 
@@ -62,7 +62,17 @@ type SecondBrainProfile = {
 }
 
 // ── KPI icons ─────────────────────────────────────────────────────────────────
-const kpiIcons = [
+// Keyed by labelKey rather than array position: the "Overall Pass Rate" tile
+// can be omitted entirely (a tenant with no pass/fail criteria — see
+// kpiCards below), and a position-based lookup would then hand the WRONG
+// icon to every tile after it.
+const KPI_ICON_BY_LABEL_KEY: Partial<Record<KpiCard["labelKey"], React.ReactNode>> = {
+  practiceSessions:  <PlayCircle key="p"  className="w-4 h-4" />,
+  avgSessionScore:   <Target     key="t"  className="w-4 h-4" />,
+  overallPassRate:   <TrendingUp key="tr" className="w-4 h-4" />,
+  certifiedUsers:    <BadgeCheck key="b"  className="w-4 h-4" />,
+}
+const DEFAULT_KPI_ICONS = [
   <PlayCircle key="p"  className="w-4 h-4" />,
   <Target     key="t"  className="w-4 h-4" />,
   <TrendingUp key="tr" className="w-4 h-4" />,
@@ -251,21 +261,45 @@ export function DashboardContent() {
         value: overview!.totalEvaluations,
         delta: d(overview!.totalEvaluations, overview!.prevTotalEvaluations),
         tier: "A" as const,
+        info: t.practiceSessionsInfo,
       },
       {
         label: "Avg Session Score", labelKey: "avgSessionScore" as const,
-        value: overview!.avgScore ?? 0, unit: "pts",
-        delta: d(overview!.avgScore ?? 0, overview!.prevAvgScore ?? 0),
+        // Was `?? 0`: a tenant with zero SCORED sessions this period (e.g. a
+        // new tenant, or a period before their first evaluation) showed a
+        // literal "0 pts" tile indistinguishable from a real rock-bottom
+        // average, and the delta below compared two fabricated zeros into a
+        // fabricated "+0%"/"no change" reading. avgScore is only ever null
+        // when there is nothing to average -- never a genuine "0".
+        value: overview!.avgScore ?? "—",
+        unit: overview!.avgScore != null ? "pts" : undefined,
+        delta: overview!.avgScore != null && overview!.prevAvgScore != null
+          ? d(overview!.avgScore, overview!.prevAvgScore) : 0,
+        noComparison: overview!.avgScore == null || overview!.prevAvgScore == null,
         tier: "B" as const,
+        info: t.avgSessionScoreInfo,
       },
-      {
+      // passRateLegend === null (explicit, not merely absent) means this
+      // tenant has no applicable pass/fail criteria at all -- omit the tile
+      // entirely rather than render a number computed against a threshold
+      // the client never agreed to. Every other org type simply doesn't set
+      // this field (undefined), so the tile renders exactly as before.
+      ...(overview!.passRateLegend === null ? [] : [{
         label: "Overall Pass Rate", labelKey: "overallPassRate" as const,
-        value: overview!.passRate ?? 0, unit: "%",
-        delta: d(overview!.passRate ?? 0, overview!.prevPassRate ?? 0),
+        // Same null-vs-zero fix as Avg Session Score above: passRate is null
+        // only when there were no scored sessions to compute a rate from.
+        value: overview!.passRate ?? "—",
+        unit: overview!.passRate != null ? "%" : undefined,
+        delta: overview!.passRate != null && overview!.prevPassRate != null
+          ? d(overview!.passRate, overview!.prevPassRate) : 0,
+        noComparison: overview!.passRate == null || overview!.prevPassRate == null,
         tier: "B" as const,
-      },
+        legend: overview!.passRateLegend,
+        info: t.overallPassRateInfo,
+      }]),
       {
         label: "Certified Users", labelKey: "certifiedUsers" as const,
+        info: t.certifiedUsersInfo,
         // cert.stats is a current-state snapshot with no date range, so there
         // is no real "previous period" to diff against — show "no comparison"
         // rather than a fabricated-looking 0% trend.
@@ -282,7 +316,7 @@ export function DashboardContent() {
         tier: "A" as const,
       },
     ]
-  }, [overview, overviewCert, hasOverviewData, isSecondBrain])
+  }, [overview, overviewCert, hasOverviewData, isSecondBrain, t])
 
   const secondBrainKpis = useMemo(() => {
     if (!isSecondBrain || !sbProfile) return []
@@ -387,11 +421,17 @@ export function DashboardContent() {
   // from the per-activity breakdown any tenant already returns. Generic: renders
   // only when there is at least one activity with sessions.
   const insights = useMemo(() => {
-    const rows = (ucBreakdown?.data ?? []).filter(r => Number(r.totalEvaluations) > 0)
+    // r.passRate is already the correct passed/SCORED ratio computed
+    // server-side (lib/bridge-rolplay-app.ts) -- re-deriving it here from
+    // passed/totalEvaluations divides by every session including unscoreable
+    // ones, understating the true rate and risking a wrong "weakest activity"
+    // pick. A usecase with no real pass rate (passRate === null, nothing
+    // scored yet) is excluded rather than assigned a fabricated rate.
+    const rows = (ucBreakdown?.data ?? []).filter(r => Number(r.totalEvaluations) > 0 && r.passRate != null)
     if (!rows.length) return null
     const withRate = rows.map(r => ({
       name: r.usecase_name?.trim() || `UC-${r.usecaseId}`,
-      rate: (Number(r.passed) / Number(r.totalEvaluations)) * 100,
+      rate: Number(r.passRate),
     }))
     const sorted    = [...withRate].sort((a, b) => a.rate - b.rate)
     const weakest   = sorted.filter(r => r.rate < 60).slice(0, 3)
@@ -434,7 +474,9 @@ export function DashboardContent() {
     {
       key: "passed",
       header: t.colResult,
-      render: r => (
+      render: r => r.passed == null ? (
+        <span className="text-muted-foreground">—</span>
+      ) : (
         <span className={cn(
           "inline-flex px-2 py-0.5 rounded-full text-xs font-semibold",
           r.passed
@@ -559,17 +601,13 @@ export function DashboardContent() {
 
       <div className="w-full px-4 sm:px-6 lg:px-8 py-5 sm:py-8 space-y-6 sm:space-y-8 max-w-[1600px] mx-auto">
 
-        {/* Active solution badge */}
-        <AnimatePresence>
-          {selectedSolution && (
-            <motion.div
-              key="solution-badge"
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.2 }}
-              className="flex items-center gap-2 text-sm font-medium text-primary"
-            >
+        {/* Active solution badge -- plain conditional + CSS keyframe, not
+            framer-motion's AnimatePresence (see ai-assistant.tsx and
+            DataTable.tsx for the full story: an unrelated re-render landing
+            while framer-motion holds a reference to a node mid-exit throws
+            insertBefore/NotFoundError and crashes the whole app). */}
+        {selectedSolution && (
+            <div className="flex items-center gap-2 text-sm font-medium text-primary animate-fade-in">
               <span className="inline-block w-2 h-2 rounded-full bg-primary" />
               {t.themeShowing}{" "}
               <span className="capitalize font-bold">
@@ -581,9 +619,8 @@ export function DashboardContent() {
               >
                 {t.themeClear}
               </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
+            </div>
+        )}
 
         {/* API error banners */}
         {overviewError && <ErrorBanner message={`${t.errorLoading}: ${overviewError}`} />}
@@ -694,7 +731,7 @@ export function DashboardContent() {
                         key={`${selectedSolution ?? "all"}-${kpi.label}`}
                         kpi={kpi}
                         index={i}
-                        icon={kpiIcons[i]}
+                        icon={KPI_ICON_BY_LABEL_KEY[kpi.labelKey] ?? DEFAULT_KPI_ICONS[i]}
                       />
                     ))
                   : Array.from({ length: 4 }).map((_, i) => (
@@ -980,22 +1017,19 @@ export function DashboardContent() {
                   <h3 className="text-base sm:text-lg font-semibold">{t.scoreDistribution}</h3>
                   <p className="text-xs sm:text-sm text-muted-foreground mt-1.5">{t.scoreDistributionSub}</p>
                 </div>
-                <div className="space-y-2">
-                  {trends!.scoreDistribution!.map(bucket => (
-                    <div key={bucket.range} className="flex items-center gap-3">
-                      <span className="w-16 shrink-0 text-xs font-medium text-muted-foreground tabular-nums">{bucket.range}</span>
-                      <div className="flex-1 h-5 bg-muted/40 rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full"
-                          style={{ width: `${Math.max(bucket.pct, bucket.count > 0 ? 2 : 0)}%`, background: `linear-gradient(90deg, hsl(var(--primary)), hsl(var(--accent)))` }}
-                        />
+                {/* Score buckets sum to 100% -- a donut, never separate
+                    bars, with each bucket's exact count + share kept
+                    visible rather than replaced by the chart. */}
+                <div className="space-y-4">
+                  <DonutChart data={trends!.scoreDistribution!.map(bucket => ({ name: bucket.range, value: bucket.count }))} />
+                  <div className="space-y-1.5">
+                    {trends!.scoreDistribution!.map(bucket => (
+                      <div key={bucket.range} className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground tabular-nums">{bucket.range}</span>
+                        <span className="font-semibold tabular-nums text-foreground">{bucket.count} ({bucket.pct}%)</span>
                       </div>
-                      <span className="w-20 shrink-0 text-xs text-right tabular-nums">
-                        <span className="font-semibold">{bucket.count}</span>
-                        <span className="text-muted-foreground"> ({bucket.pct}%)</span>
-                      </span>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               </div>
             )}

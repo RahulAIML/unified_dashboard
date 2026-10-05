@@ -21,6 +21,7 @@ function row(over: Record<string, unknown> = {}) {
     ucids: [], has_certification: false, has_objections: false, has_business_lines: false,
     has_organization: false, has_top_stats: false, has_lms: null, has_simulator: null,
     coach_activity_ids: null, auth_header_name: null, auth_header_value: null,
+    pass_threshold: null, has_no_passing_criteria: false,
     is_active: true, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
     ...over,
   }
@@ -122,6 +123,58 @@ describe('tri-state capability flags', () => {
   })
 })
 
+describe('pass threshold (tri-state, like has_lms/has_simulator)', () => {
+  it('stores NULL when passThreshold is omitted', async () => {
+    const { upsertTenant } = await load()
+    await upsertTenant({ ...base })
+
+    const { params } = lastCall()
+    // Position 17 (1-indexed) → index 16.
+    expect(params[16]).toBeNull()
+  })
+
+  it('stores an explicitly configured threshold', async () => {
+    const { upsertTenant } = await load()
+    await upsertTenant({ ...base, passThreshold: 80 })
+
+    const { params } = lastCall()
+    expect(params[16]).toBe(80)
+  })
+
+  it('stores hasNoPassingCriteria as false distinctly from true', async () => {
+    const { upsertTenant } = await load()
+    await upsertTenant({ ...base, hasNoPassingCriteria: true })
+
+    const { params } = lastCall()
+    // Position 18 (1-indexed) → index 17.
+    expect(params[17]).toBe(true)
+  })
+
+  it('defaults hasNoPassingCriteria to false when omitted', async () => {
+    const { upsertTenant } = await load()
+    await upsertTenant({ ...base })
+
+    const { params } = lastCall()
+    expect(params[17]).toBe(false)
+  })
+
+  it('COALESCEs pass_threshold on conflict so a partial update cannot wipe a set value', async () => {
+    const { upsertTenant } = await load()
+    await upsertTenant({ ...base })
+
+    const { sql } = lastCall()
+    expect(sql).toMatch(/pass_threshold\s*=\s*COALESCE\(EXCLUDED\.pass_threshold,\s*pharma_tenants\.pass_threshold\)/)
+  })
+
+  it('does NOT COALESCE has_no_passing_criteria (plain boolean, like has_certification)', async () => {
+    const { upsertTenant } = await load()
+    await upsertTenant({ ...base })
+
+    const { sql } = lastCall()
+    expect(sql).toMatch(/has_no_passing_criteria\s*=\s*EXCLUDED\.has_no_passing_criteria/)
+  })
+})
+
 describe('read path', () => {
   it('maps a missing column to null rather than throwing', async () => {
     const { getTenantRow } = await load()
@@ -135,6 +188,19 @@ describe('read path', () => {
 
     expect(t?.hasLms).toBeNull()
     expect(t?.hasSimulator).toBeNull()
+  })
+
+  it('maps a missing pass_threshold/has_no_passing_criteria to the same defaults', async () => {
+    const { getTenantRow } = await load()
+    const partial = row()
+    delete (partial as Record<string, unknown>).pass_threshold
+    delete (partial as Record<string, unknown>).has_no_passing_criteria
+    authQuery.mockResolvedValue([partial])
+
+    const t = await getTenantRow('t')
+
+    expect(t?.passThreshold).toBeNull()
+    expect(t?.hasNoPassingCriteria).toBe(false)
   })
 
   it('selects the new columns', async () => {

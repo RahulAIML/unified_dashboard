@@ -2,7 +2,6 @@
 
 import { useMemo, useRef, useState } from "react"
 import { usePathname } from "next/navigation"
-import { motion, AnimatePresence } from "framer-motion"
 import { Bot, Send, X, Loader2 } from "lucide-react"
 import { useDashboardStore } from "@/lib/store"
 import { buildApiUrl } from "@/lib/hooks/useApi"
@@ -254,14 +253,20 @@ export function AIAssistant() {
         {t.askAi}
       </button>
 
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, y: 16, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 16, scale: 0.97 }}
-            transition={{ duration: 0.18 }}
-            className="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-50 flex w-[380px] max-w-[92vw] flex-col rounded-2xl border border-border bg-card shadow-2xl"
+      {/* Plain conditional render + CSS keyframe, NOT framer-motion's
+          AnimatePresence -- this floating panel is mounted on every page
+          (globally, via layout), so it sat in the tree the whole time
+          alongside every other page's own re-renders. The exact same
+          insertBefore/NotFoundError crash already root-caused and fixed in
+          OnboardingTour.tsx (an unrelated re-render landing while
+          framer-motion still held a reference to a node mid-exit) hit here
+          too -- confirmed live: a real user's dark/light toggle click on
+          /kpis crashed the whole app with that exact error. See that file's
+          comment for the full story; this drops the controlled exit
+          animation for the same reason. */}
+      {open && (
+          <div
+            className="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-50 flex w-[380px] max-w-[92vw] flex-col rounded-2xl border border-border bg-card shadow-2xl animate-slide-up"
             style={{ maxHeight: "min(600px, 90vh)" }}
           >
             {/* Header */}
@@ -360,9 +365,8 @@ export function AIAssistant() {
                 </button>
               </div>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </div>
+      )}
     </>
   )
 }

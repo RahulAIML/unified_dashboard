@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, act } from '@testing-library/react'
 import React from 'react'
 
 // ── Next.js mocks ─────────────────────────────────────────────────────────────
@@ -57,10 +57,18 @@ vi.mock('@/lib/lang-store', () => ({
     usecase:            'Use case',
     passed:             'Passed',
     failed:             'Failed',
+    insightsTitle:        'AI Insights',
+    insightsSub:          'Auto-derived from your data',
+    insightsFocusAreas:   'Focus areas',
+    insightsAllStrong:    'All activities are performing well',
+    insightsStrongest:    'Strongest activity',
+    insightsRecommendation: 'Recommendation',
+    insightsRecoText:     'Keep up the momentum. Average score:',
   }),
+  useLangStore: () => ({ lang: 'en' as const, toggle: vi.fn() }),
 }))
 vi.mock('@/lib/hooks/useClientBrand', () => ({
-  useClientBrand: () => ({ name: 'TestBrand', primaryColor: '#ff0000' }),
+  useClientBrand: () => ({ name: 'TestBrand', primaryColor: '#ff0000', chartColors: ['#ff0000', '#00ff00', '#0000ff'] }),
 }))
 vi.mock('@/components/AuthProvider', () => ({
   useAuthContext: () => ({ user: { id: 1, email: 'u@test.com' }, isLoading: false }),
@@ -86,7 +94,6 @@ vi.mock('framer-motion', () => ({
 vi.mock('@/components/DashboardHeader', () => ({
   DashboardHeader: ({ title }: { title: string }) => <div data-testid="header">{title}</div>,
 }))
-vi.mock('@/components/SummaryCard', () => ({ SummaryCard: () => <div /> }))
 vi.mock('@/components/MetricCard',   () => ({ MetricCard:   () => <div /> }))
 vi.mock('@/components/ChartCard',    () => ({ ChartCard:    ({ children }: { children: React.ReactNode }) => <div>{children}</div> }))
 vi.mock('@/components/DataTable',    () => ({ DataTable:    () => <div /> }))
@@ -99,16 +106,25 @@ vi.mock('@/components/charts/DonutChart',        () => ({ DonutChart:        () 
 
 let mockAccessStatus: Record<string, unknown> | null = null
 let mockAccessLoading = false
+let mockOverviewData: Record<string, unknown> | null = null
+let mockUcBreakdown: Record<string, unknown> | null = null
 
 vi.mock('@/lib/hooks/useApi', () => ({
   useApi: (url: string | null) => {
     if (url?.includes('access-status')) {
       return { data: mockAccessStatus, loading: mockAccessLoading, error: null }
     }
+    if (url?.includes('/api/dashboard/overview') && !url.includes('solution=certification')) {
+      return { data: mockOverviewData, loading: false, error: null }
+    }
+    if (url?.includes('usecase-breakdown')) {
+      return { data: mockUcBreakdown, loading: false, error: null }
+    }
     return { data: null, loading: false, error: null }
   },
-  buildApiUrl: (path: string, from: Date, to: Date) =>
-    `${path}?from=${from.toISOString()}&to=${to.toISOString()}`,
+  buildApiUrl: (path: string, from: Date, to: Date, extra?: Record<string, unknown>) =>
+    `${path}?from=${from.toISOString()}&to=${to.toISOString()}` +
+    (extra ? `&${Object.entries(extra).map(([k, v]) => `${k}=${v}`).join('&')}` : ''),
 }))
 
 import { DashboardContent } from '../DashboardContent'
@@ -118,7 +134,135 @@ import { DashboardContent } from '../DashboardContent'
 beforeEach(() => {
   mockAccessStatus  = null
   mockAccessLoading = false
+  mockOverviewData  = null
+  mockUcBreakdown   = null
   mockRouterReplace.mockClear()
+})
+
+function coachAccess() {
+  return { hasCoachData: true, hasBancoAccess: false, hasSecondBrainData: false, hasAnyAccess: true }
+}
+
+/** The component shows a 400ms shimmer on mount (solution "changes" from
+ *  null to the initial value) before real KPI content renders. */
+async function renderPastInitialShimmer() {
+  vi.useFakeTimers()
+  render(<DashboardContent />)
+  await act(async () => { vi.advanceTimersByTime(500) })
+  vi.useRealTimers()
+}
+
+describe('DashboardContent — pass-rate legend / hide behavior', () => {
+  it('shows the pass-rate tile with its legend when the tenant has a configured threshold', async () => {
+    mockAccessStatus = coachAccess()
+    mockOverviewData = {
+      totalEvaluations: 100, avgScore: 82, passRate: 65, passedEvaluations: 65,
+      prevTotalEvaluations: 90, prevAvgScore: 80, prevPassRate: 60,
+      passRateLegend: 'Pass threshold: score ≥ 80 pts',
+    }
+    await renderPastInitialShimmer()
+    expect(screen.getByText('Pass threshold: score ≥ 80 pts')).toBeTruthy()
+  })
+
+  it('omits the pass-rate tile entirely for a tenant with no passing criteria', async () => {
+    mockAccessStatus = coachAccess()
+    mockOverviewData = {
+      totalEvaluations: 100, avgScore: 82, passRate: null, passedEvaluations: 0,
+      prevTotalEvaluations: 90, prevAvgScore: 80, prevPassRate: null,
+      passRateLegend: null,
+    }
+    await renderPastInitialShimmer()
+    expect(screen.queryByText('Pass Rate')).toBeNull()
+  })
+
+  it('shows the pass-rate tile with no legend for an org type that has not been wired up yet', async () => {
+    mockAccessStatus = coachAccess()
+    mockOverviewData = {
+      totalEvaluations: 100, avgScore: 82, passRate: 65, passedEvaluations: 65,
+      prevTotalEvaluations: 90, prevAvgScore: 80, prevPassRate: 60,
+      // passRateLegend intentionally absent (undefined), matching a
+      // response built before this field existed.
+    }
+    await renderPastInitialShimmer()
+    expect(screen.getByText('Pass Rate')).toBeTruthy()
+  })
+})
+
+describe('DashboardContent — null vs. genuine zero (Avg Score / Pass Rate)', () => {
+  it('shows "—" rather than a fabricated "0" when avgScore/passRate are null (no scored sessions)', async () => {
+    mockAccessStatus = coachAccess()
+    mockOverviewData = {
+      totalEvaluations: 5, avgScore: null, passRate: null, passedEvaluations: 0,
+      prevTotalEvaluations: 0, prevAvgScore: null, prevPassRate: null,
+      passRateLegend: 'Pass threshold: score ≥ 70 pts',
+    }
+    await renderPastInitialShimmer()
+    // The old `?? 0` behavior rendered a literal "0" here, indistinguishable
+    // from a real rock-bottom score/rate. Regression: must show "—" instead.
+    const dashes = screen.getAllByText('—')
+    expect(dashes.length).toBeGreaterThanOrEqual(2) // Avg Score tile + Pass Rate tile
+  })
+
+  it('still renders a genuine 0 pass rate as "0", not as missing data', async () => {
+    // A real all-fail period: passRate is 0 (a computed number), not null.
+    // This must NOT be conflated with the no-data case above.
+    mockAccessStatus = coachAccess()
+    mockOverviewData = {
+      totalEvaluations: 10, avgScore: 42, passRate: 0, passedEvaluations: 0,
+      prevTotalEvaluations: 8, prevAvgScore: 50, prevPassRate: 20,
+      passRateLegend: 'Pass threshold: score ≥ 70 pts',
+    }
+    await renderPastInitialShimmer()
+    expect(screen.getByText('42')).toBeTruthy()
+    // A genuine 0 pass rate must render as a real "0" tile, not "—" and not
+    // be silently dropped -- getAllByText tolerates other unrelated "0"s
+    // elsewhere on the page (e.g. a delta pill).
+    expect(screen.getAllByText('0').length).toBeGreaterThanOrEqual(1)
+    expect(screen.queryByText('—')).toBeNull()
+  })
+})
+
+describe('DashboardContent — insights (weakest/strongest use case)', () => {
+  it('uses the server-computed passRate, not a re-derived passed/totalEvaluations ratio', async () => {
+    mockAccessStatus = coachAccess()
+    mockOverviewData = {
+      totalEvaluations: 100, avgScore: 82, passRate: 65, passedEvaluations: 65,
+      prevTotalEvaluations: 90, prevAvgScore: 80, prevPassRate: 60,
+      passRateLegend: null,
+    }
+    // `passed` (a raw count of only the SCORED-and-passed rows) intentionally
+    // disagrees with `totalEvaluations` here -- if insights recomputed
+    // passed/totalEvaluations it would derive 20%; the real, server-computed
+    // passRate (scoped to scored sessions only) is 80%. Regression: the UI
+    // must reflect the real 80%, not a fabricated 20%.
+    mockUcBreakdown = {
+      data: [
+        { usecaseId: 1, usecase_name: 'Objection Handling', totalEvaluations: 10, avgScore: 88, passRate: 80, passed: 2 },
+      ],
+    }
+    await renderPastInitialShimmer()
+    expect(screen.getByText('Objection Handling')).toBeTruthy()
+    expect(screen.getByText('80%')).toBeTruthy()
+    expect(screen.queryByText('20%')).toBeNull()
+  })
+
+  it('excludes a use case with no real pass rate (passRate null) instead of assigning it a fabricated rate', async () => {
+    mockAccessStatus = coachAccess()
+    mockOverviewData = {
+      totalEvaluations: 100, avgScore: 82, passRate: 65, passedEvaluations: 65,
+      prevTotalEvaluations: 90, prevAvgScore: 60, prevPassRate: 60,
+      passRateLegend: null,
+    }
+    mockUcBreakdown = {
+      data: [
+        { usecaseId: 1, usecase_name: 'Unscored Activity', totalEvaluations: 5, avgScore: null, passRate: null, passed: 0 },
+        { usecaseId: 2, usecase_name: 'Strong Activity', totalEvaluations: 8, avgScore: 90, passRate: 90, passed: 8 },
+      ],
+    }
+    await renderPastInitialShimmer()
+    expect(screen.queryByText('Unscored Activity')).toBeNull()
+    expect(screen.getByText('Strong Activity')).toBeTruthy()
+  })
 })
 
 describe('DashboardContent — access routing', () => {

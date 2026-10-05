@@ -146,7 +146,7 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
       <div className="px-4 sm:px-6 py-3 sm:py-4">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 sm:gap-4 mb-3 sm:mb-4">
           <div>
-            <h1 className="text-xl font-semibold tracking-tight text-foreground">{title}</h1>
+            <h1 className="text-xl font-bold tracking-tight text-foreground">{title}</h1>
             {subtitle && <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>}
           </div>
 
@@ -154,7 +154,7 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
             <button
               onClick={toggleLang}
               className="px-3 py-2 rounded-lg text-xs font-semibold border border-border bg-muted hover:bg-muted/70 transition-colors tabular-nums min-h-[36px]"
-              aria-label="Toggle language"
+              aria-label={t.ariaToggleLanguage}
             >
               {lang === "en" ? "ES" : "EN"}
             </button>
@@ -167,7 +167,7 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
                 "inline-flex items-center gap-1.5 min-h-[36px]",
                 refreshing && "opacity-70 cursor-not-allowed"
               )}
-              aria-label="Refresh data"
+              aria-label={t.refresh}
               title={t.refresh}
             >
               <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />
@@ -186,7 +186,7 @@ export function DashboardHeader({ title, subtitle, showModuleFilter = false }: P
                     activeDays === days ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  {label}
+                  {days === ALL_TIME_DAYS ? t.filterAll : label}
                 </button>
               ))}
 

@@ -12,7 +12,7 @@
  * just rolplay-app — Sidebar.tsx gates it the same way as Activities/Reports.
  */
 
-import { Trophy, TrendingUp, TrendingDown } from "lucide-react"
+import { AlertTriangle, Trophy, TrendingUp, TrendingDown } from "lucide-react"
 import { DashboardHeader } from "@/components/DashboardHeader"
 import { useApi, buildApiUrl } from "@/lib/hooks/useApi"
 import { useDashboardStore } from "@/lib/store"
@@ -22,6 +22,15 @@ import { cn } from "@/lib/utils"
 import type { BestPerformersApiResponse, BestPerformerRow } from "@/lib/types"
 
 interface AccessCaps { hasCoachData?: boolean; hasPharmaAccess?: boolean; hasBancoAccess?: boolean; hasRolplayAppAccess?: boolean }
+
+function ErrorBanner({ message }: { message: string }) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive mb-4">
+      <AlertTriangle className="w-4 h-4 shrink-0" />
+      <span>{message}</span>
+    </div>
+  )
+}
 
 const RANK_BADGE_CLASSES = [
   "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 shadow-sm",
@@ -40,7 +49,7 @@ export default function RankingPage() {
   const url = ready
     ? buildApiUrl("/api/dashboard/best-performers", dateRange.from, dateRange.to, { limit: 20, solution: selectedSolution, rk: refreshKey })
     : null
-  const { data, loading } = useApi<BestPerformersApiResponse>(url)
+  const { data, loading, error } = useApi<BestPerformersApiResponse>(url)
   const rows = data?.data ?? []
 
   return (
@@ -48,6 +57,10 @@ export default function RankingPage() {
       <DashboardHeader title={t.navRanking} subtitle={t.bestPerformersSub} showModuleFilter />
 
       <div className="w-full px-4 sm:px-6 lg:px-8 py-5 sm:py-8 max-w-[1400px] mx-auto">
+        {/* Was silently dropped: a backend/tenant-resolution failure rendered
+            identically to a real "no performers yet" tenant (rows=[] either
+            way). Surfacing it distinguishes "something broke" from "empty". */}
+        {error && <ErrorBanner message={`${t.errorLoading}: ${error}`} />}
         <div className="rounded-[16px] border border-border/60 bg-card p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)]">
           <div className="mb-5">
             <h3 className="text-base sm:text-lg font-semibold flex items-center gap-2">

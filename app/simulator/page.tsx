@@ -20,6 +20,7 @@ import type {
   TrendsApiResponse,
   UsecaseBreakdownApiResponse,
   UsecaseApiRow,
+  ResultsApiResponse,
 } from "@/lib/types"
 
 const icons = [
@@ -79,10 +80,15 @@ export default function SimulatorPage() {
   const overviewUrl = buildApiUrl("/api/dashboard/overview", dateRange.from, dateRange.to, { solution: "simulator", rk: refreshKey })
   const trendsUrl   = buildApiUrl("/api/dashboard/trends",   dateRange.from, dateRange.to, { solution: "simulator", rk: refreshKey })
   const ucUrl       = buildApiUrl("/api/dashboard/usecase-breakdown", dateRange.from, dateRange.to, { solution: "simulator", rk: refreshKey })
+  // Internal/temporary, KPI-design evaluation only (see the export card
+  // below): raw per-session rows, the same data /api/dashboard/results
+  // already serves for Certification's "Evaluation Results" table.
+  const resultsUrl  = buildApiUrl("/api/dashboard/results", dateRange.from, dateRange.to, { limit: 200, solution: "simulator", rk: refreshKey })
 
   const { data: overview, loading: overviewLoading, error: overviewError } = useApi<OverviewApiResponse>(overviewUrl)
   const { data: trends,   loading: trendsLoading,   error: trendsError }   = useApi<TrendsApiResponse>(trendsUrl)
   const { data: ucBreakdown, loading: ucLoading,    error: ucError }       = useApi<UsecaseBreakdownApiResponse>(ucUrl)
+  const { data: rawResults }                                              = useApi<ResultsApiResponse>(resultsUrl)
 
   const hasData = overview && overview.totalEvaluations > 0
 
@@ -94,18 +100,32 @@ export default function SimulatorPage() {
         value: overview!.totalEvaluations,
         delta: calcDeltaPct(overview!.totalEvaluations, overview!.prevTotalEvaluations),
         tier: "A" as const,
+        info: t.totalSessionsInfo,
       },
       {
         label: "Pass Rate", labelKey: "passRate" as const,
-        value: overview!.passRate ?? 0, unit: "%",
-        delta: calcDeltaPct(overview!.passRate ?? 0, overview!.prevPassRate ?? 0),
+        // Was `?? 0`: a module with zero SCORED sessions this period showed a
+        // literal "0%" pass-rate tile indistinguishable from a real all-fail
+        // period, and the delta compared two fabricated zeros. passRate is
+        // only ever null when there is nothing to compute a rate from.
+        value: overview!.passRate ?? "—",
+        unit: overview!.passRate != null ? "%" : undefined,
+        delta: overview!.passRate != null && overview!.prevPassRate != null
+          ? calcDeltaPct(overview!.passRate, overview!.prevPassRate) : 0,
+        noComparison: overview!.passRate == null || overview!.prevPassRate == null,
         tier: "B" as const,
+        info: t.passRateInfo,
       },
       {
         label: "Avg Score", labelKey: "avgScore" as const,
-        value: overview!.avgScore ?? 0, unit: "pts",
-        delta: calcDeltaPct(overview!.avgScore ?? 0, overview!.prevAvgScore ?? 0),
+        // Same null-vs-zero fix as Pass Rate above.
+        value: overview!.avgScore ?? "—",
+        unit: overview!.avgScore != null ? "pts" : undefined,
+        delta: overview!.avgScore != null && overview!.prevAvgScore != null
+          ? calcDeltaPct(overview!.avgScore, overview!.prevAvgScore) : 0,
+        noComparison: overview!.avgScore == null || overview!.prevAvgScore == null,
         tier: "B" as const,
+        info: t.avgScoreInfo,
       },
       {
         label: "Successful Sessions", labelKey: "successfulSessions" as const,
@@ -115,9 +135,10 @@ export default function SimulatorPage() {
           estimatePassedSessions(overview!.prevTotalEvaluations, overview!.prevPassRate)
         ),
         tier: "A" as const,
+        info: t.successfulSessionsInfo,
       },
     ]
-  }, [overview, hasData])
+  }, [overview, hasData, t])
 
   const scoreTrendData  = useMemo(() => trends?.scoreTrend ?? [],      [trends])
   const activityData    = useMemo(() => trends?.evalCountTrend ?? [],   [trends])
@@ -249,6 +270,34 @@ export default function SimulatorPage() {
             }
           </div>
         </div>
+
+        {/* Internal/temporary: raw per-session export for KPI-design
+            evaluation (Aug 20/21 sprint review) -- lets an admin download
+            the exact rows a KPI/chart on this page is computed from. To be
+            removed once that evaluation is done, matching Certification's
+            existing "Evaluation Results" export. */}
+        {!!rawResults?.data?.length && (
+          <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+            <div className="px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
+              <div>
+                <h3 className="text-sm font-semibold">{t.rawExportTitle}</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">{rawResults.data.length} {t.rawExportSub}</p>
+              </div>
+              <ExportButton
+                data={rawResults.data}
+                filename={csvFilename("simulator-raw-sessions")}
+                label={t.rawExportLabel}
+                columns={[
+                  { header: "Report ID",   value: r => r.savedReportId },
+                  { header: "Use Case ID", value: r => r.usecaseId },
+                  { header: "Score",       value: r => r.score },
+                  { header: "Result",      value: r => r.passed == null ? "" : r.passed ? "PASS" : "FAIL" },
+                  { header: "Date",        value: r => r.date },
+                ]}
+              />
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

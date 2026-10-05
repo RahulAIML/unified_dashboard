@@ -207,6 +207,19 @@ async def _rolplay_app_schema(svc, schema, log: LogFn) -> None:
         DiscoveredMetric(key="total_users", label="Active Users", type=MetricType.count,
                          source_kind=svc.kind, source_action="r_user",
                          business_question="How many reps are actively using the platform?"),
+        # Distinct from total_users/"Active Users" above (which only counts
+        # reps who actually have a session) -- this is the full registered
+        # roster, regardless of whether they've ever practiced. Found live
+        # on Chinoin: 581 real accounts (r_user), only 1 with any session --
+        # a manager reading only "Active Users: 1" had no way to see the
+        # other 580 people who have an account but haven't started using the
+        # platform yet, which reads as "the dashboard is broken/stale" when
+        # it's actually an accurate, if stark, adoption picture. Automatic
+        # for every rolplay_app_sql tenant via _heuristic() below -- no
+        # per-client change needed for this or any future client.
+        DiscoveredMetric(key="total_roster", label="Registered Users", type=MetricType.count,
+                         source_kind=svc.kind, source_action="r_user",
+                         business_question="How many people have an account on this platform, whether or not they've started using it?"),
         # Cesar KPI group 1 (dashboard_planning.py's _cesar_kpis_page) —
         # computed from r_user/r_user_session/SCORE_SQL alone
         # (preview_fetch.py's _rolplay_app_cesar_metrics), so real for ANY
@@ -223,32 +236,38 @@ async def _rolplay_app_schema(svc, schema, log: LogFn) -> None:
         DiscoveredMetric(key="mau_rate", label="Recurring Adoption (MAU)", type=MetricType.rate,
                          source_kind=svc.kind, source_action="r_user_session",
                          business_question="What % of reps used the platform in the last 30 days?"),
-        DiscoveredMetric(key="practices_to_mastery", label="Practices to Mastery", type=MetricType.count,
-                         source_kind=svc.kind, source_action="r_user_session",
-                         business_question="How many attempts does it take to reach mastery (>=95)?"),
         DiscoveredMetric(key="delta_score", label="Competency Gain (Delta Score)", type=MetricType.score,
                          source_kind=svc.kind, source_action="r_user_session",
                          business_question="How much do reps improve from their first to their most recent session?"),
         DiscoveredMetric(key="readiness_index", label="Field Readiness Index", type=MetricType.rate,
                          source_kind=svc.kind, source_action="r_user_session",
                          business_question="What % of the sales force has reached mastery-level certification?"),
-        # KPI-2.4 Trial-and-Error Index. Registered unconditionally like every
-        # other Cesar metric here -- it's real only for a tenant whose
-        # r_simulator.category actually has a Certifier ("SEGMENT") module
-        # (confirmed live: most don't), but preview_fetch.py reports None
-        # ("no data") for the rest, never a fabricated rate.
-        DiscoveredMetric(key="trial_and_error_rate", label="Trial-and-Error Index", type=MetricType.rate,
-                         source_kind=svc.kind, source_action="r_user_session",
-                         business_question="What % of certification attempts happened with no prior coaching?"),
+        # Practices to Mastery and Trial-and-Error Index were REMOVED from
+        # scope per the Aug 6 session with Silverio -- both were implemented
+        # and working before this decision (preview_fetch.py's per-user
+        # score sequencing / cross-category session sequencing).
     ]
 
     client_id = int((svc.handle or {}).get("client_id") or 0)
     scored = 0
+    discovery_failed = False
     if client_id:
         status, body = await post_json(
             get_settings().rolplay_app_sql_url,
             {"sql": f"SELECT COUNT(sc) AS scored FROM ({score_stats_inner(client_id)}) t"},
         )
+        # post_json never raises -- a network error/timeout comes back as
+        # {"__error": "..."} (app/http.py), which (body or {}).get("data")
+        # silently reduces to None, indistinguishable from "this client
+        # genuinely has zero scored sessions." A transient bridge outage
+        # during discovery must not be reported as "verified: no
+        # capabilities" -- that's the opposite failure mode from fabricating
+        # a capability, but equally dishonest. Log it and flag the schema's
+        # own note so this run is visibly incomplete, not silently empty.
+        if isinstance(body, dict) and "__error" in body:
+            discovery_failed = True
+            await log("schema_discovery", "error",
+                      f"rolplay-app client_id={client_id}: score-count query failed ({body['__error']}) -- scored count may be understated")
         data = (body or {}).get("data") if isinstance(body, dict) else None
         if data:
             scored = int(data[0].get("scored") or 0)
@@ -263,6 +282,10 @@ async def _rolplay_app_schema(svc, schema, log: LogFn) -> None:
                 f"WHERE u.client_id = {client_id} GROUP BY sim.category"
             )},
         )
+        if isinstance(mod_body, dict) and "__error" in mod_body:
+            discovery_failed = True
+            await log("schema_discovery", "error",
+                      f"rolplay-app client_id={client_id}: module-discovery query failed ({mod_body['__error']}) -- modules list may be incomplete or empty")
         mod_rows = (mod_body or {}).get("data") if isinstance(mod_body, dict) else None
         modules: list[str] = []
         mins: list[str] = []
@@ -319,6 +342,12 @@ async def _rolplay_app_schema(svc, schema, log: LogFn) -> None:
     else:
         schema.note = "Rolplay-app platform: sessions recorded, no scores found — counts-only."
         await log("schema_discovery", "info", "No scores in this client's sessions — counts-only dashboard")
+
+    if discovery_failed:
+        # Appended, never replaces the note above -- a manager reviewing this
+        # run must see BOTH what was found and that the finding is incomplete,
+        # not just one or the other.
+        schema.note += " WARNING: one or more discovery queries failed against the bridge -- modules/scores above may be incomplete, not necessarily a true zero. Retry before trusting this as final."
 
     schema.metrics = metrics
 

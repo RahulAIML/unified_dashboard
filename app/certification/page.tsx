@@ -86,27 +86,35 @@ export default function CertificationPage() {
         value: overview!.totalEvaluations,
         delta: 0, noComparison: true,
         tier: "A" as const,
+        info: t.candidatesEvaluatedInfo,
       },
       {
         label: "Pass Rate", labelKey: "passRate" as const,
-        value: overview!.passRate ?? 0, unit: "%",
+        // Was `?? 0`: a "0%" tile is indistinguishable from a real all-fail
+        // certification cohort. passRate is only ever null when there is
+        // nothing to compute a rate from.
+        value: overview!.passRate ?? "—", unit: overview!.passRate != null ? "%" : undefined,
         delta: 0, noComparison: true,
         tier: "B" as const,
+        info: t.passRateInfo,
       },
       {
         label: "Avg Score", labelKey: "avgScore" as const,
-        value: overview!.avgScore ?? 0, unit: "pts",
+        // Same null-vs-zero fix as Pass Rate above.
+        value: overview!.avgScore ?? "—", unit: overview!.avgScore != null ? "pts" : undefined,
         delta: 0, noComparison: true,
         tier: "B" as const,
+        info: t.avgScoreInfo,
       },
       {
         label: "Certified Users", labelKey: "certifiedUsers" as const,
         value: overview!.passedEvaluations,
         delta: 0, noComparison: true,
         tier: "A" as const,
+        info: t.certifiedUsersInfo,
       },
     ]
-  }, [overview, hasData])
+  }, [overview, hasData, t])
 
   const passFailData  = useMemo(() => trends?.passFailTrend ?? [],  [trends])
   const scoreTrend    = useMemo(() => trends?.scoreTrend ?? [],      [trends])
@@ -156,7 +164,9 @@ export default function CertificationPage() {
     {
       key: "passed",
       header: t.colResult,
-      render: r => (
+      render: r => r.passed == null ? (
+        <span className="text-muted-foreground">—</span>
+      ) : (
         <span className={cn(
           "inline-flex px-2 py-0.5 rounded-full text-xs font-semibold",
           r.passed
@@ -281,7 +291,7 @@ export default function CertificationPage() {
                 { header: "Exercise Name", value: r => r.usecaseName ?? "" },
                 { header: "Use Case ID",   value: r => r.usecaseId },
                 { header: "Score (pts)",   value: r => r.score },
-                { header: "Result",        value: r => r.passed ? "PASS" : "FAIL" },
+                { header: "Result",        value: r => r.passed == null ? "" : r.passed ? "PASS" : "FAIL" },
                 { header: "Segment",       value: r => r.result },
                 { header: "Date",          value: r => r.date },
               ]}

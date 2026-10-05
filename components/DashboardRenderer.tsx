@@ -9,7 +9,8 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useT } from '@/lib/lang-store'
+import { useT, useLangStore } from '@/lib/lang-store'
+import { translateGeneratedText, translateColumnHeader, translateResultValue, translateStatusValue, translateLegend } from '@/lib/generated-content-i18n'
 import { motion } from 'framer-motion'
 import { PlayCircle, Target, TrendingUp, TrendingDown, Minus, BadgeCheck, Trophy, AlertTriangle } from 'lucide-react'
 import {
@@ -17,6 +18,7 @@ import {
   CartesianGrid, Tooltip, LabelList, PieChart, Pie, Cell, Legend,
 } from 'recharts'
 import { ExportButton } from './ExportButton'
+import { EmptyState } from './EmptyState'
 import { csvFilename } from '@/lib/csv-export'
 import { cn } from '@/lib/utils'
 
@@ -25,7 +27,7 @@ import { cn } from '@/lib/utils'
 // mirrors the hand-built Overview's "vs previous period" arrows exactly
 // (lib/kpi-builder.ts's calcDeltaPct). Absent/null for every widget with no
 // real previous-period baseline to compare against (never fabricated).
-export interface WidgetPreview { widget_id: string; ok: boolean; value?: number | string | null; series?: Record<string, unknown>[]; rows?: Record<string, unknown>[]; error?: string | null; prev_value?: number | string | null; delta_pct?: number | null }
+export interface WidgetPreview { widget_id: string; ok: boolean; value?: number | string | null; series?: Record<string, unknown>[]; rows?: Record<string, unknown>[]; error?: string | null; prev_value?: number | string | null; delta_pct?: number | null; legend?: string | null }
 // id_field: which key in each row of a `table` widget is a real, click-
 // through-able report id (see ai-service's WidgetConfig.id_field) — set only
 // for connectors with a verified matching /drilldown/[id] backend. Absent
@@ -45,7 +47,11 @@ export interface DashRow { id: string; title?: string | null; widgets: WidgetCon
 // A real navigable page (Overview/LMS/Coach/...) — see ai-service's
 // DashboardPage model. Optional/absent on a config built before multi-page
 // generation existed; DashboardRenderer falls back to flat `rows` then.
-export interface DashPage { id: string; title: string; rows: DashRow[] }
+// mandatory: a service the manager explicitly contracted (ai-service's
+// GenerateRequest.services) but for which no data was discovered -- render
+// an honest "no data yet" state (below) instead of this page never
+// appearing in `pages` at all. Absent/false for every real, data-backed page.
+export interface DashPage { id: string; title: string; rows: DashRow[]; mandatory?: boolean }
 export interface DashboardConfig {
   company: string; slug: string; title: string; connector: string
   rows: DashRow[]; pages?: DashPage[]; recommendations: string[]
@@ -78,18 +84,19 @@ export function fmt(v: unknown): string {
 // industry a company is actually in. Heineken (beverages), Lacoste (apparel),
 // M8, etc. use these exact same connectors. Never show the raw internal name
 // to a manager; always show what it actually is.
-const CONNECTOR_LABELS: Record<string, string> = {
-  pharma_kpi: 'Structured analytics feed',
-  pharma_sale_exercises: 'Practice session log',
-  pharma_exceltis_rest: 'Activity tracking system',
-  coach_app_sql: 'Coaching database',
-  second_brain: 'Second Brain',
-  rolplay_app_sql: 'Session log (counts only)',
+const CONNECTOR_LABELS: Record<string, { en: string; es: string }> = {
+  pharma_kpi: { en: 'Structured analytics feed', es: 'Fuente de analítica estructurada' },
+  pharma_sale_exercises: { en: 'Practice session log', es: 'Registro de sesiones de práctica' },
+  pharma_exceltis_rest: { en: 'Activity tracking system', es: 'Sistema de seguimiento de actividad' },
+  coach_app_sql: { en: 'Coaching database', es: 'Base de datos de coaching' },
+  second_brain: { en: 'Second Brain', es: 'Second Brain' },
+  rolplay_app_sql: { en: 'Session log (counts only)', es: 'Registro de sesiones (solo conteos)' },
 }
 
-export function humanizeConnector(connector: string | null | undefined): string {
-  if (!connector) return 'Unknown'
-  return CONNECTOR_LABELS[connector] ?? connector.replace(/_/g, ' ')
+export function humanizeConnector(connector: string | null | undefined, lang: 'en' | 'es' = 'en'): string {
+  if (!connector) return lang === 'es' ? 'Desconocido' : 'Unknown'
+  const label = CONNECTOR_LABELS[connector]
+  return label ? label[lang] : connector.replace(/_/g, ' ')
 }
 
 // Cycled by KPI position, matching DashboardContent.tsx's own `kpiIcons`
@@ -118,7 +125,8 @@ const cardMotion = {
  * baseline) renders the same neutral "no comparison" pill SummaryCard shows
  * for a snapshot metric, never a fabricated 0%.
  */
-function KpiTile({ title, value, deltaPct, index }: { title: string; value: unknown; deltaPct?: number | null; index: number }) {
+function KpiTile({ title, value, deltaPct, legend, index }: { title: string; value: unknown; deltaPct?: number | null; legend?: string | null; index: number }) {
+  const t = useT()
   const hasDelta = deltaPct !== null && deltaPct !== undefined
   const isPositive = hasDelta && deltaPct! > 0
   const isNegative = hasDelta && deltaPct! < 0
@@ -154,8 +162,11 @@ function KpiTile({ title, value, deltaPct, index }: { title: string; value: unkn
             {!isPositive && !isNegative && <Minus className="w-3 h-3" />}
             <span>{hasDelta ? `${isPositive ? '+' : ''}${deltaPct}%` : '—'}</span>
           </div>
-          <span className="text-xs text-muted-foreground/70">{hasDelta ? 'vs prior period' : 'no comparison'}</span>
+          <span className="text-xs text-muted-foreground/70">{hasDelta ? t.vsPrior : t.noHistoricalComparison}</span>
         </div>
+        {legend && (
+          <p className="text-[11px] text-muted-foreground/80 mt-2.5 pt-2.5 border-t border-border/50">{legend}</p>
+        )}
       </div>
     </motion.div>
   )
@@ -243,7 +254,7 @@ function Leaderboard({ rows }: { rows: Record<string, unknown>[] }) {
               </div>
               <div>
                 <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">{t.colAvgScoreShort}</p>
-                <p className="text-sm font-bold text-foreground tabular-nums">{fmt(r.avg_score)} <span className="text-xs font-normal text-muted-foreground">pts</span></p>
+                <p className="text-sm font-bold text-foreground tabular-nums">{fmt(r.avg_score)} <span className="text-xs font-normal text-muted-foreground">{t.unitPts}</span></p>
               </div>
               <div>
                 <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">{t.passRate}</p>
@@ -264,11 +275,21 @@ function Leaderboard({ rows }: { rows: Record<string, unknown>[] }) {
 }
 
 function DashboardRows({ rows, pv }: { rows: DashRow[]; pv: Map<string, WidgetPreview> }) {
+  const t = useT()
+  const { lang } = useLangStore()
   return (
     <div className="space-y-5 sm:space-y-6">
       {rows.map(row => (
         <div key={row.id}>
-          {row.title && <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2.5">{row.title}</div>}
+          {row.title && <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2.5">{translateGeneratedText(row.title, lang)}</div>}
+          {row.widgets.length === 0 ? (
+            // A section the manager explicitly contracted (mandatory), but with
+            // no data discovered yet -- shown honestly, never silently omitted.
+            <EmptyState
+              title={t.sectionNoDataTitle}
+              message={t.sectionNoDataMsg}
+            />
+          ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
             {row.widgets.map((w, i) => {
               const p = pv.get(w.id)
@@ -278,11 +299,11 @@ function DashboardRows({ rows, pv }: { rows: DashRow[]; pv: Map<string, WidgetPr
               return (
                 <div key={w.id} className={wide ? 'sm:col-span-2 lg:col-span-4' : ''}>
                   {w.type === 'kpi_tile' ? (
-                    <KpiTile title={w.title} value={p?.value} deltaPct={p?.delta_pct} index={i} />
+                    <KpiTile title={translateGeneratedText(w.title, lang)} value={p?.value} deltaPct={p?.delta_pct} legend={translateLegend(p?.legend, lang)} index={i} />
                   ) : (
                     <WidgetCard
-                      title={w.title}
-                      subtitle={w.business_question}
+                      title={translateGeneratedText(w.title, lang)}
+                      subtitle={translateGeneratedText(w.business_question, lang)}
                       index={i}
                       headerAction={isLeaderboard ? (
                         <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, hsl(var(--primary)/0.12), hsl(var(--accent)/0.08))' }}>
@@ -296,18 +317,19 @@ function DashboardRows({ rows, pv }: { rows: DashRow[]; pv: Map<string, WidgetPr
                       {w.type === 'journey' && <MiniJourney rows={p?.rows ?? []} />}
                       {isLeaderboard && <Leaderboard rows={p?.rows ?? []} />}
                       {w.type === 'table' && !isLeaderboard && (w.paginated
-                        ? <ReportsTable rows={p?.rows ?? []} searchable={!!w.searchable} exportable={!!w.exportable} filenamePrefix={w.id} />
+                        ? <ReportsTable rows={p?.rows ?? []} searchable={!!w.searchable} exportable={!!w.exportable} filenamePrefix={w.id} idField={w.id_field} />
                         : <MiniTable rows={p?.rows ?? []} idField={w.id_field} />)}
-                      {failed && <div className="text-xs text-amber-600 dark:text-amber-400 mt-2">no data{p!.error ? `: ${p!.error}` : ''}</div>}
+                      {failed && <div className="text-xs text-amber-600 dark:text-amber-400 mt-2">{t.noDataInline}{p!.error ? `: ${p!.error}` : ''}</div>}
                     </WidgetCard>
                   )}
                   {w.type === 'kpi_tile' && failed && (
-                    <div className="text-xs text-amber-600 dark:text-amber-400 mt-1.5 px-1">no data{p!.error ? `: ${p!.error}` : ''}</div>
+                    <div className="text-xs text-amber-600 dark:text-amber-400 mt-1.5 px-1">{t.noDataInline}{p!.error ? `: ${p!.error}` : ''}</div>
                   )}
                 </div>
               )
             })}
           </div>
+          )}
         </div>
       ))}
     </div>
@@ -344,6 +366,7 @@ function AIInsights({ insights }: { insights: string[] }) {
 }
 
 export function DashboardRenderer({ config, preview }: { config: DashboardConfig; preview: { widgets: WidgetPreview[] } }) {
+  const { lang } = useLangStore()
   const pv = new Map(preview.widgets.map(w => [w.widget_id, w]))
   const pages = config.pages ?? []
   const [activeId, setActiveId] = useState<string | null>(pages[0]?.id ?? null)
@@ -376,7 +399,7 @@ export function DashboardRenderer({ config, preview }: { config: DashboardConfig
                   : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
-              {p.title}
+              {translateGeneratedText(p.title, lang)}
             </button>
           ))}
         </div>
@@ -452,8 +475,8 @@ export function MiniChart({ series, bar }: { series: Record<string, unknown>[]; 
   const hasPassed = bar && data.some(d => d.passedValue !== null)
 
   return (
-    <div className="w-full h-40 mt-2">
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="w-full h-[240px] mt-2 min-w-0">
+      <ResponsiveContainer width="100%" height={240}>
         {bar ? (
           <BarChart data={data} margin={{ top: 20, right: 8, left: -20, bottom: hasPassed ? 20 : 0 }}>
             <CartesianGrid strokeDasharray="4 4" stroke="currentColor" strokeOpacity={0.06} vertical={false} />
@@ -497,13 +520,6 @@ export function MiniChart({ series, bar }: { series: Record<string, unknown>[]; 
   )
 }
 
-const JOURNEY_PHASE_LABELS: Record<string, string> = {
-  cognitive: 'Cognitive',
-  practice: 'Practice',
-  validation: 'Validation',
-  excellence: 'Excellence',
-}
-
 /**
  * Solution Journey widget — the tenant's real modules in fixed progression
  * order (LMS -> Master Coach -> Practice Simulator -> Certification ->
@@ -514,13 +530,21 @@ const JOURNEY_PHASE_LABELS: Record<string, string> = {
  * stage reports its own metric on its own scale" rule, no cross-stage funnel.
  */
 export function MiniJourney({ rows }: { rows: Record<string, unknown>[] }) {
+  const t = useT()
+  const { lang } = useLangStore()
+  const journeyPhaseLabels: Record<string, string> = {
+    cognitive: t.journeyPhaseCognitive,
+    practice: t.journeyPhasePractice,
+    validation: t.journeyPhaseValidation,
+    excellence: t.journeyPhaseExcellence,
+  }
   if (!rows.length) {
     return <div className="h-24 flex items-center justify-center text-sm text-muted-foreground">—</div>
   }
   return (
     <div className="flex items-stretch gap-2 mt-2 overflow-x-auto pb-1">
       {rows.map((r, i) => {
-        const label = String(r.label ?? r.module ?? '—')
+        const label = translateGeneratedText(String(r.label ?? r.module ?? '—'), lang)
         const phase = String(r.phase ?? '')
         const total = Number(r.total_sessions ?? 0)
         const passRate = r.pass_rate === null || r.pass_rate === undefined ? null : Number(r.pass_rate)
@@ -529,18 +553,18 @@ export function MiniJourney({ rows }: { rows: Record<string, unknown>[] }) {
             <div className="w-36 rounded-lg border border-border/60 bg-background p-3">
               {phase && (
                 <p className="text-[9px] font-semibold uppercase tracking-wide text-primary/70">
-                  {JOURNEY_PHASE_LABELS[phase] ?? phase}
+                  {journeyPhaseLabels[phase] ?? phase}
                 </p>
               )}
               <p className="text-sm font-semibold text-foreground mt-0.5">{label}</p>
               <p className="text-xl font-bold text-foreground mt-1">{total.toLocaleString()}</p>
-              <p className="text-[10px] text-muted-foreground">sessions</p>
+              <p className="text-[10px] text-muted-foreground">{t.sessionsLabel}</p>
               {passRate !== null && (
                 <>
                   <div className="h-1.5 rounded-full bg-muted overflow-hidden mt-2">
                     <div className="h-full bg-primary" style={{ width: `${Math.max(0, Math.min(100, passRate))}%` }} />
                   </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">{passRate}% pass rate</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">{passRate}% {t.passRate}</p>
                 </>
               )}
             </div>
@@ -585,6 +609,7 @@ function DonutTooltip({ active, payload }: { active?: boolean; payload?: { name?
  */
 export function MiniDonut({ rows }: { rows: Record<string, unknown>[] }) {
   const t = useT()
+  const { lang } = useLangStore()
   const points = rows.slice(0, 30).map(normalizeChartRow)
   if (!points.length) {
     return <div className="h-40 flex items-center justify-center text-sm text-muted-foreground">—</div>
@@ -599,14 +624,18 @@ export function MiniDonut({ rows }: { rows: Record<string, unknown>[] }) {
   const restTotal = sorted.slice(MAX_SLICES).reduce((s, r) => s + r.value, 0)
   const data = restTotal > 0 ? [...top, { label: t.otherLabel, value: restTotal, passedValue: null }] : top
   const total = data.reduce((s, d) => s + d.value, 0)
+  // Labels here are backend-generated enum strings (e.g. "Passed"/"Failed",
+  // "Basic (<75)") from a closed vocabulary -- translate the same way widget
+  // titles are, via the exact-match dictionary, never a raw pass-through.
+  const displayData = data.map(d => ({ ...d, label: translateGeneratedText(d.label, lang) }))
 
   return (
     <div className="flex flex-col items-center gap-2 mt-2">
       <div className="relative w-40 h-40 shrink-0">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height={160}>
           <PieChart>
-            <Pie data={data} dataKey="value" nameKey="label" cx="50%" cy="50%" innerRadius="55%" outerRadius="90%" paddingAngle={2} strokeWidth={0}>
-              {data.map((_, i) => <Cell key={i} fill={DONUT_PALETTE[i % DONUT_PALETTE.length]} />)}
+            <Pie data={displayData} dataKey="value" nameKey="label" cx="50%" cy="50%" innerRadius="55%" outerRadius="90%" paddingAngle={2} strokeWidth={0}>
+              {displayData.map((_, i) => <Cell key={i} fill={DONUT_PALETTE[i % DONUT_PALETTE.length]} />)}
             </Pie>
             <Tooltip content={<DonutTooltip />} />
           </PieChart>
@@ -619,7 +648,7 @@ export function MiniDonut({ rows }: { rows: Record<string, unknown>[] }) {
         </div>
       </div>
       <div className="flex flex-wrap gap-x-3 gap-y-1 justify-center max-w-full">
-        {data.map((d, i) => (
+        {displayData.map((d, i) => (
           <div key={i} className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: DONUT_PALETTE[i % DONUT_PALETTE.length] }} />
             <span className="text-[11px] text-muted-foreground truncate max-w-[100px]" title={d.label}>{d.label}</span>
@@ -631,6 +660,8 @@ export function MiniDonut({ rows }: { rows: Record<string, unknown>[] }) {
 }
 
 export function MiniTable({ rows, idField }: { rows: Record<string, unknown>[]; idField?: string | null }) {
+  const t = useT()
+  const { lang } = useLangStore()
   if (!rows.length) return <div className="text-sm text-muted-foreground">—</div>
   // The id itself isn't interesting to show as a column (it's an opaque
   // report id) — it's what the "View" link's href is built from instead.
@@ -640,7 +671,7 @@ export function MiniTable({ rows, idField }: { rows: Record<string, unknown>[]; 
       <table className="w-full text-xs">
         <thead>
           <tr className="text-muted-foreground text-left">
-            {cols.map(c => <th key={c} className="py-1 pr-4 font-medium capitalize">{c.replace(/_/g, ' ')}</th>)}
+            {cols.map(c => <th key={c} className="py-1 pr-4 font-medium capitalize">{translateColumnHeader(c, lang)}</th>)}
             {idField && <th className="py-1 pr-4 font-medium" />}
           </tr>
         </thead>
@@ -649,12 +680,12 @@ export function MiniTable({ rows, idField }: { rows: Record<string, unknown>[]; 
             const id = idField ? r[idField] : null
             return (
               <tr key={i} className="border-t border-border/40">
-                {cols.map(c => <td key={c} className="py-1 pr-4 text-foreground">{fmt(r[c])}</td>)}
+                {cols.map(c => <td key={c} className="py-1 pr-4 text-foreground">{c === 'result' ? translateResultValue(fmt(r[c]), lang) : c === 'status' ? translateStatusValue(fmt(r[c]), lang) : fmt(r[c])}</td>)}
                 {idField && (
                   <td className="py-1 pr-4">
                     {id !== null && id !== undefined && (
                       <Link href={`/drilldown/${id}`} className="text-primary hover:underline whitespace-nowrap">
-                        View →
+                        {t.viewLink} →
                       </Link>
                     )}
                   </td>
@@ -678,18 +709,25 @@ const REPORTS_PAGE_SIZE = 25
  * actually usable report.
  */
 export function ReportsTable({
-  rows, searchable, exportable, filenamePrefix,
+  rows, searchable, exportable, filenamePrefix, idField,
 }: {
   rows: Record<string, unknown>[]
   searchable: boolean
   exportable: boolean
   filenamePrefix: string
+  idField?: string | null
 }) {
   const t = useT()
+  const { lang } = useLangStore()
   const [query, setQuery] = useState('')
   const [page, setPage] = useState(0)
 
-  const cols = rows.length ? Object.keys(rows[0]) : []
+  // The id itself isn't interesting to show as a column (it's an opaque
+  // report id) -- it's what the "View" link's href is built from instead.
+  // Kept in the CSV export columns (below, from the unfiltered key set) since
+  // a raw report id is a genuinely useful cross-reference there.
+  const allCols = rows.length ? Object.keys(rows[0]) : []
+  const cols = allCols.filter(c => c !== idField)
 
   const filtered = useMemo(() => {
     if (!query.trim()) return rows
@@ -717,11 +755,14 @@ export function ReportsTable({
           />
         ) : <span />}
         <div className="flex items-center gap-2">
-          <span className="text-[11px] text-muted-foreground">{filtered.length} row{filtered.length === 1 ? '' : 's'}</span>
+          <span className="text-[11px] text-muted-foreground">{t.rowsCountLabel.replace('{count}', String(filtered.length)).replace('{plural}', filtered.length === 1 ? '' : 's')}</span>
           {exportable && (
             <ExportButton
               data={filtered}
-              columns={cols.map(c => ({ header: c.replace(/_/g, ' '), value: (r: Record<string, unknown>) => r[c] }))}
+              columns={allCols.map(c => ({
+                header: translateColumnHeader(c, lang),
+                value: (r: Record<string, unknown>) => c === 'result' ? translateResultValue(fmt(r[c]), lang) : c === 'status' ? translateStatusValue(fmt(r[c]), lang) : r[c],
+              }))}
               filename={csvFilename(filenamePrefix)}
               minWidth="min-w-[90px]"
             />
@@ -732,15 +773,28 @@ export function ReportsTable({
         <table className="w-full text-xs">
           <thead>
             <tr className="text-muted-foreground text-left">
-              {cols.map(c => <th key={c} className="py-1 pr-4 font-medium capitalize">{c.replace(/_/g, ' ')}</th>)}
+              {cols.map(c => <th key={c} className="py-1 pr-4 font-medium capitalize">{translateColumnHeader(c, lang)}</th>)}
+              {idField && <th className="py-1 pr-4 font-medium" />}
             </tr>
           </thead>
           <tbody>
-            {visible.map((r, i) => (
-              <tr key={i} className="border-t border-border/40">
-                {cols.map(c => <td key={c} className="py-1 pr-4 text-foreground">{fmt(r[c])}</td>)}
-              </tr>
-            ))}
+            {visible.map((r, i) => {
+              const id = idField ? r[idField] : null
+              return (
+                <tr key={i} className="border-t border-border/40">
+                  {cols.map(c => <td key={c} className="py-1 pr-4 text-foreground">{c === 'result' ? translateResultValue(fmt(r[c]), lang) : c === 'status' ? translateStatusValue(fmt(r[c]), lang) : fmt(r[c])}</td>)}
+                  {idField && (
+                    <td className="py-1 pr-4">
+                      {id !== null && id !== undefined && (
+                        <Link href={`/drilldown/${id}`} className="text-primary hover:underline whitespace-nowrap">
+                          {t.viewLink} →
+                        </Link>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              )
+            })}
           </tbody>
         </table>
         {visible.length === 0 && <div className="py-6 text-center text-xs text-muted-foreground">{t.noMatchingRows}</div>}

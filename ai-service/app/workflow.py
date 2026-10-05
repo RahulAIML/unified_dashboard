@@ -58,7 +58,13 @@ async def run_generation(job: JobState, update) -> None:
         job.percent = 8; await update(job)
 
         job.phase = JobPhase.company_discovery; await update(job)
-        knowledge = await company_discovery.run(req.company, req.exercise_ids, log)
+        # req.domains: the manager-typed login domain(s), if supplied. Without
+        # this, company_discovery falls back to guess_domains(company, slug)
+        # -- a naive "{slug}.com" guess that's often wrong (e.g. 'sanfer.com'
+        # when reps are really on 'sanfer.com.mx') and silently breaks client
+        # logins. graph.py's alternate (unused) pipeline already threaded
+        # this through; this is the one the API actually calls.
+        knowledge = await company_discovery.run(req.company, req.exercise_ids, log, req.domains)
         job.knowledge = knowledge; job.percent = 18; await update(job)
 
         job.phase = JobPhase.service_discovery; await update(job)
@@ -205,8 +211,11 @@ async def resume_with_services(job: JobState, selected_modules: list[str], updat
 async def _continue_from_planning(job: JobState, knowledge, primary: ServiceDescriptor, schema: NormalizedSchema, update, log) -> None:
     req = job.request
     try:
+        required_services = frozenset(job.request.services)
         job.phase = JobPhase.dashboard_planning; await update(job)
-        pages, filters, recs = await dashboard_planning.run(schema, log, secondary_schema=job.secondary_schema)
+        pages, filters, recs = await dashboard_planning.run(
+            schema, log, secondary_schema=job.secondary_schema, required_services=required_services,
+        )
         job.percent = 68; await update(job)
 
         job.phase = JobPhase.dashboard_config; await update(job)
@@ -215,9 +224,17 @@ async def _continue_from_planning(job: JobState, knowledge, primary: ServiceDesc
         # merge its connector handle (e.g. coach_app_sql's customer_id) in
         # alongside the primary's -- cheap and deterministic, no re-probing.
         secondary = pick_secondary(knowledge, primary) if job.secondary_schema else None
-        cfg = await dashboard_config.run(knowledge, schema, primary, pages, filters, recs, log, secondary=secondary)
+        cfg = await dashboard_config.run(knowledge, schema, primary, pages, filters, recs, log,
+                                         secondary=secondary, required_services=required_services)
         cfg.connector_handle["base_url"] = primary.base_url
         cfg.confidential = req.confidential
+        cfg.pass_threshold = req.pass_threshold
+        cfg.has_no_passing_criteria = req.has_no_passing_criteria
+        # Normalize the same way every other email comparison in this codebase
+        # does (lib/pharma-tenant.ts, lib/bridge-rolplay-app.ts: lowercase,
+        # trim) so the stored allowlist matches however the viewer's email
+        # arrives from auth -- a mismatch here would silently lock everyone out.
+        cfg.authorized_emails = sorted({e.strip().lower() for e in req.authorized_emails if e and e.strip()})
         job.dashboard = cfg; job.percent = 76; await update(job)
 
         job.phase = JobPhase.validation; await update(job)
@@ -236,7 +253,7 @@ async def _continue_from_planning(job: JobState, knowledge, primary: ServiceDesc
 
         if req.auto_publish and report.ok:
             job.phase = JobPhase.publish; await update(job)
-            job.published = await publish.run(cfg, knowledge.domains, log)
+            job.published = await publish.run(cfg, knowledge.domains, log, force=req.force_republish)
 
         job.phase = JobPhase.done; job.percent = 100
         await log("done", "success", f"Dashboard generated for '{req.company}'. Review the preview and publish.")

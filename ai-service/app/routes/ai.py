@@ -49,20 +49,30 @@ async def known_companies() -> list[dict]:
     r_client, so a manager can select rather than guess spelling. Every other
     connector still only has free-text entry; this connector is the one the
     user asked to make fully self-service.
+
+    r_client DOES carry a real created_on datetime (confirmed live via
+    information_schema — verified sane, distinct, correctly-ordered values,
+    e.g. a client created 3 days before this comment was written) -- an
+    earlier version of this endpoint assumed it didn't and tracked "first
+    seen" separately in our own Postgres as a workaround. That workaround is
+    gone; created_on is the real signal and the Next.js route derives isNew
+    from it directly, the same way it already does for DB-backed pharma
+    tenants.
     """
     from ..connectors.rolplay_app import RolplayAppConnector
 
     conn = RolplayAppConnector()
     rows = await conn._sql(
-        "SELECT c.ID AS id, c.name AS name, COUNT(s.ID) AS sessions, COUNT(DISTINCT u.ID) AS users "
+        "SELECT c.ID AS id, c.name AS name, c.created_on AS created_on, "
+        "COUNT(s.ID) AS sessions, COUNT(DISTINCT u.ID) AS users "
         "FROM r_client c LEFT JOIN r_user u ON u.client_id = c.ID "
         "LEFT JOIN r_user_session s ON s.user_id = u.ID "
-        "GROUP BY c.ID, c.name ORDER BY sessions DESC, c.name ASC"
+        "GROUP BY c.ID, c.name, c.created_on ORDER BY sessions DESC, c.name ASC"
     )
     if not rows:
         return []
     return [
-        {"id": int(r["id"]), "name": r["name"],
+        {"id": int(r["id"]), "name": r["name"], "created_on": r.get("created_on"),
          "sessions": int(r.get("sessions") or 0), "users": int(r.get("users") or 0)}
         for r in rows
     ]
@@ -161,19 +171,37 @@ async def generate_sync(req: GenerateRequest) -> JobState:
 
 class PublishIn(BaseModel):
     job_id: str
+    # See GenerateRequest.force_republish's docstring -- same override,
+    # needed here too since a manager can re-open an existing job and
+    # publish it independently of the generate-sync auto_publish path.
+    force_republish: bool = False
 
 
 @router.post("/publish")
 async def do_publish(body: PublishIn) -> dict:
+    """Returns enough for the caller to build a real "you're live, here's how
+    to reach it" confirmation -- not just a bare success flag. `access_status`
+    is a stable code (never localized server-side) so the frontend can render
+    it in whatever language the admin has selected; see
+    app/dashboard-builder/page.tsx's PUBLISH_STATUS_KEY map for the strings."""
     job = jobs.get_job(body.job_id)
     if not job or not job.dashboard:
         raise HTTPException(status_code=404, detail="job/dashboard not found")
     if job.validation and not job.validation.ok:
         raise HTTPException(status_code=400, detail="validation failed; cannot publish")
     domains = job.knowledge.domains if job.knowledge else []
-    ok = await publish.run(job.dashboard, domains, _noop_log)
+    details: dict = {}
+    ok = await publish.run(job.dashboard, domains, _noop_log, force=body.force_republish, details=details)
     job.published = ok
-    return {"published": ok, "slug": job.dashboard.slug}
+    cfg = job.dashboard
+    return {
+        "published": ok,
+        "slug": cfg.slug,
+        "company": cfg.company,
+        "url": f"/d/{cfg.slug}",
+        "domain": details.get("domain"),
+        "access_status": details.get("status") or ("frozen" if not ok else "unknown"),
+    }
 
 
 async def _load_config(slug: str) -> DashboardConfig | None:
@@ -198,6 +226,14 @@ async def get_dashboard(slug: str) -> DashboardConfig:
 
 
 _RENDER_CACHE_TTL_SECONDS = 30
+# A render where every widget succeeded is cached for the full TTL above.
+# A render with ANY failed widget gets this much shorter TTL instead --
+# found live: a single transient hiccup (a slow bridge timing out once) got
+# cached as a blank KPI tile for the FULL 30s, so every viewer in that
+# window saw the same frozen failure even though a retry moments later
+# would have succeeded. This lets a genuine transient failure self-heal on
+# the next request instead of guaranteeing 30s of blank tiles.
+_RENDER_FAILURE_CACHE_TTL_SECONDS = 3
 
 
 @router.get("/render/{slug}")
@@ -220,12 +256,18 @@ async def render_dashboard(slug: str) -> dict:
     if not cfg:
         raise HTTPException(status_code=404, detail="dashboard not found")
 
-    async def _compute() -> dict:
-        pv = await preview.run(cfg, _noop_log)
-        return {"config": cfg.model_dump(mode="json"), "preview": pv.model_dump(mode="json")}
-
     from .. import cache
-    return await cache.get_or_set(f"render:{slug}:v{cfg.version}", _RENDER_CACHE_TTL_SECONDS, _compute)
+    key = f"render:{slug}:v{cfg.version}"
+    cached = await cache.cache_get(key)
+    if cached is not None:
+        return cached
+
+    pv = await preview.run(cfg, _noop_log)
+    result = {"config": cfg.model_dump(mode="json"), "preview": pv.model_dump(mode="json")}
+    any_failed = any(not widget.get("ok") for widget in result["preview"]["widgets"])
+    ttl = _RENDER_FAILURE_CACHE_TTL_SECONDS if any_failed else _RENDER_CACHE_TTL_SECONDS
+    await cache.cache_set(key, result, ttl)
+    return result
 
 
 @router.get("/dashboard-versions/{slug}")
@@ -249,3 +291,64 @@ async def rollback_dashboard(body: RollbackIn) -> dict:
     if not restored:
         raise HTTPException(status_code=404, detail=f"no version {body.version} found for '{body.slug}'")
     return {"slug": body.slug, "restored_from_version": body.version, "new_version": restored.version}
+
+
+class RequiredSectionsIn(BaseModel):
+    sections: list[str]
+
+
+@router.patch("/dashboard/{slug}/required-sections")
+async def update_required_sections(slug: str, body: RequiredSectionsIn) -> DashboardConfig:
+    """Mark/unmark which services are contracted on an ALREADY-PUBLISHED
+    dashboard -- e.g. a manager adding "lms" after the fact so it shows an
+    honest empty page instead of never appearing. Deliberately lightweight:
+    no schema re-discovery, no re-planning, no version bump -- see
+    dashboard_versions.set_required_sections's docstring."""
+    from .. import dashboard_versions
+    cfg = await dashboard_versions.set_required_sections(slug, body.sections)
+    if not cfg:
+        raise HTTPException(status_code=404, detail=f"dashboard '{slug}' not found")
+    return cfg
+
+
+class PassThresholdIn(BaseModel):
+    pass_threshold: int = 80
+    has_no_passing_criteria: bool = False
+
+
+@router.patch("/dashboard/{slug}/pass-threshold")
+async def update_pass_threshold(slug: str, body: PassThresholdIn) -> DashboardConfig:
+    """Change the pass/fail bar on an ALREADY-PUBLISHED dashboard -- e.g. a
+    manager correcting 80 to 70 for a tenant, or marking a tenant as having
+    no score-based criteria at all. Deliberately lightweight, same contract
+    as required-sections above: no schema re-discovery, no re-planning, no
+    version bump. /ai/render/{slug} re-fetches every widget fresh (30s
+    cache), so this takes effect on every affected KPI/chart the next time
+    the dashboard is viewed -- see dashboard_versions.set_pass_threshold."""
+    if not (1 <= body.pass_threshold <= 100):
+        raise HTTPException(status_code=422, detail="pass_threshold must be between 1 and 100")
+    from .. import dashboard_versions
+    cfg = await dashboard_versions.set_pass_threshold(slug, body.pass_threshold, body.has_no_passing_criteria)
+    if not cfg:
+        raise HTTPException(status_code=404, detail=f"dashboard '{slug}' not found")
+    return cfg
+
+
+class AuthorizedEmailsIn(BaseModel):
+    emails: list[str] = []
+
+
+@router.patch("/dashboard/{slug}/authorized-emails")
+async def update_authorized_emails(slug: str, body: AuthorizedEmailsIn) -> DashboardConfig:
+    """Restrict (or un-restrict) an ALREADY-PUBLISHED dashboard to a specific
+    list of real emails, on top of the normal tenant domain+roster check --
+    e.g. only the 3 admins at a client who should actually see it, not every
+    real user of that tenant. An empty list removes the restriction entirely
+    (back to "any real user of the tenant"). Same lightweight contract as
+    required-sections/pass-threshold above: no schema re-discovery, no
+    re-planning, no version bump -- see dashboard_versions.set_authorized_emails."""
+    from .. import dashboard_versions
+    cfg = await dashboard_versions.set_authorized_emails(slug, body.emails)
+    if not cfg:
+        raise HTTPException(status_code=404, detail=f"dashboard '{slug}' not found")
+    return cfg

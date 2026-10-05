@@ -2,9 +2,11 @@ import Link from 'next/link'
 import { FileText } from 'lucide-react'
 import { APP_NAME } from '@/lib/constants'
 
+// Static metadata can't react to the client language toggle -- matches
+// SSR_LANG (lib/lang-store.ts's default, 'es'), same as app/layout.tsx.
 export const metadata = {
-  title: `Terms of Service · ${APP_NAME} Analytics`,
-  description: `Terms of Service for ${APP_NAME} Analytics — the AI-powered analytics platform for learning and coaching solutions.`,
+  title: `Términos de Servicio · ${APP_NAME} Analytics`,
+  description: `Términos de Servicio de ${APP_NAME} Analytics — la plataforma de analítica con IA para soluciones de aprendizaje y coaching.`,
 }
 
 export default function TermsPage() {

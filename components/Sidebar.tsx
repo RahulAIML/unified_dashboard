@@ -18,6 +18,7 @@ import { useAuthContext } from "./AuthProvider"
 import { useApi } from "@/lib/hooks/useApi"
 import { useAvailableModules } from "@/lib/hooks/useAvailableModules"
 import { hasJourney } from "@/lib/journey"
+import { NAV_TOUR_TARGETS } from "@/lib/nav-tour-targets"
 import type { Module } from "@/lib/types"
 
 // Minimal capability shape from /api/auth/access-status (only the flag we need).
@@ -138,10 +139,17 @@ export function Sidebar() {
     // since the leaderboard itself is universal, not connector-specific.
     ...((access?.hasCoachData || access?.hasPharmaAccess || access?.hasBancoAccess || access?.hasRolplayAppAccess)
       ? [{ href: "/ranking", label: t.navRanking, icon: Trophy }] : []),
-    // Conversational is pharma-only (objection-handling data). Capability-gated
-    // so it appears exactly for the tenants that have it — no hardcoded list.
+    // Conversational is pharma-only (objection-handling data).
     ...(access?.hasPharmaAccess ? [
       { href: "/conversational", label: t.navConversational, icon: MessageSquare },
+    ] : []),
+    // Organization: real roster (+ per-user activity for rolplay-app) —
+    // /api/dashboard/organization has a real branch for both pharma (admin/
+    // member hierarchy) and rolplay-app (r_user roster, see
+    // lib/bridge-rolplay-app.ts's rolplayAppOrganization) tenants. Previously
+    // pharma-only, which left every rolplay-app tenant (e.g. Chinoin, 581
+    // real registered accounts) with no way to see their own roster at all.
+    ...(access?.hasPharmaAccess || access?.hasRolplayAppAccess ? [
       { href: "/organization",   label: t.navOrganization,   icon: Building2     },
     ] : []),
     // Business Segments: previously shown for every pharma-sim tenant
@@ -154,9 +162,13 @@ export function Sidebar() {
     ] : []),
     ...(hasModule('certification')  ? [{ href: "/certification", label: t.navCertification, icon: BadgeCheck }] : []),
     ...(hasModule('second-brain')   ? [{ href: "/second-brain",  label: t.navSecondBrain,   icon: Database   }] : []),
-    // KPIs: Sugerencia de KPI's Cesar.xlsx, rolplay-app only (the one
-    // connector this spec was verified against real data for).
-    ...(access?.hasRolplayAppAccess ? [{ href: "/kpis", label: t.navKpis, icon: BarChart3 }] : []),
+    // KPIs: rolplay-app tenants get the full Cesar KPI suite (Sugerencia de
+    // KPI's Cesar.xlsx, verified against real rolplay_app_sql data). Pharma
+    // tenants (Apotex, Sanfer, ...) previously had NO KPI page at all despite
+    // having their own real, already-computed metrics -- the page now
+    // branches on which access the viewer actually has (see app/kpis/page.tsx).
+    ...(access?.hasRolplayAppAccess || access?.hasPharmaAccess
+      ? [{ href: "/kpis", label: t.navKpis, icon: BarChart3 }] : []),
     ...((access?.hasCoachData || access?.hasPharmaAccess || access?.hasBancoAccess || access?.hasRolplayAppAccess)
       ? [{ href: "/reports", label: t.navReports, icon: FileText }] : []),
     // Admin-only: the AI Dashboard Builder has no other discoverable entry
@@ -208,8 +220,12 @@ export function Sidebar() {
       <nav className="flex-1 px-3 py-4 space-y-0.5">
         {nav.map(({ href, label, icon: Icon }) => {
           const active = pathname === href
+          // Stable hook for OnboardingTour to spotlight the real nav item a
+          // step talks about, instead of a fragile text/position selector —
+          // see NAV_TOUR_TARGETS in OnboardingTour.tsx.
+          const tourTarget = NAV_TOUR_TARGETS[href]
           return (
-            <Link key={href} href={href}>
+            <Link key={href} href={href} data-tour={tourTarget}>
               <motion.div
                 whileHover={{ x: 2 }}
                 className={cn(
@@ -285,7 +301,7 @@ export function Sidebar() {
         <button
           onClick={() => setMobileOpen(!mobileOpen)}
           className="p-3 rounded-xl hover:bg-sidebar-accent transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
-          aria-label="Toggle menu"
+          aria-label={t.ariaToggleMenu}
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />

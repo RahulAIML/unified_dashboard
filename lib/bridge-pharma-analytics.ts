@@ -52,8 +52,37 @@ import type {
 } from './types'
 import type { DrilldownResult, DrilldownField } from './data-provider'
 import { TENANT_CONFIG, type PharmaTenant } from './pharma-tenant'
+import { computePassRate, passRateLegend, resolvePassThreshold } from './kpi-builder'
 
-const PASS_THRESHOLD = 70 // matches every tenant's own pass/fail convention (>=70)
+/**
+ * The pass threshold to apply for this tenant, or null when the tenant has no
+ * score-based passing criteria at all.
+ *
+ * This used to be a module-level `const PASS_THRESHOLD = LEGACY_PASS_THRESHOLD`
+ * with a docstring scoping per-row comparisons out of the configurability
+ * ticket. The result was an internally contradictory dashboard: a tenant
+ * configured at 80 got an Overview pass-rate tile computed at 80, while its
+ * trend chart, usecase breakdown, best-performers table, Results rows and
+ * drilldown badges all still used 70. Two different definitions of "passed"
+ * on one screen is worse than either threshold on its own, so every comparison
+ * in this file now resolves the same per-tenant value.
+ */
+function tenantPassThreshold(tenant: PharmaTenant): number | null {
+  return resolvePassThreshold(TENANT_CONFIG[tenant])
+}
+
+/**
+ * True when `score` counts as a pass for this tenant.
+ *
+ * Returns false for a tenant with NO passing criteria (threshold null) rather
+ * than silently falling back to 70 -- inventing a pass mark for a tenant that
+ * deliberately has none is exactly the fabrication this codebase refuses
+ * elsewhere. Callers rendering such a tenant must HIDE the pass-rate figure
+ * (passRateLegend() already returns null to signal that), not display 0%.
+ */
+export function isPassForTenant(score: number, threshold: number | null): boolean {
+  return threshold !== null && Number.isFinite(score) && score >= threshold
+}
 
 const EMPTY_OVERVIEW: OverviewApiResponse = {
   totalEvaluations: 0, prevTotalEvaluations: 0,
@@ -95,7 +124,7 @@ function isoToDate(iso: string): string {
 
 // ── sale_exercises tenants: raw-row fetch + in-adapter aggregation ─────────────
 
-interface SaleExercisesRow {
+export interface SaleExercisesRow {
   id: number
   usecase_id: number
   usecase_name: string
@@ -303,15 +332,21 @@ async function fetchExceltisRestSessions(
     .filter((r): r is SaleExercisesRow => r !== null)
 }
 
-function aggregateSaleExercisesRows(rows: SaleExercisesRow[]) {
+/**
+ * @param threshold The tenant's resolved pass threshold (lib/kpi-builder.ts's
+ *   resolvePassThreshold) -- null means this tenant has no score-based
+ *   passing criteria, so passRate/passed are never computed (never a
+ *   misleading number against a threshold the client never agreed to).
+ */
+export function aggregateSaleExercisesRows(rows: SaleExercisesRow[], threshold: number | null) {
   const total  = rows.length
-  const passed = rows.filter(r => r.score >= PASS_THRESHOLD).length
+  const passed = threshold !== null ? rows.filter(r => r.score >= threshold).length : null
   const avg    = total ? rows.reduce((s, r) => s + r.score, 0) / total : null
   return {
     total,
     avgScore: avg != null ? Math.round(avg * 100) / 100 : null,
-    passRate: total ? Math.round((passed / total) * 10000) / 100 : null,
-    passed,
+    passRate: threshold !== null ? computePassRate(passed as number, total) : null,
+    passed: passed ?? 0,
   }
 }
 
@@ -407,6 +442,11 @@ async function sanferCertificationOverview(): Promise<OverviewApiResponse> {
     // real "previous period" to compare against, so we report zero change
     // rather than fabricate a trend that doesn't exist.
     prevTotalEvaluations: stats.total, prevAvgScore: avgScore, prevPassRate: stats.cert_pct,
+    // Not a score threshold at all -- cert_pct is % of users who completed
+    // every assigned simulation (official platform DB), a wholly different
+    // convention from PASS_THRESHOLD. Real number, so shown (not hidden),
+    // with an accurate legend rather than a fabricated "score >= N pts" one.
+    passRateLegend: 'Certified: % of users who completed every assigned simulation',
   }
 }
 
@@ -426,7 +466,7 @@ async function sanferCertificationBreakdown(): Promise<UsecaseBreakdownApiRespon
       usecase_name: b.name,
       totalEvaluations: b.total,
       avgScore: b.scores.length ? Math.round((b.scores.reduce((a, c) => a + c, 0) / b.scores.length) * 100) / 100 : null,
-      passRate: b.total ? Math.round((b.passed / b.total) * 10000) / 100 : null,
+      passRate: computePassRate(b.passed, b.total),
       passed: b.passed,
     }))
     .sort((a, b) => b.totalEvaluations - a.totalEvaluations)
@@ -552,9 +592,13 @@ function summarizeApotexActivities(rows: ApotexActivityRow[]): OverviewApiRespon
   return {
     totalEvaluations: total,
     avgScore: total ? Math.round((scoreWeighted / total) * 100) / 100 : null,
-    passRate: total ? Math.round((passed / total) * 10000) / 100 : null,
+    passRate: computePassRate(passed, total),
     passedEvaluations: passed,
     prevTotalEvaluations: 0, prevAvgScore: null, prevPassRate: null, // filled in by caller with a second window
+    // sessions_pass/pass_rate_pct come from Apotex's OWN bridge, computed by
+    // their system against a convention we don't control -- an honest label
+    // rather than a fabricated "score >= N pts" one implying we set it.
+    passRateLegend: 'Pass rate as reported by the source system',
   }
 }
 
@@ -626,6 +670,9 @@ async function apotexActivityLeaderboard(ids: number[], fromIso: string, toIso: 
 }
 
 async function apotexCoachSessions(fromIso: string, toIso: string, limit: number): Promise<ResultsApiResponse> {
+  // Apotex-specific helper (called only from the 'apotex' branch), so the
+  // tenant is known statically rather than passed in.
+  const apotexThreshold = tenantPassThreshold('apotex')
   const ids = TENANT_CONFIG.apotex.coachActivityIds ?? []
   const [resps, { coach, simulator }] = await Promise.all([
     Promise.all(ids.map(id =>
@@ -641,7 +688,7 @@ async function apotexCoachSessions(fromIso: string, toIso: string, limit: number
     .sort((a, b) => (a.fecha < b.fecha ? 1 : -1))
     .slice(0, limit)
     .map(r => {
-      const score = Number(r.score); const passed = score >= PASS_THRESHOLD
+      const score = Number(r.score); const passed = isPassForTenant(score, apotexThreshold)
       const usecaseId = Number(r.usecase_id ?? r.activity_id)
       return {
         savedReportId: Number(r.id), usecaseId, usecaseName: nameById.get(usecaseId) ?? null,
@@ -716,15 +763,18 @@ export async function pharmaDashboardOverview(
       prevTotalEvaluations: Number(prev.overview.total_sessions),
       prevAvgScore:         prev.overview.avg_score != null ? Number(prev.overview.avg_score) : null,
       prevPassRate:         prev.overview.pass_rate_pct != null ? Number(prev.overview.pass_rate_pct) : null,
+      // Computed by Apotex's own bridge, not against our threshold.
+      passRateLegend: 'Pass rate as reported by the source system',
     }
   }
 
+  const threshold = resolvePassThreshold(TENANT_CONFIG[tenant])
   const [curRows, prevRows] = await Promise.all([
     fetchSaleExercisesSessions(tenant, params.fromIso, params.toIso),
     fetchSaleExercisesSessions(tenant, params.prevFromIso, params.prevToIso),
   ])
-  const cur  = aggregateSaleExercisesRows(curRows)
-  const prev = aggregateSaleExercisesRows(prevRows)
+  const cur  = aggregateSaleExercisesRows(curRows, threshold)
+  const prev = aggregateSaleExercisesRows(prevRows, threshold)
   return {
     totalEvaluations:     cur.total,
     avgScore:             cur.avgScore,
@@ -733,6 +783,7 @@ export async function pharmaDashboardOverview(
     prevTotalEvaluations: prev.total,
     prevAvgScore:         prev.avgScore,
     prevPassRate:         prev.passRate,
+    passRateLegend: passRateLegend(threshold),
   }
 }
 
@@ -772,13 +823,14 @@ export async function pharmaDashboardTrends(
   }
 
   const rows = await fetchSaleExercisesSessions(tenant, params.fromIso, params.toIso)
+  const threshold = tenantPassThreshold(tenant)
   const byDay = new Map<string, { total: number; passed: number; scoreSum: number }>()
   for (const r of rows) {
     const day = r.date.slice(0, 10)
     const bucket = byDay.get(day) ?? { total: 0, passed: 0, scoreSum: 0 }
     bucket.total++
     bucket.scoreSum += r.score
-    if (r.score >= PASS_THRESHOLD) bucket.passed++
+    if (isPassForTenant(r.score, threshold)) bucket.passed++
     byDay.set(day, bucket)
   }
   const days = [...byDay.keys()].sort()
@@ -830,12 +882,13 @@ export async function pharmaDashboardUsecaseBreakdown(
   }
 
   const rows = await fetchSaleExercisesSessions(tenant, params.fromIso, params.toIso)
+  const threshold = tenantPassThreshold(tenant)
   const byUc = new Map<number, { name: string; total: number; passed: number; scoreSum: number }>()
   for (const r of rows) {
     const bucket = byUc.get(r.usecase_id) ?? { name: r.usecase_name, total: 0, passed: 0, scoreSum: 0 }
     bucket.total++
     bucket.scoreSum += r.score
-    if (r.score >= PASS_THRESHOLD) bucket.passed++
+    if (isPassForTenant(r.score, threshold)) bucket.passed++
     byUc.set(r.usecase_id, bucket)
   }
   const data: UsecaseApiRow[] = [...byUc.entries()]
@@ -844,7 +897,7 @@ export async function pharmaDashboardUsecaseBreakdown(
       usecase_name:     b.name || null,
       totalEvaluations: b.total,
       avgScore:         Math.round((b.scoreSum / b.total) * 100) / 100,
-      passRate:         Math.round((b.passed / b.total) * 10000) / 100,
+      passRate:         computePassRate(b.passed, b.total),
       passed:           b.passed,
     }))
     .sort((a, b) => b.totalEvaluations - a.totalEvaluations)
@@ -883,13 +936,14 @@ export async function pharmaDashboardBestPerformers(
   }
 
   const rows = await fetchSaleExercisesSessions(tenant, params.fromIso, params.toIso)
+  const threshold = tenantPassThreshold(tenant)
   const byUser = new Map<string, { name: string; total: number; passed: number; scoreSum: number }>()
   for (const r of rows) {
     if (!r.email) continue
     const bucket = byUser.get(r.email) ?? { name: r.name, total: 0, passed: 0, scoreSum: 0 }
     bucket.total++
     bucket.scoreSum += r.score
-    if (r.score >= PASS_THRESHOLD) bucket.passed++
+    if (isPassForTenant(r.score, threshold)) bucket.passed++
     if (r.name) bucket.name = r.name
     byUser.set(r.email, bucket)
   }
@@ -899,7 +953,7 @@ export async function pharmaDashboardBestPerformers(
       user_name:  b.name || null,
       sessions:   b.total,
       avg_score:  Math.round((b.scoreSum / b.total) * 100) / 100,
-      pass_rate:  Math.round((b.passed / b.total) * 10000) / 100,
+      pass_rate:  computePassRate(b.passed, b.total) ?? 0,
     }))
     .sort((a, b) => b.avg_score - a.avg_score || b.sessions - a.sessions)
     .slice(0, limit)
@@ -933,6 +987,7 @@ export async function pharmaDashboardResults(
   params: { fromIso: string; toIso: string; limit: number; solution?: string | null },
 ): Promise<ResultsApiResponse> {
   const limit = Math.min(Math.max(1, params.limit), 200)
+  const resultsThreshold = tenantPassThreshold(tenant)
   if (isUnsupportedModule(tenant, params.solution)) return { data: [] }
   if (tenant === 'sanfer' && params.solution === 'certification') return sanferCertificationResults(limit)
 
@@ -957,7 +1012,7 @@ export async function pharmaDashboardResults(
       : (resp.sessions ?? [])
     const data: EvaluationApiRow[] = sessions.map(r => {
       const score  = Number(r.score)
-      const passed = score >= PASS_THRESHOLD
+      const passed = isPassForTenant(score, resultsThreshold)
       const usecaseId = Number(r.usecase_id ?? r.activity_id)
       return {
         savedReportId: Number(r.id),
@@ -977,7 +1032,7 @@ export async function pharmaDashboardResults(
     .sort((a, b) => (a.date < b.date ? 1 : -1))
     .slice(0, limit)
     .map(r => {
-      const passed = r.score >= PASS_THRESHOLD
+      const passed = isPassForTenant(r.score, resultsThreshold)
       return {
         savedReportId: r.id,
         usecaseId:     r.usecase_id,
@@ -1241,6 +1296,7 @@ export async function pharmaDashboardDrilldown(
   tenant: PharmaTenant,
   savedReportId: number,
 ): Promise<DrilldownResult | null> {
+  const drilldownThreshold = tenantPassThreshold(tenant)
   // Negative IDs are synthetic (certification rows have no real session id —
   // see sanferCertificationResults). Nothing meaningful to drill into.
   if (savedReportId < 0) return null
@@ -1258,7 +1314,7 @@ export async function pharmaDashboardDrilldown(
     const score = Number(row.Calificacion)
     const fields: DrilldownField[] = [
       scoreField(Number.isNaN(score) ? 0 : score),
-      resultField(!Number.isNaN(score) && score >= PASS_THRESHOLD),
+      resultField(isPassForTenant(score, drilldownThreshold)),
       ...genericFieldsFromExceltisRow(row),
     ]
     return {
@@ -1281,7 +1337,7 @@ export async function pharmaDashboardDrilldown(
     }
     const s = resp.session
     const score = Number(s.score)
-    const passed = score >= PASS_THRESHOLD
+    const passed = isPassForTenant(score, drilldownThreshold)
     const fields: DrilldownField[] = [
       scoreField(score),
       resultField(passed),
@@ -1306,7 +1362,7 @@ export async function pharmaDashboardDrilldown(
     return null
   }
   const r = resp.data
-  const passed = r.Calificacion >= PASS_THRESHOLD
+  const passed = isPassForTenant(Number(r.Calificacion), drilldownThreshold)
   const fields: DrilldownField[] = [
     scoreField(r.Calificacion),
     resultField(passed),

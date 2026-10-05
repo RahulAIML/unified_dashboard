@@ -107,6 +107,16 @@ export function useApi<T>(url: string | null): ApiState<T> {
         // Shape: { success: boolean, data: T, meta: {...} }
         if (isApiResponseLike(json)) {
           if (!json.success) {
+            // A route can deliberately mark a soft "this isn't set up" case
+            // as success:false + data.notConfigured (see
+            // /api/second-brain/profile) so it never gets logged/treated as
+            // a real failure -- honor that instead of throwing, so callers
+            // fall through to their normal empty-state UI (no data) rather
+            // than a scary, untranslated error banner.
+            const data = (json as { data?: unknown }).data
+            if (isRecord(data) && data["notConfigured"] === true) {
+              return null as T
+            }
             throw new Error(extractErrorMessage(json, "Request failed"))
           }
           return json.data as T

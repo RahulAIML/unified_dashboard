@@ -31,6 +31,7 @@ export async function GET(request: NextRequest) {
             // Session tenant is authoritative (from JWT); do not trust auth DB here.
             customer_id: Number(claims.customer_id ?? 0),
             role: user.role,
+            onboarding_completed_at: user.onboarding_completed_at,
           },
         })
       }
@@ -49,6 +50,12 @@ export async function GET(request: NextRequest) {
         full_name: claims.email.split('@')[0],
         customer_id: Number(claims.customer_id),
         role: 'user' as const,
+        // DB unavailable -- can't know the real state. Default to "already
+        // dismissed" rather than "never seen": a false negative here would
+        // repeatedly nag a returning user with the tour every time the auth
+        // DB hiccups, which is worse than occasionally suppressing it for a
+        // genuinely new user during an outage.
+        onboarding_completed_at: new Date().toISOString(),
       },
     })
   } catch (error) {

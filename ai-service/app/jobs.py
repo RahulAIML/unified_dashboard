@@ -20,11 +20,28 @@ import asyncio
 import json
 from datetime import datetime, timezone
 
-from .models import GenerateRequest, JobPhase, JobState
+from .models import GenerateRequest, JobLog, JobPhase, JobState
 from .workflow import resume_with_ids, resume_with_services, run_generation
 
 _JOBS: dict[str, JobState] = {}
 _counter = 0
+
+# Every individual network call in the pipeline already carries its own
+# timeout (30s per rolplay_app_sql widget fetch, 45s per LLM call, etc.), so
+# in the ordinary case the whole pipeline finishes in seconds. This is a
+# WATCHDOG, not the expected runtime: a real live generation got stuck
+# showing "Fetching live data..." at a fixed percent forever (confirmed live
+# -- polling kept returning the exact same stale state, no error, no further
+# log lines, indefinitely). Every individual bounded timeout should make that
+# impossible, but "should" isn't a guarantee against the unbounded case (a
+# hung DNS resolution, a stuck TCP connect that a lower-level timeout doesn't
+# catch, event-loop starvation) -- and a job stuck mid-phase forever is
+# invisible to _JOBS' only reader, get_job(), which has no way to tell "still
+# genuinely running" apart from "silently wedged". This wraps the ENTIRE
+# pipeline in a hard ceiling so get_job() is GUARANTEED to reach a terminal
+# phase (done/error) within a bounded time no matter what hangs inside it,
+# instead of potentially staying non-terminal forever.
+_GENERATION_TIMEOUT_SECONDS = 240
 
 
 async def _persist(job: JobState) -> None:
@@ -80,7 +97,26 @@ async def _run(job: JobState, update) -> None:
     since there was no exception to catch). workflow.run_generation is the
     implementation that's actually been tested end-to-end (pause + resume,
     real data, no hang) — see the LangGraph formalization note in graph.py."""
-    await run_generation(job, update)
+    try:
+        await asyncio.wait_for(run_generation(job, update), timeout=_GENERATION_TIMEOUT_SECONDS)
+    except asyncio.TimeoutError:
+        # run_generation's own try/except (workflow.py) catches every
+        # exception INSIDE the pipeline and always resolves to a terminal
+        # phase -- but wait_for's TimeoutError is raised OUTSIDE that, once
+        # the ceiling is hit, precisely because something in there never
+        # returned at all. Mark the job terminal exactly the way that inner
+        # handler does, so the one thing every caller of get_job() already
+        # relies on (phase becomes done/error, never stays queued/running
+        # forever) holds here too.
+        stuck_in = job.phase.value
+        job.phase = JobPhase.error
+        job.error = (
+            f"Generation timed out after {_GENERATION_TIMEOUT_SECONDS}s "
+            f"(stuck in '{stuck_in}'). An upstream service may be slow "
+            "or unresponsive -- try again."
+        )
+        job.logs.append(JobLog(phase=JobPhase.error, level="error", message=job.error))
+        await update(job)
 
 
 def _next_id() -> str:

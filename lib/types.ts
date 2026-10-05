@@ -52,6 +52,14 @@ export interface KpiCard {
    *  (e.g. a current-state snapshot with no date range) — renders a neutral
    *  "no comparison" badge instead of a real-looking "+0%" delta. */
   noComparison?: boolean
+  /** Visible caption under the value, e.g. "Pass threshold: score >= 80 pts"
+   *  (see OverviewApiResponse.passRateLegend) — so an applied criterion is
+   *  never left for the viewer to infer. Absent for every KPI this doesn't
+   *  apply to. */
+  legend?: string | null
+  /** Definition + formula shown via the info/"eye" affordance next to the
+   *  label, on hover or click. Absent = no affordance for this tile. */
+  info?: string
 }
 
 export interface TimeSeriesPoint {
@@ -188,6 +196,16 @@ export interface OverviewApiResponse {
   prevTotalEvaluations: number
   prevAvgScore:         number | null
   prevPassRate:         number | null
+  /**
+   * The exact legend text for the pass-rate section (e.g. "Pass threshold:
+   * score >= 80 pts"), so the applied criteria are never left for the
+   * viewer to infer -- see lib/kpi-builder.ts's passRateLegend(). null means
+   * this tenant has no applicable passing criteria at all: the frontend
+   * must hide the pass-rate section entirely rather than show a misleading
+   * number. undefined (absent) means this org type hasn't been wired up to
+   * report it yet -- render exactly as before this field existed.
+   */
+  passRateLegend?: string | null
 }
 
 /** A single point in a time-series returned by GET /api/dashboard/trends */
@@ -219,7 +237,11 @@ export interface EvaluationApiRow {
   usecaseName:   string | null
   score:         number | null
   result:        string | null
-  passed:        boolean
+  // null (not false) when score is null -- a session with no extractable
+  // score at all has no real pass/fail verdict, and `false` would render as
+  // a fabricated "FAIL" badge next to a blank score. Mirrors `result`, which
+  // already carries this same null-for-unscoreable rule.
+  passed:        boolean | null
   date:          string
 }
 
@@ -295,7 +317,8 @@ export interface BusinessLinesApiResponse {
   data: BusinessLineRow[]
 }
 
-// ── Organization (pharma-sim tenants with a real members/admins source) ──────
+// ── Organization (pharma-sim tenants with a real members/admins source, and
+// rolplay_app_sql tenants with a real r_user roster + per-user activity) ─────
 
 export interface OrgMemberRow {
   id:          number
@@ -303,6 +326,22 @@ export interface OrgMemberRow {
   email:       string
   designation: string | null
   adminId:     number | null
+  // Real per-user account + activity fields -- populated only for connectors
+  // that can compute them (rolplay_app_sql today, via lib/bridge-rolplay-
+  // app.ts's rolplayAppOrganization). Left undefined for pharma's admin/
+  // member hierarchy, which has no session data of its own to report here --
+  // app/organization/page.tsx renders each one only when present, so pharma's
+  // existing rendering is unchanged.
+  department?:    string | null
+  status?:        'active' | 'disabled'
+  sessions?:      number
+  /** Which dashboard modules (Master Coach/Practice Simulator/Certification)
+   *  this user has a real session in, most-recent activity first. Empty for
+   *  a registered account that has never run a session. */
+  modulesUsed?:   string[]
+  lastSessionAt?: string | null
+  lastLoginAt?:   string | null
+  createdOn?:     string | null
 }
 
 export interface OrgAdminRow {
@@ -357,6 +396,11 @@ export interface LmsCourseRow {
   enrolled:       number
   completed:      number
   inProgress:     number
+  /** Total real users on the school -- the completion-rate denominator (every
+   *  user is expected to take every course), also shown as a "Total" column
+   *  so the table matches the KPI tile's own "of N users" sub-label. */
+  totalUsers:     number
+  /** Percent 0-100, against totalUsers (the whole roster), not `enrolled`. */
   completionRate: number | null
   avgScore:       number | null
 }
@@ -374,7 +418,9 @@ export interface LmsApiResponse {
   modulesCompleted: number
   inProgress:       number
   notStarted:       number
-  /** Percent 0-100. Null when there are no enrollments to divide by. */
+  /** Percent 0-100, against the FULL roster (totalUsers * totalCourses),
+   *  not against however many enrollments happened to exist -- every user
+   *  is expected to take every course. Null when there's nothing to divide by. */
   completionRate:   number | null
   /**
    * Percent 0-100, or null when the school has no graded assessments.
@@ -388,4 +434,13 @@ export interface LmsApiResponse {
   /** Completions per day, filtered to the selected range. */
   completionTrend:  ApiTrendPoint[]
   courses:          LmsCourseRow[]
+  /** Internal/temporary: one row per (learner, course) enrollment, demo-mode
+   *  only (lib/demo/engine.ts's demoLms) -- lets an admin export the raw data
+   *  a completion rate is actually built from, for KPI-design evaluation.
+   *  Real LearnWorlds responses never set this field. To be removed once
+   *  that evaluation is done. */
+  enrollments?: {
+    userId: string; userName: string; userEmail: string; courseId: string; courseName: string
+    status: 'completed' | 'in_progress' | 'not_started'; score: number | null; completedAt: string | null
+  }[]
 }

@@ -232,8 +232,9 @@ describe('lmsDashboard — aggregation', () => {
     expect(res.notStarted).toBe(2)
     // The three status buckets must exactly partition the enrollments.
     expect(res.modulesCompleted + res.inProgress + res.notStarted).toBe(res.totalEnrollments)
-    // 2/5 = 40%
-    expect(res.completionRate).toBe(40)
+    // Against the FULL roster (4 users x 3 courses = 12 possible), not just
+    // the 5 that happened to enroll: 2/12 = 16.7%.
+    expect(res.completionRate).toBe(16.7)
   })
 
   it('averages only graded rows, ignoring the 0s that mean "not graded"', async () => {
@@ -263,10 +264,11 @@ describe('lmsDashboard — aggregation', () => {
     expect(res.avgQuizScore).toBeNull()
     expect(res.hasScoreData).toBe(false)
     // Completion still reports normally — only the score is unknown.
-    expect(res.completionRate).toBe(50)
+    // 1 completed / (4 users x 3 courses = 12 possible) = 8.3%.
+    expect(res.completionRate).toBe(8.3)
   })
 
-  it('returns null rates rather than 0 when there are no enrollments', async () => {
+  it('reports a real 0% (not null) when nobody has enrolled but a real roster exists', async () => {
     installFetchMock({ progress: {} })
     const { lmsDashboard } = await freshModule()
 
@@ -274,10 +276,24 @@ describe('lmsDashboard — aggregation', () => {
 
     expect(res.totalEnrollments).toBe(0)
     expect(res.enrolledUsers).toBe(0)
-    expect(res.completionRate).toBeNull()
+    // completionRate is now against the roster (4 users x 3 courses = 12
+    // possible), which IS known even with zero enrollments -- 0/12 is a
+    // real, meaningful 0%, not "nothing to divide by". null is reserved for
+    // when totalUsers or totalCourses is itself 0 (see the next test).
+    expect(res.completionRate).toBe(0)
     expect(res.avgQuizScore).toBeNull()
     // The roster is still real, and still worth showing.
     expect(res.totalUsers).toBe(4)
+  })
+
+  it('reports null (not 0) when the school genuinely has zero users to divide by', async () => {
+    installFetchMock({ users: [], progress: {} })
+    const { lmsDashboard } = await freshModule()
+
+    const res = await lmsDashboard('apotex', JULY.from, JULY.to)
+
+    expect(res.totalUsers).toBe(0)
+    expect(res.completionRate).toBeNull()
   })
 
   it('builds per-course rows sorted by enrollment then name', async () => {
@@ -289,14 +305,14 @@ describe('lmsDashboard — aggregation', () => {
     expect(res.courses.map(c => c.name)).toEqual(['Intro', 'Advanced', 'Compliance'])
 
     const intro = res.courses[0]
-    expect(intro).toMatchObject({ courseId: 'c1', enrolled: 3, completed: 2, inProgress: 0 })
-    // 2/3 = 66.666… rounded to one decimal.
-    expect(intro.completionRate).toBe(66.7)
+    expect(intro).toMatchObject({ courseId: 'c1', enrolled: 3, completed: 2, inProgress: 0, totalUsers: 4 })
+    // Against the full roster (4 users), not just the 3 who enrolled: 2/4 = 50%.
+    expect(intro.completionRate).toBe(50)
     expect(intro.avgScore).toBe(85)
 
     // Ungraded course: a rate of 0 is real, but the score is unknown.
     const compliance = res.courses.find(c => c.courseId === 'c3')!
-    expect(compliance).toMatchObject({ enrolled: 1, completed: 0, inProgress: 1, completionRate: 0 })
+    expect(compliance).toMatchObject({ enrolled: 1, completed: 0, inProgress: 1, completionRate: 0, totalUsers: 4 })
     expect(compliance.avgScore).toBeNull()
   })
 
@@ -313,32 +329,61 @@ describe('lmsDashboard — aggregation', () => {
   })
 })
 
-describe('lmsDashboard — completion trend', () => {
+describe('lmsDashboard — completion trend (fixed, always-current 30-day window)', () => {
+  /** Days-ago -> its UTC date key, matching lib/lms-learnworlds.ts's toDateKey(). */
+  function daysAgo(n: number): { date: Date; key: string; epochSeconds: number } {
+    const date = new Date(Date.now() - n * 86_400_000)
+    return { date, key: date.toISOString().slice(0, 10), epochSeconds: Math.floor(date.getTime() / 1000) }
+  }
+
   it('reads completed_at as unix SECONDS and buckets by UTC day', async () => {
-    installFetchMock({ progress: STANDARD_PROGRESS })
+    const d3 = daysAgo(3)
+    const d2 = daysAgo(2)
+    installFetchMock({
+      progress: {
+        u1: [{ course_id: 'c1', status: 'completed', average_score_rate: 80, completed_at: d3.epochSeconds }],
+        u2: [{ course_id: 'c1', status: 'completed', average_score_rate: 90, completed_at: d2.epochSeconds }],
+      },
+    })
     const { lmsDashboard } = await freshModule()
 
     const res = await lmsDashboard('apotex', JULY.from, JULY.to)
 
-    // 1720000000s = 2024-07-03T09:46:40Z, 1720086400s = 2024-07-04T09:46:40Z.
-    // Misreading these as millis would land in 1970 and drop out of range.
+    // Misreading these as millis would land the epoch conversion in 1970,
+    // far outside the 30-day window, and this would come back empty.
     expect(res.completionTrend).toEqual([
-      { date: '2024-07-03', value: 1 },
-      { date: '2024-07-04', value: 1 },
+      { date: d3.key, value: 1 },
+      { date: d2.key, value: 1 },
     ])
   })
 
-  it('filters the trend by range without changing the current-state totals', async () => {
-    installFetchMock({ progress: STANDARD_PROGRESS })
+  it("ignores the caller's from/to entirely -- a range that would have excluded this completion under the old range-filtered behavior has no effect", async () => {
+    const recent = daysAgo(5)
+    installFetchMock({
+      progress: { u1: [{ course_id: 'c1', status: 'completed', completed_at: recent.epochSeconds }] },
+    })
     const { lmsDashboard } = await freshModule()
 
-    const res = await lmsDashboard('apotex', new Date('2024-07-04T00:00:00Z'), JULY.to)
+    // JULY 2024 is nowhere near "recent" -- if the trend still honoured
+    // from/to, this completion would be filtered out. It must not be.
+    const res = await lmsDashboard('apotex', JULY.from, JULY.to)
 
-    // Only the 07-04 completion falls in range...
-    expect(res.completionTrend).toEqual([{ date: '2024-07-04', value: 1 }])
-    // ...but the roster snapshot is not a time series, so totals are unchanged.
-    expect(res.modulesCompleted).toBe(2)
-    expect(res.completionRate).toBe(40)
+    expect(res.completionTrend).toEqual([{ date: recent.key, value: 1 }])
+    // The roster snapshot is not a time series, so totals are unaffected either way.
+    expect(res.modulesCompleted).toBe(1)
+  })
+
+  it('excludes a completion older than 30 days from the trend, even though it still counts toward the current-state totals', async () => {
+    const old = daysAgo(45)
+    installFetchMock({
+      progress: { u1: [{ course_id: 'c1', status: 'completed', completed_at: old.epochSeconds }] },
+    })
+    const { lmsDashboard } = await freshModule()
+
+    const res = await lmsDashboard('apotex', JULY.from, JULY.to)
+
+    expect(res.completionTrend).toEqual([])
+    expect(res.modulesCompleted).toBe(1)
   })
 
   it('counts a completion with a missing timestamp without inventing a date', async () => {
@@ -354,14 +399,15 @@ describe('lmsDashboard — completion trend', () => {
   })
 
   it('accepts an ISO completed_at as well as an epoch', async () => {
+    const recent = daysAgo(4)
     installFetchMock({
-      progress: { u1: [{ course_id: 'c1', status: 'completed', completed_at: '2024-07-10T12:00:00Z' }] },
+      progress: { u1: [{ course_id: 'c1', status: 'completed', completed_at: recent.date.toISOString() }] },
     })
     const { lmsDashboard } = await freshModule()
 
     const res = await lmsDashboard('apotex', JULY.from, JULY.to)
 
-    expect(res.completionTrend).toEqual([{ date: '2024-07-10', value: 1 }])
+    expect(res.completionTrend).toEqual([{ date: recent.key, value: 1 }])
   })
 })
 

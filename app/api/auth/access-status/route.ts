@@ -16,7 +16,7 @@ import { getTenantIntegration } from "@/lib/db-tenant-integrations"
 import { secondBrainAdminCandidates } from "@/lib/banco-second-brain"
 import { isBancoOrg } from "@/lib/org-type"
 import { resolveRolplayAppAccess } from "@/lib/bridge-rolplay-app"
-import { resolvePharmaTenant, TENANT_CONFIG } from "@/lib/pharma-tenant"
+import { resolvePharmaTenantAccess, TENANT_CONFIG } from "@/lib/pharma-tenant"
 import { isDemoDataEnabled } from "@/lib/demo"
 import { demoAccessStatus } from "@/lib/demo/engine"
 
@@ -113,7 +113,7 @@ export async function GET(request: NextRequest) {
   const hasCoachData       = auth.customerId > 0
   const hasSecondBrainData = await probeSecondBrainAccess(auth.customerId, auth.email)
   const hasBancoAccess     = isBancoOrg(auth.email)
-  const pharmaTenant       = await resolvePharmaTenant(auth.email)
+  const pharmaTenant       = await resolvePharmaTenantAccess(auth.email)
   const hasPharmaAccess    = pharmaTenant !== null
   // Business Segments nav/page previously showed for EVERY pharma-sim tenant
   // regardless of whether they actually have segment data (hasBusinessLines

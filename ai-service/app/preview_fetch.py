@@ -7,8 +7,9 @@ Mirrors how the Next.js dashboard queries each pipeline.
 from __future__ import annotations
 
 import json
+import logging
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from . import journey as journey_lib
@@ -18,10 +19,16 @@ from .http import get_json, post_json
 from .rolplay_score import SCORE_SQL
 from .models import DashboardConfig, ServiceKind, WidgetConfig, WidgetPreview, WidgetType
 
-PASS_THRESHOLD = 70
-# "Certified"/"mastery" bar per Cesar's KPI spec (Sugerencia de KPI's Cesar.xlsx)
-# -- deliberately separate from PASS_THRESHOLD: passing a single session (70)
-# is not the same bar as being field-ready/certified (95).
+# Pass/fail bar used to be a flat global constant here (70 for every
+# tenant) -- real customers differ (some pass at 70, some 80, some 90, some
+# have no score-based criteria at all, e.g. Sanfer certifies by completing
+# every assigned simulation). Every call site below now reads cfg.pass_threshold
+# (DashboardConfig.pass_threshold, default 80, tenant-configurable at build
+# time and editable after publish -- see dashboard_versions.set_pass_threshold)
+# instead. "Certified"/"mastery" bar per Cesar's KPI spec (Sugerencia de KPI's
+# Cesar.xlsx) -- deliberately separate and still fixed: passing a single
+# session is a different bar from being field-ready/certified, and no tenant
+# has asked to configure this one.
 MASTERY_THRESHOLD = 95
 
 # Must match dashboard_planning.py's _auto_donut_widgets id for the pass/fail
@@ -61,13 +68,37 @@ _BEST_PERFORMERS_LIMIT = 10
 # alongside a total) -- no new frontend component needed.
 DAILY_PASSFAIL_ID = "chart_daily_pass_fail"
 
+# Must match dashboard_planning.py's _auto_registered_users_widget id — the
+# full r_user roster (name/email/department/designation/created/last login),
+# not aggregated by anything. Distinct from every other table above: those
+# all describe SESSIONS; this one describes ACCOUNTS, so it deliberately
+# skips the r_user_session join and the date-range/category filters
+# entirely (found live on Chinoin: 581 accounts, only 1 with a session --
+# a manager asking "who are the other 580 people?" had nowhere to look).
+REGISTERED_USERS_TABLE_ID = "table_registered_users"
+_REGISTERED_USERS_ROW_LIMIT = 1000
+
+
+def _pass_rate_legend(cfg: DashboardConfig) -> str:
+    return f"Passing threshold: {cfg.pass_threshold} pts"
+
+
+def _no_passing_criteria_preview(w: WidgetConfig) -> WidgetPreview:
+    """Every pass_rate kpi_tile must route through this for a tenant with
+    has_no_passing_criteria=True -- an honest 'no data' state, never a
+    number computed against a threshold that doesn't apply to this tenant."""
+    return WidgetPreview(widget_id=w.id, ok=False, value=None,
+                          error="This tenant has no score-based passing criteria configured")
+
 # ── Cesar's KPI suggestions (Sugerencia de KPI's Cesar.xlsx) ─────────────────
 # Two groups, by data dependency:
 #
 # GROUP 1 (universal -- computed from r_user/r_user_session/SCORE_SQL alone,
 # same as every existing metric here, works for ANY rolplay_app_sql tenant):
-# activation_rate, weekly_practice_frequency, mau_rate, practices_to_mastery,
-# delta_score, readiness_index, mastery distribution.
+# activation_rate, weekly_practice_frequency, mau_rate, delta_score,
+# readiness_index, mastery distribution.
+# (Practices to Mastery and Trial-and-Error Index were REMOVED from scope
+# per the Aug 6 session with Silverio -- see CESAR_METRIC_KEYS below.)
 #
 # GROUP 2 (depends on raw_closing_data carrying a rich per-session evaluation
 # JSON -- confirmed real and richly structured for Siigo: 5 scored "bloque_*"
@@ -95,8 +126,7 @@ _CLOSING_DATA_SAMPLE_LIMIT = 500  # bounded scan, matches REPORTS_TABLE's own ca
 # the kind of "not in its proper place" clutter the user flagged.
 CESAR_METRIC_KEYS = {
     "activation_rate", "weekly_practice_frequency", "mau_rate",
-    "practices_to_mastery", "delta_score", "readiness_index",
-    "trial_and_error_rate",
+    "delta_score", "readiness_index",
 }
 
 
@@ -159,7 +189,17 @@ def _prev_period(frm: str, to: str) -> tuple[str, str] | None:
     rolplayAppOverview's prevRange computation exactly (same "period
     immediately preceding the current one" definition), so a period-over-
     period KPI delta compares against the same baseline the hand-built app
-    would show for this same range."""
+    would show for this same range.
+
+    prev_to is `frm` minus one day, NOT `frm` itself: _sql_date_clause pads
+    both ends of a date-only bound to a full day (00:00:00..23:59:59), so a
+    previous window ending exactly on `frm` would count the ENTIRE calendar
+    day `frm` in both the current period (which starts at `frm 00:00:00`)
+    and the previous one (which would end at `frm 23:59:59`) -- a real,
+    material double-count for any typical 7-30 day dashboard window, not a
+    one-instant edge case. Matches the -1 adjustment
+    app/api/dashboard/cesar-kpis/route.ts already uses for the same reason.
+    """
     try:
         f = datetime.combine(date.fromisoformat(frm), datetime.min.time())
         t = datetime.combine(date.fromisoformat(to), datetime.min.time())
@@ -168,7 +208,9 @@ def _prev_period(frm: str, to: str) -> tuple[str, str] | None:
     if t <= f:
         return None
     span = t - f
-    return (f - span).date().isoformat(), frm
+    prev_to = f - timedelta(days=1)
+    prev_from = prev_to - span
+    return prev_from.date().isoformat(), prev_to.date().isoformat()
 
 
 def _calc_delta_pct(current: float | None, prev: float | None) -> float | None:
@@ -307,8 +349,15 @@ async def _kpi(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
     if w.type == WidgetType.kpi_tile:
         _, body = await post_json(base, {"action": "kpi.overview", "date_from": frm, "date_to": to}, hdr)
         ov = (body or {}).get("overview", {}) if isinstance(body, dict) else {}
-        val = {"total_sessions": ov.get("total_sessions"), "avg_score": ov.get("avg_score"),
-               "pass_rate": ov.get("pass_rate_pct")}.get(w.metric_key)
+        metrics = {"total_sessions": ov.get("total_sessions"), "avg_score": ov.get("avg_score"),
+                   "pass_rate": ov.get("pass_rate_pct")}
+        # An unrecognized metric_key must be a loud, diagnosable error, not a
+        # silent None -- a stale/mismatched key would otherwise render as a
+        # permanently blank tile with no clue anywhere why (see the bare
+        # dict.get() this replaced).
+        if w.metric_key not in metrics:
+            return WidgetPreview(widget_id=w.id, ok=False, error=f"unsupported metric_key '{w.metric_key}' for pharma_kpi")
+        val = metrics[w.metric_key]
         return WidgetPreview(widget_id=w.id, ok=val is not None, value=val)
     if w.type == WidgetType.line_chart:
         _, body = await post_json(base, {"action": "kpi.score_trend", "date_from": frm, "date_to": to, "granularity": "month"}, hdr)
@@ -361,8 +410,16 @@ async def _exceltis(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
             v = round(sum(scored) / len(scored), 2) if scored else None
             return WidgetPreview(widget_id=w.id, ok=v is not None, value=v)
         if w.metric_key == "pass_rate":
-            v = round(100 * sum(1 for s in scored if s >= PASS_THRESHOLD) / len(scored), 1) if scored else None
-            return WidgetPreview(widget_id=w.id, ok=v is not None, value=v)
+            if cfg.has_no_passing_criteria:
+                return _no_passing_criteria_preview(w)
+            v = round(100 * sum(1 for s in scored if s >= cfg.pass_threshold) / len(scored), 1) if scored else None
+            return WidgetPreview(widget_id=w.id, ok=v is not None, value=v, legend=_pass_rate_legend(cfg))
+        # An unrecognized metric_key must return here -- without this, a
+        # kpi_tile with a stale/mismatched key fell through to the usecase-
+        # breakdown `rows=` return at the bottom of this function, a
+        # wrong-shaped WidgetPreview (rows instead of value) that KpiTile
+        # renders as a permanently blank tile with no error shown at all.
+        return WidgetPreview(widget_id=w.id, ok=False, error=f"unsupported metric_key '{w.metric_key}' for pharma_exceltis_rest")
 
     # ── Score trend (monthly avg score) ── Found live (Heineken): this
     # connector's rows carry a real 'Fecha_y_Hora' timestamp, but nothing
@@ -398,7 +455,8 @@ async def _exceltis(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
         out = [{
             "user_email": name, "user_name": name, "sessions": len(scores),
             "avg_score": round(sum(scores) / len(scores), 2),
-            "pass_rate": round(100 * sum(1 for s in scores if s >= PASS_THRESHOLD) / len(scores), 1),
+            "pass_rate": None if cfg.has_no_passing_criteria else
+                round(100 * sum(1 for s in scores if s >= cfg.pass_threshold) / len(scores), 1),
         } for name, scores in ranked]
         return WidgetPreview(widget_id=w.id, ok=bool(out), rows=out)
 
@@ -441,14 +499,31 @@ async def _sale_exercises(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPrevie
         v = round(sum(scores) / len(scores), 2) if scores else None
         return WidgetPreview(widget_id=w.id, ok=v is not None, value=v)
     if w.metric_key == "pass_rate":
-        v = round(100 * sum(1 for s in scores if s >= PASS_THRESHOLD) / len(scores), 1) if scores else None
-        return WidgetPreview(widget_id=w.id, ok=v is not None, value=v)
+        if cfg.has_no_passing_criteria:
+            return _no_passing_criteria_preview(w)
+        v = round(100 * sum(1 for s in scores if s >= cfg.pass_threshold) / len(scores), 1) if scores else None
+        return WidgetPreview(widget_id=w.id, ok=v is not None, value=v, legend=_pass_rate_legend(cfg))
     return WidgetPreview(widget_id=w.id, ok=bool(rows), value=len(rows))
 
 
 # ── rolplay-app (query endpoint; scores from raw_closing_data/closing_analysis) ──────
+_logger = logging.getLogger(__name__)
+
+
 async def _rolplay_app_sql(sql: str) -> list[dict]:
+    """Every caller treats a failed query as an empty result -- see
+    lib/bridge-rolplay-app.ts's remoteSelect for the TS mirror of this same
+    silent-degradation contract and why it stays unchanged (one bad widget
+    must not 500 the whole dashboard). But an httpx/network failure or a
+    non-2xx status previously vanished into (body or {}).get("data", [])
+    with zero trace anywhere -- post_json swallows the exception into an
+    "__error" key (app/http.py) that nothing ever read or logged. Log it here
+    so an outage is visible in ai-service logs instead of only as
+    suspiciously-flat KPI numbers.
+    """
     _, body = await post_json(get_settings().rolplay_app_sql_url, {"sql": sql})
+    if isinstance(body, dict) and "__error" in body:
+        _logger.error("rolplay-app SQL query failed (treated as empty data): %s", body["__error"])
     return (body or {}).get("data", []) if isinstance(body, dict) else []
 
 
@@ -465,26 +540,36 @@ def _category_clause(module: str | None) -> str:
     return f" AND s.simulator_id IN (SELECT ID FROM r_simulator WHERE category = '{cat}')"
 
 
-async def _rolplay_app_kpi_metrics(cid: int, module: str | None, dc: str) -> dict[str, Any]:
+async def _rolplay_app_kpi_metrics(cid: int, module: str | None, dc: str, threshold: int) -> dict[str, Any]:
     """One scalar-KPI query, parameterised by an already-built date clause —
     shared by the current-period fetch and (when a widget supports a
     period-over-period delta) the previous-period fetch, so both windows are
-    computed by the exact same aggregation."""
+    computed by the exact same aggregation. `threshold` is the tenant's own
+    configured pass_threshold (DashboardConfig.pass_threshold), not a fixed
+    global -- see preview_fetch.py's module docstring on PASS_THRESHOLD."""
     data = await _rolplay_app_sql(
         "SELECT COUNT(s.ID) AS sessions, COUNT(DISTINCT u.ID) AS users, "
+        f"COUNT({SCORE_SQL}) AS scored, "
         f"ROUND(AVG({SCORE_SQL}),2) AS avg_score, "
-        f"SUM(CASE WHEN ({SCORE_SQL})>={PASS_THRESHOLD} THEN 1 ELSE 0 END) AS passed "
+        f"SUM(CASE WHEN ({SCORE_SQL})>={threshold} THEN 1 ELSE 0 END) AS passed "
         f"FROM r_user u LEFT JOIN r_user_session s ON s.user_id=u.ID "
         f"WHERE u.client_id={cid}{_category_clause(module)}{dc}"
     )
     row = data[0] if data else {}
     sessions = int(row.get("sessions") or 0)
+    # pass_rate's denominator must be SCORED sessions (COUNT(SCORE_SQL)), not
+    # total sessions -- a session with no matching score-extraction pattern
+    # returns NULL, not 0, and must be excluded, never diluting the rate. This
+    # previously divided by `sessions`, understating pass_rate versus the
+    # TS bridge (lib/bridge-rolplay-app.ts's fetchScoreStats) for any tenant
+    # with genuinely unscoreable sessions -- matches lib/bridge-rolplay-app.ts.
+    scored = int(row.get("scored") or 0)
     passed = int(row.get("passed") or 0)
     return {
         "total_sessions": sessions,
         "total_users": int(row.get("users") or 0),
         "avg_score": float(row["avg_score"]) if row.get("avg_score") is not None else None,
-        "pass_rate": round(100 * passed / sessions, 1) if sessions else None,
+        "pass_rate": round(100 * passed / scored, 1) if scored else None,
         "passed": passed,
     }
 
@@ -502,11 +587,11 @@ async def _rolplay_app_cesar_metrics(cid: int, module: str | None, frm: str, to:
     alone (no raw_closing_data JSON needed), so it works for any
     rolplay_app_sql tenant, same as the pre-existing KPI tiles.
 
-    Per-user sequencing (delta_score, practices_to_mastery, readiness_index)
-    is done in PYTHON after fetching one bounded (user_id, date, score) row
-    set, rather than as nested correlated SQL -- simpler to get right and
-    to test than re-deriving SCORE_SQL's alias-dependent CASE expression
-    inside a subquery, for a one-time-per-render scalar computation.
+    Per-user sequencing (delta_score, readiness_index) is done in PYTHON
+    after fetching one bounded (user_id, date, score) row set, rather than
+    as nested correlated SQL -- simpler to get right and to test than
+    re-deriving SCORE_SQL's alias-dependent CASE expression inside a
+    subquery, for a one-time-per-render scalar computation.
     """
     dc = _sql_date_clause("s.date_created", frm, to)
     cat = _category_clause(module)
@@ -535,9 +620,31 @@ async def _rolplay_app_cesar_metrics(cid: int, module: str | None, frm: str, to:
     )
     mau_users = int((mau_rows[0] if mau_rows else {}).get("n") or 0)
 
-    # Per-user chronological score sequence, for delta_score/practices_to_mastery/
-    # readiness_index -- bounded to a real bar (matches Reports' own cap) so a
-    # very large tenant doesn't pull its entire history into memory every render.
+    # mastered_users comes from a DEDICATED, UNBOUNDED DB-side aggregate over
+    # every scored session in range -- NOT from the bounded seq_rows scan
+    # below. This mirrors a fix already shipped on the TS side
+    # (lib/bridge-rolplay-app.ts's rolplayAppCesarGroup1): mastered_users used
+    # to be derived from the same LIMIT-500 scan as delta_score, so
+    # readiness_index (= mastered_users / enrolled) divided a capped
+    # numerator by an uncapped denominator and silently trended toward 0% as
+    # a tenant grew. Worse, the scan is ORDER BY user_id, so the 500 rows are
+    # always the same lowest-numbered users -- a systematic bias, not a
+    # sample. This query has no LIMIT, so it cannot exhibit that bias.
+    mastery_rows = await _rolplay_app_sql(
+        f"SELECT COUNT(DISTINCT CASE WHEN sc>={MASTERY_THRESHOLD} THEN user_id END) mastered_users "
+        f"FROM (SELECT s.user_id user_id, ({SCORE_SQL}) sc "
+        f"FROM r_user_session s JOIN r_user u ON u.ID=s.user_id "
+        f"WHERE u.client_id={cid}{cat}{dc}) t WHERE sc IS NOT NULL"
+    )
+    mastered_users = int((mastery_rows[0] if mastery_rows else {}).get("mastered_users") or 0)
+
+    # delta_score genuinely needs per-user chronological ordering, which has
+    # no portable single-aggregate form here (no window functions are used
+    # anywhere in this connector) -- it keeps the bounded scan, matching
+    # Reports' own cap so a very large tenant doesn't pull its entire history
+    # into memory every render. Unlike mastered_users, it is honestly flagged
+    # as sampled when the cap is actually hit, rather than silently passing a
+    # truncated average off as complete.
     seq_rows = await _rolplay_app_sql(
         f"SELECT s.user_id, s.date_created, ({SCORE_SQL}) sc "
         f"FROM r_user_session s JOIN r_user u ON u.ID=s.user_id "
@@ -550,54 +657,17 @@ async def _rolplay_app_cesar_metrics(cid: int, module: str | None, frm: str, to:
 
     deltas = [scores[-1] - scores[0] for scores in by_user.values() if len(scores) >= 2]
     delta_score = round(sum(deltas) / len(deltas), 1) if deltas else None
-
-    practices = []
-    for scores in by_user.values():
-        for i, sc in enumerate(scores, start=1):
-            if sc >= MASTERY_THRESHOLD:
-                practices.append(i)
-                break
-    practices_to_mastery = round(sum(practices) / len(practices), 1) if practices else None
-
-    mastered_users = sum(1 for scores in by_user.values() if any(sc >= MASTERY_THRESHOLD for sc in scores))
-
-    # KPI-2.4 Trial-and-Error Index: % of Certifier ("SEGMENT") attempts made
-    # by a user with no prior Coach ("COACH") session. Deliberately queried
-    # WITHOUT _category_clause(module) -- this needs to see a user's FULL
-    # cross-category session history to know what came "before", unlike
-    # every other metric here which is fine scoped to one module. Real only
-    # for a tenant whose r_simulator.category actually contains SEGMENT (few
-    # do -- confirmed live: Siigo/Rowe/Armstrong/Sanfer have none, M8 does);
-    # everyone else honestly gets None ("no data"), never a fabricated 0.
-    cat_seq_rows = await _rolplay_app_sql(
-        f"SELECT s.user_id, sim.category AS category, s.date_created "
-        f"FROM r_user_session s JOIN r_user u ON u.ID=s.user_id "
-        f"LEFT JOIN r_simulator sim ON sim.ID=s.simulator_id "
-        f"WHERE u.client_id={cid}{dc} "
-        f"ORDER BY s.user_id, s.date_created ASC LIMIT {_CLOSING_DATA_SAMPLE_LIMIT}"
-    )
-    certifier_attempts = 0
-    no_prior_coach = 0
-    seen_coach: set[Any] = set()
-    for r in cat_seq_rows:
-        category = str(r.get("category") or "").upper()
-        uid = r["user_id"]
-        if category == "COACH":
-            seen_coach.add(uid)
-        elif category == "SEGMENT":
-            certifier_attempts += 1
-            if uid not in seen_coach:
-                no_prior_coach += 1
-    trial_and_error_rate = round(100 * no_prior_coach / certifier_attempts, 1) if certifier_attempts else None
+    delta_score_sampled = len(seq_rows) >= _CLOSING_DATA_SAMPLE_LIMIT
 
     return {
         "activation_rate": round(100 * active_users / enrolled, 1) if enrolled else None,
         "weekly_practice_frequency": round(period_sessions / active_weeks, 1) if active_weeks else None,
         "mau_rate": round(100 * mau_users / enrolled, 1) if enrolled else None,
-        "practices_to_mastery": practices_to_mastery,
         "delta_score": delta_score,
+        "delta_score_sampled": delta_score_sampled,
+        # Both operands now count every scored session/user in range -- no
+        # capped-numerator-over-uncapped-denominator mismatch.
         "readiness_index": round(100 * mastered_users / enrolled, 1) if enrolled else None,
-        "trial_and_error_rate": trial_and_error_rate,
     }
 
 
@@ -685,13 +755,16 @@ def _rubrica_tag_counts(parsed: list[dict], want_pass: bool) -> list[dict]:
     for d in parsed:
         for k, v in d.items():
             m = _RUBRICA_ITEM_RE.match(k)
-            if not m or not v:
+            # A non-string label (e.g. a nested object from a non-conforming
+            # evaluator payload) must be skipped, not blindly stringified
+            # into a garbage row in Top Strengths/Opportunities.
+            if not m or not isinstance(v, str) or not v:
                 continue
             cumplido = str(d.get(f"rubrica_p{m.group(1)}_cumplido", "")).strip().lower()
             if cumplido not in ("true", "false"):
                 continue
             if (cumplido == "true") == want_pass:
-                counts[str(v)] = counts.get(str(v), 0) + 1
+                counts[v] = counts.get(v, 0) + 1
     ranked = sorted(counts.items(), key=lambda kv: -kv[1])[:10]
     return [{"item": name, "count": n} for name, n in ranked]
 
@@ -725,8 +798,8 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
     if w.type == WidgetType.journey:
         rows = await _rolplay_app_sql(
             "SELECT sim.category AS category, COUNT(*) total_sessions, "
-            f"SUM(CASE WHEN ({SCORE_SQL})>={PASS_THRESHOLD} THEN 1 ELSE 0 END) passed_sessions, "
-            f"ROUND(100*SUM(CASE WHEN ({SCORE_SQL})>={PASS_THRESHOLD} THEN 1 ELSE 0 END)/COUNT(*),1) pass_rate "
+            f"COUNT({SCORE_SQL}) scored, "
+            f"SUM(CASE WHEN ({SCORE_SQL})>={cfg.pass_threshold} THEN 1 ELSE 0 END) passed_sessions "
             "FROM r_user_session s JOIN r_user u ON u.ID=s.user_id "
             f"JOIN r_simulator sim ON sim.ID=s.simulator_id WHERE u.client_id={cid} "
             "GROUP BY sim.category"
@@ -736,12 +809,24 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
             for r in rows if str(r.get("category") or "").upper() in journey_lib.CATEGORY_TO_MODULE
         }
         stages = journey_lib.ordered_stages(list(by_module.keys()))
-        out = [{
-            "module": m, "label": journey_lib.LABEL[m], "phase": journey_lib.PHASE[m],
-            "total_sessions": int(by_module[m].get("total_sessions") or 0),
-            "passed_sessions": int(by_module[m].get("passed_sessions") or 0),
-            "pass_rate": by_module[m].get("pass_rate"),
-        } for m in stages]
+        out = []
+        for m in stages:
+            r = by_module[m]
+            scored = int(r.get("scored") or 0)
+            passed_sessions = int(r.get("passed_sessions") or 0)
+            out.append({
+                "module": m, "label": journey_lib.LABEL[m], "phase": journey_lib.PHASE[m],
+                "total_sessions": int(r.get("total_sessions") or 0),
+                "passed_sessions": passed_sessions,
+                # Denominator is SCORED sessions, not total -- a session with
+                # no matching score-extraction pattern is excluded, never
+                # counted as failing (matches _rolplay_app_kpi_metrics above).
+                # None (not a computed number) for a tenant with no real
+                # passing criteria -- never fabricate a rate against a
+                # threshold that doesn't apply to it.
+                "pass_rate": None if cfg.has_no_passing_criteria else
+                    (round(100 * passed_sessions / scored, 1) if scored else None),
+            })
         return WidgetPreview(widget_id=w.id, ok=len(out) >= 2, rows=out,
                              error=None if len(out) >= 2 else "fewer than 2 real modules for a journey")
 
@@ -749,9 +834,15 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
     # Must be checked before the generic bar_chart branch below claims every
     # bar_chart-typed widget.
     if w.id.endswith(DAILY_PASSFAIL_ID):
+        # This chart is fundamentally a Total-vs-Passed comparison -- for a
+        # tenant with no real passing criteria there is no "Passed" series to
+        # draw at all, not a zero one. Skip it entirely rather than fabricate.
+        if cfg.has_no_passing_criteria:
+            return WidgetPreview(widget_id=w.id, ok=False,
+                                 error="This tenant has no score-based passing criteria configured")
         rows = await _rolplay_app_sql(
             "SELECT day, COUNT(*) sessions, "
-            f"SUM(CASE WHEN sc>={PASS_THRESHOLD} THEN 1 ELSE 0 END) passed FROM ("
+            f"SUM(CASE WHEN sc>={cfg.pass_threshold} THEN 1 ELSE 0 END) passed FROM ("
             f"SELECT DATE(s.date_created) day, {SCORE_SQL} sc {base}) t "
             "GROUP BY day ORDER BY day"
         )
@@ -765,17 +856,48 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
     if w.id.endswith(BEST_PERFORMERS_ID):
         rows = await _rolplay_app_sql(
             "SELECT u.email email, u.name name, COUNT(*) sessions, "
+            f"COUNT({SCORE_SQL}) scored, "
             f"ROUND(AVG({SCORE_SQL}),2) avg_score, "
-            f"SUM(CASE WHEN ({SCORE_SQL})>={PASS_THRESHOLD} THEN 1 ELSE 0 END) passed "
+            f"SUM(CASE WHEN ({SCORE_SQL})>={cfg.pass_threshold} THEN 1 ELSE 0 END) passed "
             f"{base} GROUP BY u.ID, u.email, u.name "
             f"HAVING COUNT({SCORE_SQL}) > 0 "
             f"ORDER BY avg_score DESC, sessions DESC LIMIT {_BEST_PERFORMERS_LIMIT}"
         )
+        # HAVING COUNT(SCORE_SQL) > 0 guarantees scored > 0 for every returned
+        # row today, but the pass_rate denominator is scored sessions, not
+        # total sessions, matching lib/bridge-rolplay-app.ts's
+        # rolplayAppBestPerformers -- never dilute by unscored sessions if
+        # that guard is ever relaxed.
         out = [{
             "user_email": r.get("email"), "user_name": (r.get("name") or "").strip() or None,
             "sessions": int(r.get("sessions") or 0),
             "avg_score": float(r["avg_score"]) if r.get("avg_score") is not None else 0.0,
-            "pass_rate": round(100 * int(r.get("passed") or 0) / int(r["sessions"]), 1) if r.get("sessions") else 0.0,
+            "pass_rate": None if cfg.has_no_passing_criteria else
+                (round(100 * int(r.get("passed") or 0) / int(r["scored"]), 1) if r.get("scored") else 0.0),
+        } for r in rows]
+        return WidgetPreview(widget_id=w.id, ok=bool(out), rows=out)
+
+    # ── Organization: full registered roster, not aggregated by anything ──
+    # Must be checked before the generic table branch below claims every
+    # table-typed widget. Deliberately no join to r_user_session and no
+    # date-range/category filter -- an account's existence isn't scoped to
+    # when it happened to run a session. NEVER select u.password.
+    if w.id.endswith(REGISTERED_USERS_TABLE_ID):
+        rows = await _rolplay_app_sql(
+            "SELECT u.name name, u.email email, u.department department, "
+            "u.designation designation, u.created_on created_on, "
+            "u.last_loggedin last_loggedin, u.disabled disabled "
+            f"FROM r_user u WHERE u.client_id={cid} "
+            f"ORDER BY u.created_on DESC LIMIT {_REGISTERED_USERS_ROW_LIMIT}"
+        )
+        out = [{
+            "name": (r.get("name") or "").strip() or None,
+            "email": r.get("email"),
+            "department": (r.get("department") or "").strip() or None,
+            "designation": (r.get("designation") or "").strip() or None,
+            "created_on": str(r.get("created_on"))[:10] if r.get("created_on") else None,
+            "last_loggedin": str(r.get("last_loggedin"))[:10] if r.get("last_loggedin") else None,
+            "status": "Disabled" if int(r.get("disabled") or 0) else "Active",
         } for r in rows]
         return WidgetPreview(widget_id=w.id, ok=bool(out), rows=out)
 
@@ -804,10 +926,16 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
 
     # ── Trend line: monthly avg score ──
     if w.type == WidgetType.line_chart:
+        # `sessions` must count every real session that period, scored or not
+        # -- a WHERE sc IS NOT NULL on the outer query (previous version) also
+        # dropped unscored sessions from the session-volume count itself,
+        # undercounting relative to lib/bridge-rolplay-app.ts's equivalent
+        # trend (which counts all sessions unconditionally). AVG(sc) already
+        # ignores NULLs on its own, so `value` doesn't need the filter either.
         rows = await _rolplay_app_sql(
             "SELECT period, ROUND(AVG(sc),2) value, COUNT(*) sessions FROM ("
             f"SELECT DATE_FORMAT(s.date_created,'%Y-%m') period, {SCORE_SQL} sc {base}) t "
-            "WHERE sc IS NOT NULL GROUP BY period ORDER BY period"
+            "GROUP BY period ORDER BY period"
         )
         series = [{"date": r.get("period"), "value": r.get("value"), "sessions": r.get("sessions")} for r in rows]
         return WidgetPreview(widget_id=w.id, ok=bool(series), series=series)
@@ -831,11 +959,30 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
     # row, real rep identity, real date/score/result, up to a bounded cap
     # the frontend paginates/searches over client-side.
     if w.id.endswith(REPORTS_TABLE_ID):
+        # NULL (not 'Failed') for a tenant with no real passing criteria at
+        # all -- never fabricate a verdict against a threshold that doesn't
+        # apply. A literal SQL NULL keeps the column shape identical to the
+        # "unscored session" case below, so the frontend needs no new state.
+        result_case = (
+            "NULL AS result" if cfg.has_no_passing_criteria else
+            # NULL >= threshold is NULL (unknown) in SQL, not false, so a plain
+            # CASE/ELSE here would fall through to 'Failed' for a session with
+            # no extractable score at all -- a fabricated verdict next to a
+            # blank score. Emit NULL (unknown), matching
+            # lib/bridge-rolplay-app.ts's _rolplayAppResultsImpl
+            # (`score != null ? (passed ? 'pass' : 'fail') : null`).
+            f"CASE WHEN {SCORE_SQL} IS NULL THEN NULL "
+            f"WHEN ({SCORE_SQL})>={cfg.pass_threshold} THEN 'Passed' ELSE 'Failed' END AS result"
+        )
         rows = await _rolplay_app_sql(
-            "SELECT s.date_created AS date, u.email AS rep, "
+            # s.ID drives the frontend's /drilldown/[id] link (WidgetConfig.id_field,
+            # set on this widget in dashboard_planning.py's _reports_page) -- it
+            # matches app/drilldown/[id]/page.tsx's own report-id key exactly, the
+            # same session id lib/bridge-rolplay-app.ts's rolplayAppDrilldown scopes
+            # its lookup by, so every session row here is now click-through-able.
+            "SELECT s.ID AS id, s.date_created AS date, u.email AS rep, "
             "COALESCE(sim.name, CONCAT('Simulator ', s.simulator_id)) AS simulator, "
-            f"ROUND({SCORE_SQL},1) AS score, "
-            f"CASE WHEN ({SCORE_SQL})>={PASS_THRESHOLD} THEN 'Passed' ELSE 'Failed' END AS result "
+            f"ROUND({SCORE_SQL},1) AS score, {result_case} "
             "FROM r_user_session s JOIN r_user u ON u.ID=s.user_id "
             f"LEFT JOIN r_simulator sim ON sim.ID=s.simulator_id WHERE u.client_id={cid}{_category_clause(w.module)}{dc} "
             f"ORDER BY s.date_created DESC LIMIT {_REPORTS_ROW_LIMIT}"
@@ -844,15 +991,29 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
 
     # ── Per-simulator breakdown (bar_chart / donut / table / approval-donut) ──
     if w.type in (WidgetType.bar_chart, WidgetType.donut, WidgetType.table) or w.id.endswith(APPROVAL_DONUT_ID):
+        # The approval donut is fundamentally an Approved-vs-Not-Approved
+        # split -- for a tenant with no real passing criteria there is no
+        # such split to draw, not a zero one.
+        if w.id.endswith(APPROVAL_DONUT_ID) and cfg.has_no_passing_criteria:
+            return WidgetPreview(widget_id=w.id, ok=False,
+                                 error="This tenant has no score-based passing criteria configured")
         rows = await _rolplay_app_sql(
             "SELECT COALESCE(sim.name, CONCAT('Simulator ', s.simulator_id)) simulator, "
-            f"COUNT(*) total_sessions, ROUND(AVG({SCORE_SQL}),2) avg_score, "
-            f"SUM(CASE WHEN ({SCORE_SQL})>={PASS_THRESHOLD} THEN 1 ELSE 0 END) passed_sessions, "
-            f"ROUND(100*SUM(CASE WHEN ({SCORE_SQL})>={PASS_THRESHOLD} THEN 1 ELSE 0 END)/COUNT(*),1) pass_rate "
+            f"COUNT(*) total_sessions, COUNT({SCORE_SQL}) scored, ROUND(AVG({SCORE_SQL}),2) avg_score, "
+            f"SUM(CASE WHEN ({SCORE_SQL})>={cfg.pass_threshold} THEN 1 ELSE 0 END) passed_sessions "
             "FROM r_user_session s JOIN r_user u ON u.ID=s.user_id "
             f"LEFT JOIN r_simulator sim ON sim.ID=s.simulator_id WHERE u.client_id={cid}{_category_clause(w.module)}{dc} "
             "GROUP BY s.simulator_id, sim.name ORDER BY total_sessions DESC"
         )
+        # pass_rate denominator is SCORED sessions, not total_sessions -- an
+        # unscoreable session must be excluded, never dilute the rate
+        # (matches lib/bridge-rolplay-app.ts's rolplayAppUsecaseBreakdown).
+        # None (not a computed number) for a tenant with no real passing
+        # criteria -- never fabricate a rate against an inapplicable threshold.
+        for r in rows:
+            scored = int(r.get("scored") or 0)
+            r["pass_rate"] = None if cfg.has_no_passing_criteria else (
+                round(100 * int(r.get("passed_sessions") or 0) / scored, 1) if scored else None)
         if w.id.endswith(APPROVAL_DONUT_ID):
             return _approval_donut((int(r.get("total_sessions") or 0) for r in rows),
                                     (int(r.get("passed_sessions") or 0) for r in rows), w.id)
@@ -865,6 +1026,18 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
         return WidgetPreview(widget_id=w.id, ok=val is not None, value=val,
                              error=None if val is not None else "no raw_closing_data with intencion_movement in scope")
 
+    # ── Registered Users (full roster, distinct from "Active Users" =
+    # total_users below which only counts reps who actually have a
+    # session) -- a real, dedicated, unfiltered count, never conflated with
+    # the date-scoped/session-joined query _rolplay_app_kpi_metrics runs for
+    # total_users. Deliberately its own query rather than a metrics dict
+    # lookup: the module-category/date-range filters below apply to
+    # SESSIONS, not to whether someone merely has an account.
+    if w.metric_key == "total_roster":
+        rows = await _rolplay_app_sql(f"SELECT COUNT(*) n FROM r_user WHERE client_id={cid}")
+        val = int((rows[0] if rows else {}).get("n") or 0)
+        return WidgetPreview(widget_id=w.id, ok=val > 0, value=val)
+
     # ── Cesar's Group-1 KPIs (activation/weekly-frequency/MAU/practices-to-
     # mastery/delta-score/readiness) -- schema-only, no raw_closing_data
     # needed, so these work for any rolplay_app_sql tenant. ──
@@ -876,21 +1049,31 @@ async def _rolplay_app(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
     # ── KPI tiles (scalar), with a period-over-period delta for the 3 metrics
     # the hand-built Overview compares (rolplayAppOverview's prevTotal
     # Evaluations/prevAvgScore/prevPassRate) ──
-    metrics = await _rolplay_app_kpi_metrics(cid, w.module, dc)
-    sessions = metrics["total_sessions"]
-    val = metrics.get(w.metric_key, sessions)
+    if w.metric_key == "pass_rate" and cfg.has_no_passing_criteria:
+        return _no_passing_criteria_preview(w)
+
+    metrics = await _rolplay_app_kpi_metrics(cid, w.module, dc, cfg.pass_threshold)
+    # A stale/mismatched metric_key must error, not silently default to
+    # total_sessions's value (the previous `.get(w.metric_key, sessions)`) --
+    # that masked the mismatch by showing a real-looking but WRONG number
+    # under whatever title the tile has, worse than a blank tile because
+    # nothing anywhere would look off.
+    if w.metric_key not in metrics:
+        return WidgetPreview(widget_id=w.id, ok=False, error=f"unsupported metric_key '{w.metric_key}' for rolplay_app_sql")
+    val = metrics[w.metric_key]
 
     prev_val: float | None = None
     prev_window = _prev_period(frm, to)
     if prev_window and w.metric_key in _DELTA_METRIC_KEYS:
         prev_frm, prev_to = prev_window
         prev_dc = _sql_date_clause("s.date_created", prev_frm, prev_to)
-        prev_metrics = await _rolplay_app_kpi_metrics(cid, w.module, prev_dc)
+        prev_metrics = await _rolplay_app_kpi_metrics(cid, w.module, prev_dc, cfg.pass_threshold)
         prev_val = prev_metrics.get(w.metric_key)
 
     return WidgetPreview(
         widget_id=w.id, ok=val is not None, value=val,
         prev_value=prev_val, delta_pct=_calc_delta_pct(val, prev_val) if isinstance(val, (int, float)) else None,
+        legend=_pass_rate_legend(cfg) if w.metric_key == "pass_rate" else None,
     )
 
 
@@ -1041,7 +1224,15 @@ async def _second_brain(cfg: DashboardConfig, w: WidgetConfig) -> WidgetPreview:
     m = {"coaching_sessions": stats.get("total_coaching_sessions"), "total_members": stats.get("total_members"),
          "message_logs": stats.get("total_message_logs"),
          "engagement": round(100 * (stats.get("active_members") or 0) / (stats.get("total_members") or 1), 1)}
-    return WidgetPreview(widget_id=w.id, ok=w.metric_key in m, value=m.get(w.metric_key))
+    if w.metric_key not in m:
+        return WidgetPreview(widget_id=w.id, ok=False, error=f"unsupported metric_key '{w.metric_key}' for second_brain")
+    val = m[w.metric_key]
+    # `w.metric_key in m` alone (the previous check) is true for any of the
+    # 4 keys above regardless of whether the underlying stat was actually
+    # present -- a real organization with e.g. no coaching sessions yet got
+    # ok=True, value=None: a blank tile marked SUCCESSFUL, so the frontend
+    # never shows the "no data" caption either. Must check the value itself.
+    return WidgetPreview(widget_id=w.id, ok=val is not None, value=val)
 
 
 def _num(v) -> bool:
