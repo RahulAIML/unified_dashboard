@@ -1,6 +1,7 @@
 'use client'
 
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
+import { useEffect } from 'react'
 import { Sidebar } from '@/components/Sidebar'
 import { AIAssistant } from '@/components/ai-assistant'
 import { DashboardFooter } from '@/components/DashboardFooter'
@@ -13,7 +14,15 @@ const AUTH_ROUTES = ['/auth/login', '/auth/register']
 
 export function LayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const router = useRouter()
   const { isAuthenticated, isLoading } = useAuthContext()
+
+  // Redirect to login if not authenticated and not on an auth page
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated && !AUTH_ROUTES.some(route => pathname.startsWith(route))) {
+      router.push('/auth/login')
+    }
+  }, [isLoading, isAuthenticated, pathname, router])
 
   // Snap the default date range to the tenant's real data span, once, after
   // login. Internally gated on auth + rangeInitialized, so it's safe to mount
